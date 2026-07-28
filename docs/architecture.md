@@ -7,6 +7,10 @@ The future enterprise AI workbench, company Skill, permission-aware knowledge,
 and work-collaboration architecture is defined in
 [`2026-07-28-enterprise-ai-workbench-expansion-design.md`](2026-07-28-enterprise-ai-workbench-expansion-design.md).
 
+The future agent-native enterprise operating model, dynamic workbench, and
+two-layer Hermes Agent evolution loop are defined in
+[`2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md).
+
 ## Deployment boundary
 
 ```text

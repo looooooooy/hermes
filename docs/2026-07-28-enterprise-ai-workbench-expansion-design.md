@@ -7,6 +7,10 @@
 - 采集范围：Hermes 企业工作空间 + 企业明确授权的业务系统
 - 交付范围：共享 SaaS、专属数据平面、联网私有化、完全离线私有化
 
+面向未来的“可信数据与能力底座、员工动态工作台、双层 Hermes Agent 迭代循环”
+设计见
+[`2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md)。
+
 ## 1. 产品定位
 
 Hermes 企业 AI 工作台不是员工设备监控软件，而是企业工作过程、知识资产和
