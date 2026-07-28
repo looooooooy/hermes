@@ -1,6 +1,7 @@
 # Hermes Agent 原生企业工作模式设计
 
-- 状态：未来产品方向设计基线
+- 状态：未来产品方向详细设计基线
+- 文档版本：2.0
 - 日期：2026-07-28
 - 适用范围：Hermes 企业 AI 工作台及后续产品扩展
 - 依赖：
@@ -318,6 +319,72 @@ View 是对当前任务所需数据、组件和 Action 的声明式组合。它�
 Work Item 连接员工、Agent、输入、交付物、审批、异常和证据，是动态工作台中的
 正式协同对象。
 
+### 6.8 对象关系与事实归属
+
+核心对象不能互相替代。设计和实施时按以下关系处理：
+
+```text
+Business Object
+  ├─ 通过 Data Product 提供可读数据
+  ├─ 通过 Action 提供可写能力
+  ├─ 被 View 组织和展示
+  └─ 在 Work Item 中参与具体工作
+
+Knowledge Asset
+  ├─ 由 Evidence 支撑
+  └─ 被 Skill 按版本引用
+
+Skill
+  ├─ 编排 Data Product、Knowledge Asset 和 Action
+  ├─ 运行后更新 Work Item
+  └─ 产生新的 Evidence 和 Outcome
+```
+
+事实归属必须明确：
+
+| 信息 | 权威事实源 |
+|---|---|
+| 客户、订单、库存、合同等业务状态 | 对应 System of Record |
+| Tenant、Workspace 和成员关系 | Enterprise Workspace Service |
+| Data Product、Metric、Action、View、Skill 定义 | 各自 Registry |
+| Work Item 当前状态 | Collaboration Service |
+| 权限政策 | Policy Registry |
+| 一次权限判断结果 | Policy Decision Log |
+| 原始交付物和附件 | Object Store + Metadata |
+| 正式知识资产 | Knowledge Asset Registry |
+| Agent 执行过程 | Trace Store |
+| 不可抵赖审计 | Audit Store |
+
+Hermes 的搜索、向量、图谱、缓存和管理驾驶舱都是投影，不得成为业务事实源。
+
+### 6.9 对象公共信封
+
+所有可治理对象使用统一信封，避免每个模块重复发明租户、权限和版本字段：
+
+```json
+{
+  "id": "obj_01...",
+  "type": "project.delivery_risk",
+  "tenant_id": "ten_01...",
+  "workspace_id": "wsp_01...",
+  "owner_id": "usr_01...",
+  "classification": "internal",
+  "acl_ref": "acl_01...",
+  "purpose_tags": ["project_delivery"],
+  "schema_version": "1.0",
+  "resource_version": 7,
+  "status": "active",
+  "source": {
+    "system": "ticket",
+    "object_id": "TICKET-1001"
+  },
+  "created_at": "2026-07-28T10:00:00Z",
+  "updated_at": "2026-07-28T11:00:00Z"
+}
+```
+
+公共信封只定义治理字段，业务正文仍由对象自己的 Schema 定义。
+
 ## 7. 总体产品架构
 
 ```mermaid
@@ -352,6 +419,199 @@ flowchart TB
 
 Governance Plane 对所有层生效。Evolution Agent 只能提出 Policy 候选，不能
 自行放宽企业权限。
+
+### 7.1 服务职责分解
+
+| 服务 | 核心职责 | 不承担的职责 |
+|---|---|---|
+| Workbench Gateway | H5/PWA 会话、流式响应、View 交付 | 业务事实和权限决策 |
+| Identity & Org Service | Tenant、组织、成员、身份映射 | 业务对象正文 |
+| Work Event Gateway | 接入、校验、去重和规范化事件 | 知识发布 |
+| Catalog Service | Data、Metric、Action、View、Skill 元数据目录 | 执行 Action |
+| Query Planner | 将意图转换为 Read Plan | 绕过 Policy 读取数据 |
+| Policy Service | 统一权限和用途决策 | 保存业务正文 |
+| Data Product Gateway | 执行受控查询和字段脱敏 | 直接修改来源系统 |
+| Knowledge Service | Evidence、资产、引用、搜索和 RAG | 改变来源 ACL |
+| View Orchestrator | 生成和验证 View Schema | 下发任意前端代码 |
+| Action Gateway | Prepare、Approve、Commit、Compensate | 自行决定业务授权 |
+| Skill Registry | Skill 包、版本、签名和发布范围 | 在线执行 Skill |
+| Skill Runner | 编排已发布 Skill | 发布或修改 Skill |
+| Collaboration Service | Work Item、审批、交接、异常和 SLA | 保存来源系统正式交易 |
+| Evolution Service | 发现候选、组织评估、效果分析 | 直接发布企业能力 |
+| Evaluation Service | Golden Case、回归、安全和效果评估 | 修改生产数据 |
+| Audit Service | 追加式审计、查询和导出 | 充当运营日志缓存 |
+
+每个服务对外暴露版本化契约。内部实现可以合并部署，但不能合并职责和事实归属。
+
+### 7.2 控制平面与数据平面
+
+控制平面保存“应该如何运行”：
+
+- Tenant 配置；
+- Registry 元数据；
+- Policy；
+- Schema；
+- 发布清单；
+- 签名和版本；
+- 运行配额；
+- 审批配置。
+
+数据平面处理“本次工作正在发生什么”：
+
+- Work Event；
+- Read Plan；
+- Query Result；
+- Work Item；
+- Skill Run；
+- Action Command；
+- Evidence；
+- Trace。
+
+企业专属数据平面和私有化部署可以共享产品控制协议，但企业业务正文、查询结果、
+Evidence 和 Trace 必须留在客户选择的数据边界内。
+
+### 7.3 请求上下文信封
+
+所有跨服务请求携带不可由客户端自行伪造的上下文：
+
+```json
+{
+  "request_id": "req_01...",
+  "trace_id": "trc_01...",
+  "tenant_id": "ten_01...",
+  "subject": {
+    "type": "human",
+    "id": "usr_01..."
+  },
+  "delegation": {
+    "agent_id": "agt_01...",
+    "on_behalf_of": "usr_01..."
+  },
+  "workspace_id": "wsp_01...",
+  "purpose": "project_delivery",
+  "classification_ceiling": "confidential",
+  "policy_context_version": "pcv_109",
+  "expires_at": "2026-07-28T10:10:00Z"
+}
+```
+
+Agent 代表员工执行时，同时记录员工身份和 Agent 身份。审计记录不能只显示
+“系统执行”，也不能把 Agent 的行为错误归到无法识别的共享账号。
+
+### 7.4 主要 API 边界
+
+首版 API 使用资源和动作分离的方式：
+
+| API | 用途 |
+|---|---|
+| `POST /v1/intents:interpret` | 将员工表达转换为 Intent Contract |
+| `POST /v1/views:compose` | 生成 View Draft |
+| `POST /v1/views:validate` | 校验 Schema、Binding、Policy 和终端能力 |
+| `POST /v1/read-plans:execute` | 执行受控读取 |
+| `POST /v1/actions/{id}:prepare` | 生成影响预览和 Commit Token |
+| `POST /v1/actions/{id}:commit` | 执行经过确认的 Action |
+| `GET /v1/commands/{id}` | 查询最终命令状态 |
+| `POST /v1/work-items` | 创建正式协同任务 |
+| `POST /v1/skill-runs` | 启动已发布 Skill |
+| `POST /v1/skill-runs/{id}:resume` | 人工批准或补充后继续 |
+| `POST /v1/evolution-candidates` | 提交能力候选 |
+| `POST /v1/evaluations` | 启动能力评估 |
+| `POST /v1/policy-decisions` | 请求统一权限决策 |
+
+外部客户端不能直接调用内部 Data Adapter 和来源数据库。API 返回稳定错误码、
+可重试标识、Trace ID 和用户可执行的下一步。
+
+### 7.5 存储职责
+
+| 存储 | 保存内容 | 不能保存为权威事实的内容 |
+|---|---|---|
+| PostgreSQL | Registry、Workspace、Work Item、Command、Policy 元数据 | 大附件和搜索索引 |
+| Object Storage | 原文、附件、Evidence、Skill 包、评估制品 | 权限最终判断 |
+| Search Index | 全文、过滤字段、检索投影 | 正式资产状态 |
+| Vector Index | Embedding 和语义召回投影 | ACL 和业务主键事实 |
+| Graph Store | 对象和知识关系投影 | 交易状态 |
+| NATS / JetStream | 事件交付、工作队列和重放 | 最终业务状态 |
+| Redis | 短期缓存、限流、会话和短锁 | Command、审批和审计事实 |
+| Trace Store | Agent、模型和工具运行轨迹 | 正式业务结果 |
+| Audit Store | 追加式安全和内容访问审计 | 普通缓存 |
+
+Redis 是可选基础设施，用于降低热点读取和协调成本；Redis 故障不能导致正式任务、
+审批或命令永久丢失。
+
+### 7.6 关键事件
+
+```text
+work.intent.created
+view.draft.generated
+view.saved
+view.template.proposed
+read.plan.executed
+data.quality.changed
+policy.decision.denied
+action.prepared
+action.approval.requested
+action.committed
+action.outcome.unknown
+work.item.state.changed
+evidence.created
+knowledge.asset.changed
+evolution.candidate.created
+skill.evaluation.completed
+skill.release.started
+skill.release.stopped
+skill.run.completed
+skill.run.human_takeover
+acl.changed
+audit.original_content.accessed
+```
+
+事件必须包含 `event_id`、Tenant、对象 ID、对象版本、发生时间、Trace ID 和
+Schema 版本。生产者使用 Transactional Outbox，消费者按 `event_id` 幂等。
+
+### 7.7 首个试点 SLO 建议
+
+以下是设计目标，需要通过真实客户网络和数据量校准：
+
+| 指标 | 建议目标 |
+|---|---|
+| Workbench Shell 可交互时间 | 典型 4G 网络 P75 不高于 2.5 秒 |
+| 首个 View 骨架返回 | P75 不高于 3 秒 |
+| Policy Decision | 缓存命中 P95 不高于 50 毫秒 |
+| 常用只读数据加载 | P95 不高于 2 秒 |
+| Action Prepare | 不含来源系统耗时 P95 不高于 500 毫秒 |
+| Command 状态可查询 | 100% |
+| 高风险写入审计 | 100% 同步确认或阻断 |
+| 跨 Tenant 越权 | 0 |
+| 已提交 Command 永久丢失 | 0 |
+
+动态 View 采用骨架、分区加载和流式更新，不等待全部数据和模型输出后才展示。
+
+### 7.8 四种部署形态
+
+| 形态 | 控制平面 | 数据平面 | 模型和业务数据 |
+|---|---|---|---|
+| Shared SaaS | Hermes 共享 | Hermes 共享、Tenant 隔离 | 按 Tenant Policy |
+| Dedicated Data Plane | Hermes 共享 | 客户专属 VPC | 留在专属数据平面 |
+| Connected Private | 客户环境 | 客户环境 | 不离开客户 VPC |
+| Offline Private | 客户离线环境 | 客户离线环境 | 完全本地 |
+
+四种形态共用 Data、Action、View、Skill、Policy 和 Work Event 契约。差异通过
+Adapter、部署清单和发布策略处理，不维护不同业务代码。
+
+### 7.9 本地与云端执行边界
+
+Hermes Work Agent 的步骤可以分布在：
+
+- Cloud Runtime：访问云端 Data Product、Knowledge 和协同服务；
+- Customer Runtime：访问客户 VPC 内的数据、模型和 Action；
+- Local Agent：访问员工设备明确授权的本地文件、工具和会话；
+- H5/PWA：渲染 View、收集确认，不保存长期密钥。
+
+Connector 和 Agent Local Gateway 负责稳定连接、能力发现、身份绑定和本地命令
+边界，不承担 Evolution Agent 的企业分析职责。
+
+运行位置由 Skill Step、数据分类和 Policy 共同决定。不能因为本地 Agent 在线就
+把受限数据上传到云端模型，也不能因为云端规划方便而绕过客户本地 Action。
 
 ## 8. 双层 Hermes Agent
 
@@ -426,6 +686,77 @@ Evolution Agent 不是拥有所有员工原始内容的“企业超级大脑”�
 | 发布权限 | 个人视图 | 无直接发布权 |
 | 人工门禁 | 高风险 Action | 所有企业能力发布 |
 
+### 8.4 Agent 内部职责
+
+Work Agent 和 Evolution Agent 都不是单次 Prompt。运行时至少拆成以下职责：
+
+| 职责 | 说明 |
+|---|---|
+| Intent Interpreter | 提取目标、对象、时间范围、交付物和限制 |
+| Context Builder | 按权限装配最小必要上下文 |
+| Planner | 生成 Read、View、Skill 或 Command Plan |
+| Policy Client | 在计划和执行阶段请求权限决策 |
+| Executor | 调用 Data、Knowledge、Skill 和 Action |
+| Verifier | 校验 Schema、引用、业务不变量和结果完整性 |
+| Human Gate | 请求确认、审批、补充或接管 |
+| Recorder | 记录 Work Item、Evidence、Trace 和 Outcome |
+
+这些职责可以在首版中由同一进程实现，但 Trace 中必须区分“模型建议”“政策
+决策”“工具结果”和“人工决定”，否则后续无法定位错误责任。
+
+### 8.5 Context Builder
+
+Context Builder 按以下顺序装配上下文：
+
+1. 平台不可覆盖的安全政策；
+2. 当前 Tenant 和 Workspace 政策；
+3. 当前员工身份和委托关系；
+4. 当前 Work Item 的目标、状态和交付物；
+5. 已发布 Skill Manifest；
+6. 经权限过滤的 Data Product Schema；
+7. 经权限过滤的 Knowledge Asset 摘要和引用；
+8. 当前 View 状态；
+9. 当前会话必要历史；
+10. 允许使用的个人偏好。
+
+禁止默认装入：
+
+- 企业全量知识；
+- 员工全部历史对话；
+- 不属于当前 Purpose 的数据；
+- 管理员可见但当前员工不可见的数据；
+- 未发布 Skill 草稿；
+- 长期密钥和数据库凭据。
+
+Context Builder 必须记录每一项上下文的来源、版本、权限决策和 Token 成本。
+
+### 8.6 记忆分层
+
+Hermes 记忆分为四层：
+
+| 记忆层 | 内容 | 默认范围 | 晋升方式 |
+|---|---|---|---|
+| Session Memory | 当前对话和临时步骤 | 当前会话 | 会话结束清理或摘要 |
+| Personal Memory | 个人偏好、常用 View、明确保存的工作习惯 | 仅本人 | 员工主动保存 |
+| Team Memory | 项目约定、团队模板和项目复盘 | 团队/项目 | Owner 审核 |
+| Enterprise Asset | 正式知识、Metric、Skill 和模板 | 授权企业范围 | 治理发布 |
+
+个人记忆不能因为被频繁使用而自动晋升为团队或企业资产。晋升必须创建候选对象，
+保留来源 ACL，并向员工提供可见的纠错或异议入口。
+
+### 8.7 模型角色和路由
+
+不同步骤不要求使用同一个模型：
+
+- Intent 和 View 组合：优先低时延模型；
+- 复杂规划和候选 Skill 草拟：使用高能力模型；
+- 结构化校验：优先确定性规则和 Schema Validator；
+- 权限决策：只能由 Policy Service 完成；
+- 高敏感数据：按 Policy 路由到企业专属或本地模型；
+- 结果复核：可以使用独立模型或规则，避免同一输出自我证明。
+
+模型更换不得改变 Data、Action、View 和 Skill 契约。
+
 ## 9. 双层迭代升级循环
 
 ### 9.1 下层快速工作循环
@@ -480,6 +811,81 @@ Evolution Agent 不是拥有所有员工原始内容的“企业超级大脑”�
 
 使用频率不能单独决定晋升。还必须验证结果质量、数据权限、适用边界、Owner 和
 异常处理。
+
+### 9.4 Evolution 候选发现机制
+
+Evolution Agent 允许使用的发现信号包括：
+
+- 多个 Work Item 中重复出现的 Action 序列；
+- 多名员工独立保存的相似 View 结构；
+- 相同问题反复检索但缺少正式知识；
+- 相同异常反复进入人工接管；
+- 员工对 Agent 结果的重复修正模式；
+- 相似交付物中稳定出现的步骤；
+- Skill 运行中的固定失败点；
+- 团队 Owner 主动提交的能力建议。
+
+禁止使用的发现信号包括：
+
+- 键盘、鼠标、屏幕和摄像头活动；
+- 非工作时间在线状态；
+- 私人账号内容；
+- 未告知用途的历史数据；
+- 以个人提示词数量或消息数量判断能力价值。
+
+### 9.5 候选评分
+
+候选使用 0—5 分的多维评分，不使用单一“AI 置信度”：
+
+| 维度 | 核心问题 |
+|---|---|
+| Frequency | 是否在多个正式 Work Item 中重复出现 |
+| Coverage | 是否跨员工、团队或项目成立 |
+| Outcome Consistency | 方法是否持续产生可验证的正确结果 |
+| Time Saving | 是否减少明显重复劳动 |
+| Standardization | 输入输出和异常能否形成稳定契约 |
+| Data Readiness | 数据是否具备 Owner、质量和 ACL |
+| Risk | 是否涉及外部承诺、敏感数据或不可逆动作 |
+| Volatility | 规则是否频繁变化、难以固化 |
+
+建议排序分可以辅助评审：
+
+```text
+Candidate Priority
+  = Value(Frequency, Coverage, Outcome, Time Saving)
+  - Cost(Data Readiness Gap, Risk, Volatility)
+```
+
+该分数只决定进入评审队列的优先级，不决定发布。
+
+### 9.6 候选记录
+
+每个 Evolution Candidate 至少保存：
+
+```json
+{
+  "candidate_id": "evo_01...",
+  "candidate_type": "skill",
+  "title": "项目风险识别",
+  "scope": ["project_delivery"],
+  "evidence_refs": ["evd_01", "evd_02"],
+  "source_acl_refs": ["acl_01", "acl_02"],
+  "suggested_owner": "project-office",
+  "scores": {
+    "frequency": 4,
+    "coverage": 3,
+    "outcome_consistency": 4,
+    "risk": 2
+  },
+  "expected_value": {
+    "time_saved_minutes_per_run": 20
+  },
+  "status": "proposed"
+}
+```
+
+候选关闭时必须记录原因，例如重复、价值不足、数据不成熟、风险过高或不适合
+标准化。关闭结果用于改进候选发现，但不能用来训练员工评价模型。
 
 ## 10. 动态页面实现原则
 
@@ -553,6 +959,96 @@ Evolution Agent 不是拥有所有员工原始内容的“企业超级大脑”�
 个人 View 只能引用本人已有权限的数据和 Action。保存或分享 View 不得复制数据
 内容，也不得扩大访问权限。
 
+### 10.4 View 生成流水线
+
+```text
+用户目标
+  -> Intent Contract
+  -> 可用 Data / Metric / Action / Component 检索
+  -> Policy 预检查
+  -> Agent 生成 View Draft
+  -> View Schema Validator
+  -> Binding Validator
+  -> Policy 二次检查
+  -> Renderer Capability 检查
+  -> 下发客户端
+  -> 异步加载数据
+  -> 用户修改或保存
+```
+
+失败处理：
+
+- 缺少正式 Metric：不能自动编造口径，提示用户选择或申请定义；
+- 缺少数据权限：显示可申请的资源，不暴露资源正文；
+- 终端不支持组件：降级为兼容组件或结构化列表；
+- 数据超量：要求增加筛选或改用服务端聚合；
+- Action 不可用：保留只读 View，不生成无效按钮；
+- View Schema 不兼容：回退到上一可用版本。
+
+### 10.5 View Binding
+
+View 不保存查询结果，只保存声明式绑定：
+
+```text
+Component
+  -> Metric Binding / Query Binding / Object Binding
+  -> Data Product
+  -> Policy-filtered Result
+```
+
+Binding 必须声明：
+
+- Data Product 和版本范围；
+- 字段和维度；
+- 最大行数；
+- 默认筛选；
+- 刷新策略；
+- 空数据状态；
+- 错误状态；
+- 数据时效；
+- 来源展示方式。
+
+团队或企业模板发布时必须验证 Binding 在目标 Workspace 中存在，不能把创建者的
+个人权限固化进模板。
+
+### 10.6 动态页面安全
+
+Renderer 必须执行：
+
+- 组件 Allowlist；
+- Schema 深度和组件数量限制；
+- 文本、Markdown、链接和附件安全处理；
+- 禁止内联脚本和任意 iframe；
+- 外部链接域名策略；
+- 表单字段和 Action Schema 一致性；
+- 敏感字段遮罩；
+- 截图、复制和导出策略；
+- 移动端安全存储；
+- View 和数据分别缓存。
+
+Agent 生成的标题、说明和标签也属于不可信内容，必须经过内容转义和安全渲染。
+
+### 10.7 View 生命周期
+
+```text
+EPHEMERAL
+  -> SAVED_PERSONAL
+  -> SHARED_TEAM
+  -> ENTERPRISE_CANDIDATE
+  -> PUBLISHED
+  -> SUPERSEDED
+  -> ARCHIVED
+```
+
+View 版本变更分为：
+
+- Layout Change：只改变排列和展示；
+- Binding Change：改变数据和指标；
+- Action Change：改变可执行动作；
+- Policy Change：改变适用范围和条件。
+
+后面三类必须重新执行权限和回归检查。
+
 ## 11. 读取与写入分离
 
 ### 11.1 Read Plan
@@ -606,6 +1102,83 @@ Command Plan
 ```
 
 Agent 不能用自然语言直接拼接写库语句。
+
+### 11.3 Action 风险等级
+
+| 等级 | 示例 | 默认门禁 |
+|---|---|---|
+| R0 只读 | 查询、预览、比较 | Policy 允许后执行 |
+| R1 可撤销内部写入 | 保存个人 View、添加评论 | 用户确认，可撤销 |
+| R2 业务状态变更 | 分配任务、更新风险等级 | Schema、权限、幂等、审计 |
+| R3 外部承诺或敏感操作 | 发信、报价、合同审批、客户回复 | 明确预览和人工批准 |
+| R4 不可逆或高影响 | 支付、删除、生产变更 | 多人审批或仅人工执行 |
+
+风险等级由 Action Owner 定义，Agent 不能自行降低。
+
+### 11.4 Prepare / Commit 两阶段
+
+R2 及以上 Action 默认采用：
+
+1. `prepare`：校验输入、权限、前置条件和资源版本；
+2. 返回 Preview、影响范围、风险、审批要求和短期 Commit Token；
+3. 员工或审批人确认；
+4. `commit`：携带 Commit Token 和 Idempotency Key 执行；
+5. 写入 Outcome、Audit 和 Evidence。
+
+Prepare 结果过期、来源状态变化或资源版本变化时必须重新 Prepare。
+
+### 11.5 幂等和并发
+
+Action Contract 必须声明：
+
+- 幂等键作用域；
+- 幂等记录保存时间；
+- 乐观锁字段；
+- 重复请求返回规则；
+- 上游超时后的状态查询方式；
+- 是否允许自动重试；
+- 补偿动作；
+- 不可补偿时的人工处理队列。
+
+对于“请求已发出但结果未知”的情况，不能直接重试可能产生外部效果的动作。先按
+外部请求 ID 查询结果，仍无法确定时进入 `OUTCOME_UNKNOWN`。
+
+### 11.6 Command 状态机
+
+```text
+DRAFT
+  -> PREPARED
+  -> WAITING_APPROVAL
+  -> APPROVED
+  -> COMMITTING
+  -> SUCCEEDED
+
+PREPARED / WAITING_APPROVAL / APPROVED
+  -> EXPIRED / REJECTED / CANCELLED
+
+COMMITTING
+  -> FAILED / OUTCOME_UNKNOWN
+
+SUCCEEDED
+  -> COMPENSATING
+  -> COMPENSATED / COMPENSATION_FAILED
+```
+
+任何终态都必须可查询。客户端断线或 Agent 重启不能丢失命令状态。
+
+### 11.7 失败责任边界
+
+| 失败位置 | 处理责任 |
+|---|---|
+| 意图不清 | Work Agent 请求补充 |
+| View Schema 错误 | View Orchestrator 拒绝并生成安全降级 |
+| 权限拒绝 | Policy Service 返回原因代码和申请入口 |
+| 数据质量失败 | Data Product Owner 处理，Agent 标记不可信 |
+| Action 前置条件失败 | Action Gateway 返回当前状态和可重试条件 |
+| 来源系统超时 | Adapter 查询最终状态，不盲目重试 |
+| Skill 步骤失败 | Skill Runner 按补偿策略或人工接管 |
+| 模型失败 | Model Gateway 降级，不改变正式业务结果 |
+| 审计写入失败 | 高风险写操作阻断；低风险读取进入可靠缓冲 |
 
 ## 12. 数据与语义底座
 
@@ -667,6 +1240,106 @@ Hermes 不应尝试一次性建立覆盖所有行业的统一大模型。采用�
 9. 版本兼容；
 10. 使用目的说明。
 
+### 12.4 Data Product Contract 示例
+
+```yaml
+data_product_id: project-delivery-status
+version: 1.3.0
+owner: project-office
+source_of_record: ticket-system
+entity: project.delivery_item
+freshness:
+  mode: event_plus_reconcile
+  target_seconds: 60
+schema:
+  key: delivery_item_id
+  fields:
+    - name: project_id
+      type: string
+      classification: internal
+    - name: blocker_reason
+      type: string
+      classification: confidential
+quality:
+  - rule: delivery_item_id_not_null
+  - rule: state_in_allowed_values
+access:
+  purposes:
+    - project_delivery
+  row_policy: project_membership
+  field_masks:
+    blocker_reason: require_project_access
+lineage:
+  connector: ticket-connector
+  source_object: delivery_item
+```
+
+Contract 变更遵循语义化版本：
+
+- Patch：描述、质量规则和不改变结果的修复；
+- Minor：新增可选字段或兼容能力；
+- Major：删除字段、改变含义或改变主键。
+
+### 12.5 数据同步模式
+
+来源系统按能力选择：
+
+| 模式 | 适用场景 | 关键控制 |
+|---|---|---|
+| API Query | 低频、强实时读取 | 限流、超时、权限透传 |
+| Webhook / Event | 状态变化 | 签名、去重、顺序和重放 |
+| CDC | 数据库级变更 | Schema 演进、删除传播、最小字段 |
+| Incremental Pull | 无事件接口 | 游标、回溯窗口、对账 |
+| File Import | 批次数据 | 文件签名、格式、隔离和错误报告 |
+
+无论采用哪种模式，都必须定期 Reconcile，校验 Hermes 投影与 System of Record
+是否一致。
+
+### 12.6 数据质量状态
+
+Data Product 对外暴露质量状态：
+
+```text
+HEALTHY
+DEGRADED
+STALE
+BLOCKED
+RECONCILING
+```
+
+View 和 Agent 必须展示数据更新时间和质量状态。`STALE` 或 `BLOCKED` 数据不能
+用于高风险 Action 的自动判断。
+
+### 12.7 逻辑数据模型
+
+建议至少包含：
+
+- `business_object_types`
+- `business_object_refs`
+- `data_products`
+- `data_product_versions`
+- `data_contract_fields`
+- `data_quality_rules`
+- `data_quality_runs`
+- `metrics`
+- `metric_versions`
+- `action_definitions`
+- `action_versions`
+- `view_definitions`
+- `view_versions`
+- `view_bindings`
+- `evolution_candidates`
+- `candidate_evidence_refs`
+- `policy_decisions`
+- `delegation_grants`
+- `command_records`
+- `command_attempts`
+- `outcomes`
+- `traces`
+
+业务大表仍留在来源系统或客户数据平台。Hermes 元数据表保存契约、引用和治理
+状态，不复制不必要的全量业务数据。
+
 ## 13. 公司核心 Skill
 
 ### 13.1 Skill 是未来业务系统的可执行单元
@@ -722,6 +1395,95 @@ Skill 通过版本化制品快速升级，不要求同步更新 Hermes Agent 二
 - 企业能力快速迭代；
 - 客户环境按策略选择版本；
 - 异常时单独回滚 Skill。
+
+### 13.4 Skill 包结构
+
+```text
+customer-risk-review/
+  manifest.yaml
+  schemas/
+    input.schema.json
+    output.schema.json
+  workflow/
+    workflow.yaml
+  prompts/
+    analysis.md
+  policies/
+    required-purpose.yaml
+  evaluations/
+    golden-cases.jsonl
+    safety-cases.jsonl
+  migrations/
+    from-1.1-to-1.2.yaml
+  README.md
+  checksums.txt
+  signature.sig
+```
+
+Prompt 只是 Skill 包的一部分。业务规则优先使用结构化 Workflow、Action
+Precondition 和确定性校验表达。
+
+### 13.5 Skill 运行记录
+
+每次 Skill Run 保存：
+
+- Skill ID 和版本；
+- 触发来源；
+- Work Item；
+- 执行主体和委托人；
+- Purpose；
+- 输入摘要和分类；
+- 使用的知识资产版本；
+- 调用的 Action 版本；
+- 每一步开始和结束时间；
+- 模型和路由策略；
+- Token、时延和费用；
+- 人工门禁；
+- 输出和 Outcome；
+- 错误、补偿和最终状态；
+- Trace 和 Evidence 引用。
+
+### 13.6 Evaluation Suite
+
+评估至少覆盖：
+
+| 类型 | 检查内容 |
+|---|---|
+| Contract | 输入输出、必填字段和版本兼容 |
+| Golden Case | 典型正确路径 |
+| Boundary | 空值、极值、跨期、重复和冲突 |
+| Permission | 越权、字段脱敏和 Purpose |
+| Safety | Prompt Injection、秘密和外泄 |
+| Tool | 错误参数、超时、重试和幂等 |
+| Human Gate | 审批、拒绝、超时和接管 |
+| Regression | 新旧版本结果差异 |
+| Cost | Token、模型、工具和人工成本 |
+| Latency | 总时延和关键步骤时延 |
+
+Skill 发布门槛不能只使用“模型回答评分”。必须同时满足 Contract、Permission、
+Safety 和业务 Outcome 指标。
+
+### 13.7 灰度策略
+
+灰度维度：
+
+- Tenant；
+- Workspace；
+- 团队；
+- 用户；
+- Work Item 类型；
+- 数据分类；
+- Agent capability；
+- 时间窗口。
+
+自动停止条件建议包括：
+
+- 严重权限拒绝异常；
+- R3/R4 Action 异常；
+- Outcome 失败率超过版本门槛；
+- 人工接管率明显高于基线；
+- 成本或时延超过预算；
+- 来源系统错误快速上升。
 
 ## 14. 权限与治理
 
@@ -779,6 +1541,101 @@ Evolution Agent 使用独立服务身份，遵循：
 [Hermes 企业 AI 工作台扩展设计](2026-07-28-enterprise-ai-workbench-expansion-design.md)
 中的员工权益和数据治理边界。
 
+### 14.4 PDP 与 PEP
+
+Policy Decision Point（PDP）负责计算决策，Policy Enforcement Point（PEP）
+负责执行决策。以下位置必须有 PEP：
+
+1. Workbench Gateway：校验身份、Tenant 和会话；
+2. Query Planner：限制可计划的数据和字段；
+3. Data Product Gateway：执行行列过滤和脱敏；
+4. Search / Vector：召回前过滤、返回前二次鉴权；
+5. View Orchestrator：移除不可用组件和 Action；
+6. Action Gateway：检查 Action、对象和审批；
+7. Skill Runner：逐步骤检查数据和工具；
+8. Connector / Local Gateway：检查本地能力和设备授权；
+9. Export Service：检查下载、复制和外发；
+10. Model Gateway：决定数据可以进入哪个模型环境。
+
+只在 API Gateway 鉴权一次不能满足企业级数据权限。
+
+### 14.5 Policy Decision 请求示例
+
+```json
+{
+  "subject": {
+    "type": "human",
+    "id": "usr_01",
+    "roles": ["project_member"]
+  },
+  "delegated_agent": "agt_work_01",
+  "tenant_id": "ten_01",
+  "workspace_id": "wsp_01",
+  "resource": {
+    "type": "project.delivery_item",
+    "id": "item_01",
+    "classification": "confidential",
+    "acl_ref": "acl_01"
+  },
+  "action": "read:blocker_reason",
+  "purpose": "project_delivery",
+  "context": {
+    "project_id": "prj_01",
+    "device_trust": "managed",
+    "network_zone": "enterprise"
+  }
+}
+```
+
+决策响应：
+
+```json
+{
+  "decision": "allow_with_obligations",
+  "policy_version": "pol_108",
+  "obligations": {
+    "mask_fields": [],
+    "watermark": true,
+    "allow_export": false,
+    "model_route": "tenant_private",
+    "audit_level": "content_access"
+  },
+  "expires_at": "2026-07-28T10:10:00Z"
+}
+```
+
+PEP 必须执行 Obligations，不能只读取 allow/deny。
+
+### 14.6 权限变更传播
+
+来源 ACL、组织成员、项目成员或数据分类发生变化时：
+
+1. Identity / Connector 产生权限变更事件；
+2. Policy Cache 失效；
+3. Search、Vector 和 Graph 更新过滤元数据；
+4. 已打开 View 在下次读取时重新鉴权；
+5. 长任务和 Skill Run 在关键步骤重新鉴权；
+6. 已签发短期授权按风险决定立即吊销或自然过期；
+7. 审计记录传播完成时间。
+
+删除用户权限后，不能等待下一次全量索引重建才生效。
+
+### 14.7 Break-glass
+
+紧急访问必须具备：
+
+- 明确原因；
+- 指定事件或工单；
+- 最小资源范围；
+- 双人审批或事后强制复核；
+- 短有效期；
+- 强提醒和水印；
+- 不可删除审计；
+- 使用结束自动关闭；
+- 定期审查是否被滥用。
+
+平台管理员不能以“排障”为由长期拥有 Break-glass 权限。
+
 ## 15. 工作协同与证据
 
 动态页面不能只提供临时答案。正式工作必须回到 Work Item：
@@ -798,6 +1655,74 @@ Evolution Agent 使用独立服务身份，遵循：
 
 Workbench 可以随任务变化，但 Work Item 和 Evidence 保证工作连续性。员工切换
 终端、Agent 或 View 后，仍然可以恢复完整状态。
+
+### 15.1 Work Item 状态机
+
+```text
+PLANNED
+  -> READY
+  -> IN_PROGRESS
+  -> IN_REVIEW
+  -> APPROVED
+  -> DONE
+  -> ARCHIVED
+
+READY / IN_PROGRESS / IN_REVIEW
+  -> BLOCKED
+  -> IN_PROGRESS
+
+任意未完成状态
+  -> CANCELLED
+```
+
+状态转换必须声明允许的角色、前置条件、必填字段和产生的事件。例如从
+`IN_REVIEW` 进入 `APPROVED` 必须存在审批人、审批意见和目标交付物版本。
+
+### 15.2 人与 Agent 的责任记录
+
+每一步记录：
+
+- `requested_by`：谁提出目标；
+- `planned_by`：谁生成计划；
+- `executed_by`：谁或哪个 Agent 执行；
+- `approved_by`：谁批准；
+- `verified_by`：谁或哪个规则验证；
+- `accepted_by`：谁接受最终交付物。
+
+这五类责任不能合并成一个 `operator` 字段。
+
+### 15.3 Evidence 最小要求
+
+正式 Evidence 包括：
+
+- 来源对象和版本；
+- 获取时间；
+- 内容哈希；
+- 来源 ACL 快照；
+- 适用 Purpose；
+- 生成或转换过程；
+- 人工修改；
+- 关联 Outcome；
+- 保留和删除政策。
+
+报告、决策和 Skill 候选必须能够反向定位 Evidence。Evidence 被删除或失效时，
+引用它的知识和 Skill 进入复审。
+
+### 15.4 人工接管
+
+Agent 进入以下情况必须支持一键接管：
+
+- 目标冲突；
+- 权限不足；
+- 数据质量不足；
+- Action 结果未知；
+- 超出 Skill 适用范围；
+- 高风险异常；
+- 多次重试失败；
+- 员工主动要求。
+
+接管包至少包含当前目标、已完成步骤、数据引用、未决 Action、错误、建议下一步
+和恢复 Token。员工处理后可以选择继续由 Agent 执行，不能只能重新开始。
 
 ## 16. 版本与升级模型
 
@@ -839,6 +1764,67 @@ Workbench 可以随任务变化，但 Work Item 和 Evidence 保证工作连续�
 
 Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用的能力包。
 
+### 16.4 Capability Resolution
+
+Work Agent 启动或重连时上报：
+
+```json
+{
+  "agent_runtime": "2.4.1",
+  "connector_protocol": "1.3",
+  "view_schema_versions": ["1.0", "1.1"],
+  "components": {
+    "metric_card": "2.0",
+    "work_item_table": "1.4"
+  },
+  "action_contract_versions": ["1.x", "2.x"],
+  "execution_features": [
+    "skill_resume",
+    "purpose_token",
+    "command_status_query"
+  ]
+}
+```
+
+Registry 根据 Tenant 发布策略、Agent capability、Policy 和灰度范围解析实际
+可用版本。解析结果带有效期和签名，可以缓存但必须支持紧急吊销。
+
+### 16.5 兼容矩阵
+
+每个 Capability Release 声明：
+
+- 最低 Agent Runtime；
+- 最低 Connector Protocol；
+- 支持的 View Schema；
+- 需要的组件版本；
+- 需要的 Action Contract；
+- 允许的部署模式；
+- 数据迁移要求；
+- 降级方案。
+
+不兼容时应返回明确的 `CAPABILITY_UNAVAILABLE`，并提供可用旧版本，不能让模型
+猜测替代步骤。
+
+### 16.6 私有化和离线升级
+
+离线能力包包含：
+
+- OCI 镜像；
+- Helm Chart；
+- 数据库 Migration；
+- Registry Snapshot；
+- Skill 和 View 包；
+- Model 配置；
+- SBOM；
+- 签名和校验和；
+- 兼容矩阵；
+- 升级前检查；
+- 回滚包；
+- 验收脚本。
+
+客户先在预生产环境生成兼容报告，再批准进入生产。离线环境不能因为无法访问
+中央服务而停止已授权的本地工作。
+
 ## 17. 现有系统迁移方法
 
 ### 17.1 四类处置
@@ -865,9 +1851,93 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 
 不能按“页面看起来一样”判断迁移完成。必须按业务结果、权限和证据一致性验收。
 
+### 17.3 应用迁移评分
+
+每个存量系统按 0—5 分评估：
+
+| 维度 | 低分含义 | 高分含义 |
+|---|---|---|
+| Record Criticality | 非权威数据 | 核心账本或监管事实 |
+| Transaction Complexity | 只读 | 复杂事务和不可逆写入 |
+| UI Duplication | 独有体验 | 与多个系统高度重复 |
+| API Readiness | 无稳定接口 | API 和事件完整 |
+| Data Readiness | 无 Owner、质量差 | Contract、ACL、质量成熟 |
+| Workflow Variability | 流程固定 | 因人、项目和上下文变化 |
+| User Switching Cost | 独立完成工作 | 频繁跨系统 |
+| Compliance Risk | 一般内部数据 | 高敏感和强监管 |
+
+处置建议：
+
+- Record Criticality、Transaction Complexity、Compliance Risk 高：`Keep`；
+- 核心后端稳定、API Readiness 高、UI Duplication 高：`Headless`；
+- 只读、Workflow Variability 和 User Switching Cost 高：`Absorb`；
+- 使用低、无权威事实且功能重复：`Retire`。
+
+评分不能自动决定退役，必须由业务 Owner、系统 Owner、安全和审计共同批准。
+
+### 17.4 迁移验收对照
+
+每个被吸收页面建立对照表：
+
+| 对照项 | 旧系统 | Hermes | 验收要求 |
+|---|---|---|---|
+| 数据范围 | 原页面查询 | Read Plan | 行列范围一致或更严格 |
+| 指标口径 | 页面内逻辑 | Metric Registry | 结果一致 |
+| 权限 | 原系统角色 | Policy | 不扩大 |
+| 写操作 | 原表单 | Action Contract | 状态和副作用一致 |
+| 审批 | 原流程 | Work Item / Human Gate | 责任链完整 |
+| 导出 | 原下载 | Export Policy | 分类和水印符合要求 |
+| 审计 | 原日志 | Audit Event | 可追溯且字段完整 |
+| 性能 | 原基线 | Workbench SLO | 达到约定门槛 |
+
 ## 18. 可操作落地路线
 
-### Phase 0：契约与治理基础
+### 18.1 七条并行工作流
+
+每个 Phase 都由以下工作流共同交付，不能只完成前端或模型演示：
+
+| 工作流 | 主要交付 |
+|---|---|
+| Product & Domain | 场景、对象、指标、Action、责任和验收 |
+| Data | Connector、Contract、质量、血缘和对账 |
+| Agent & Model | Intent、Planner、Context、Verifier 和 Model Gateway |
+| Workbench | Shell、Renderer、Component、View 和多端适配 |
+| Capability | Action、Skill、Workflow、Registry 和 Evaluation |
+| Governance & Security | Identity、Policy、DLP、Audit 和员工透明度 |
+| Platform & Delivery | API、事件、存储、可观测、SaaS 和私有化 |
+
+每个 Phase 的完成标准是“一个真实业务闭环可以安全运行”，不是七条工作流分别
+完成孤立组件。
+
+### 18.2 环境与发布流
+
+至少划分：
+
+- Local：开发者本地契约和组件测试；
+- Integration：跨服务、Adapter 和事件集成；
+- Sandbox：使用脱敏或合成数据运行 Agent 和 Skill；
+- Pre-production：客户等价配置、权限和容量验证；
+- Canary：真实小范围用户和低风险数据；
+- Production：按发布策略扩展。
+
+Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 Canary。
+
+### 18.3 Definition of Done
+
+任何 Phase 内的产品能力只有同时满足以下条件才算完成：
+
+1. 有业务 Owner；
+2. 有版本化契约；
+3. 有权限和数据分类；
+4. 有成功、失败和接管路径；
+5. 有 Trace 和 Audit；
+6. 有自动化 Contract 和权限测试；
+7. 有用户验收用例；
+8. 有运营指标；
+9. 有灰度和回滚；
+10. 有文档和支持边界。
+
+### 18.4 Phase 0：契约与治理基础
 
 交付：
 
@@ -888,7 +1958,7 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 读写均产生审计；
 - 协议具备兼容性测试。
 
-### Phase 1：只读动态工作台
+### 18.5 Phase 1：只读动态工作台
 
 建议首个试点采用“项目交付工作台”，接入：
 
@@ -916,7 +1986,7 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 所有回答和指标可以追溯来源；
 - 不产生正式写操作。
 
-### Phase 2：受控 Action 与工作协同
+### 18.6 Phase 2：受控 Action 与工作协同
 
 交付：
 
@@ -935,7 +2005,7 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 重复提交不产生重复业务效果；
 - 失败可以补偿、回滚或明确进入人工处理。
 
-### Phase 3：知识资产与核心 Skill
+### 18.7 Phase 3：知识资产与核心 Skill
 
 交付：
 
@@ -956,7 +2026,7 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - Skill 失败不会破坏 System of Record；
 - 发布后可以按 Tenant、团队和用户灰度。
 
-### Phase 4：Enterprise Evolution Agent
+### 18.8 Phase 4：Enterprise Evolution Agent
 
 交付：
 
@@ -976,7 +2046,7 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 发布效果可以与旧版本对比；
 - 异常版本可以自动停止灰度。
 
-### Phase 5：存量系统界面收敛
+### 18.9 Phase 5：存量系统界面收敛
 
 交付：
 
@@ -994,6 +2064,33 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 旧系统退役前完成数据和审计归档；
 - 员工跨系统切换显著减少；
 - 被吸收页面不再产生第二套业务逻辑。
+
+### 18.10 阶段依赖
+
+```text
+Phase 0 契约与治理
+  -> Phase 1 只读动态工作台
+  -> Phase 2 受控写入与协同
+  -> Phase 3 知识和核心 Skill
+  -> Phase 4 Evolution Agent
+  -> Phase 5 存量界面收敛
+```
+
+允许 Phase 1 的组件开发与 Phase 0 后半段并行，但不得绕过 Policy 和 Contract
+建立临时数据接口。Phase 4 不能提前于 Phase 3，因为没有稳定 Evidence、Asset、
+Skill 和 Evaluation 时，Evolution Agent 只能生成无法治理的建议。
+
+### 18.11 每阶段退出决策
+
+阶段结束由 Product、Domain、Security、Data 和 Platform Owner 共同作出：
+
+- `GO`：满足门槛，进入下一阶段；
+- `CONDITIONAL GO`：限定范围运行，并有关闭日期和责任人；
+- `HOLD`：价值成立但依赖未完成；
+- `STOP`：试点价值不足或风险不可接受；
+- `ROLLBACK`：退回上一稳定能力。
+
+不能因为演示效果好跳过安全、数据质量和业务 Outcome 验收。
 
 ## 19. 首个试点建议
 
@@ -1023,6 +2120,100 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
   -> 其他项目 Work Agent 获得新能力
 ```
 
+### 19.1 试点角色
+
+| 角色 | 核心任务 |
+|---|---|
+| 项目成员 | 查看本人任务、依赖、资料和下一步 |
+| 项目经理 | 识别交付风险、分配责任和发起升级 |
+| 技术负责人 | 查看代码、发布、缺陷和技术阻塞 |
+| 业务 Owner | 查看里程碑、交付物和重大决策 |
+| PMO / Knowledge Steward | 审核项目复盘、模板和 Skill 候选 |
+| 安全审计员 | 查看经授权的风险和原文访问审计 |
+
+### 19.2 首批 Data Product
+
+1. `project.master`：项目、Owner、成员、阶段和里程碑；
+2. `project.work_items`：任务、状态、负责人、截止时间和依赖；
+3. `project.documents`：正式文档、版本、Owner 和审批状态；
+4. `engineering.changes`：代码变更、评审、构建和发布；
+5. `service.issues`：工单、严重等级、状态和处理人；
+6. `project.decisions`：决策、依据、审批人和生效时间；
+7. `project.delivery_metrics`：延期、阻塞、缺陷和交付趋势。
+
+首批不接入员工私人聊天和非项目空间内容。
+
+### 19.3 首批 Action
+
+按风险递增：
+
+| Action | 风险 | 门禁 |
+|---|---|---|
+| `view.save_personal` | R1 | 用户确认 |
+| `work_item.comment` | R1 | 用户确认、可删除或更正 |
+| `work_item.assign` | R2 | 项目成员和资源版本检查 |
+| `work_item.escalate` | R2 | 原因必填、通知责任人 |
+| `document.request_review` | R2 | 文档版本和 Reviewer |
+| `project.risk.accept` | R3 | 项目经理批准、记录依据 |
+| `report.publish` | R3 | 预览、引用完整、Owner 批准 |
+
+首个试点不包含生产发布、客户外发、合同、付款和员工评价 Action。
+
+### 19.4 详细用户旅程
+
+场景：“项目经理查看本周交付风险并完成处置”。
+
+1. 用户进入 Hermes，身份服务确认其项目经理角色；
+2. 用户输入“把本周交付风险按影响排序，并告诉我需要处理什么”；
+3. Intent Interpreter 生成目标、项目范围、时间窗口和交付物；
+4. Context Builder 只装配该项目的 Data Product、Metric 和 Skill；
+5. Query Planner 生成多个 Read Plan；
+6. Policy Service 对项目、字段、Purpose 和模型路由决策；
+7. Data Product Gateway 并行读取任务、文档、代码和工单；
+8. Verifier 检查数据时效、缺失和指标口径；
+9. View Orchestrator 生成风险摘要、阻塞表、时间线和 Action；
+10. 客户端先展示骨架，再按区域加载；
+11. 用户打开一个阻塞项，查看来源和当前责任人；
+12. 用户点击“升级”，Action Gateway 返回影响预览；
+13. 用户确认后 Commit，来源任务系统更新；
+14. Collaboration Service 更新 Work Item 并通知责任人；
+15. Audit 和 Evidence 记录计划、确认、执行和结果；
+16. 用户保存当前布局为个人 View；
+17. 项目结束后，正式复盘进入 Knowledge Candidate；
+18. Evolution Agent 发现多个项目使用相似风险视图和处置步骤；
+19. PMO 审核“项目风险识别 Skill”候选；
+20. 评估、灰度、反馈和回滚链路完成后发布。
+
+### 19.5 用户旅程异常
+
+| 异常 | 产品响应 |
+|---|---|
+| 工单系统超时 | 标记该区域不可用，其他区域继续加载 |
+| 数据超过时效 | 展示更新时间，禁止高风险自动判断 |
+| 用户无权查看阻塞原因 | 保留对象存在性提示，不显示标题和摘要 |
+| Metric 不存在 | 请求选择非正式分析或发起 Metric 候选 |
+| View 组件移动端不支持 | 降级为结构化列表 |
+| Action 状态变化 | Prepare 失效并要求重新确认 |
+| Commit 结果未知 | 显示处理中，按外部 ID 查询，不重复提交 |
+| Skill 无匹配版本 | 使用稳定旧版本或转人工，不临时生成未知流程 |
+
+### 19.6 试点验收样本
+
+试点前建立固定验收集：
+
+- 典型正常项目；
+- 数据缺失项目；
+- 权限复杂项目；
+- 高风险但未逾期项目；
+- 已逾期但有批准豁免项目；
+- 多来源状态冲突项目；
+- 成员离职或权限撤销项目；
+- 移动端弱网场景；
+- Agent 执行中断恢复；
+- Skill 新旧版本结果对比。
+
+验收结论以真实任务完成、权限正确和结果可追溯为准，不以生成文字是否流畅为准。
+
 ## 20. 企业组织职责变化
 
 未来 IT 和业务团队不会停止建设系统，而是改变建设对象。
@@ -1041,6 +2232,49 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 
 企业应用团队的交付物从“页面和菜单”转为“可复用数据产品、Action、Skill 和
 可信组件”。
+
+### 20.1 能力发布 RACI
+
+| 活动 | Business Owner | Data Owner | Skill/Action Owner | Security | Platform |
+|---|---|---|---|---|---|
+| 定义业务目标 | A/R | C | C | I | I |
+| 批准数据用途 | C | A/R | C | C | I |
+| 定义 Action 不变量 | A | C | R | C | C |
+| 设计 Skill | A | C | R | C | C |
+| 权限和安全评审 | C | C | C | A/R | C |
+| 灰度发布 | A | I | R | C | R |
+| 效果复核 | A/R | C | R | C | C |
+| 紧急回滚 | A | I | R | C | R |
+
+`A` 表示最终负责，`R` 表示执行，`C` 表示协同，`I` 表示知会。每个活动至少有
+一个明确 A，不能把最终责任写成“AI 平台”。
+
+### 20.2 治理会议
+
+不建议为所有能力建立重型委员会。按风险分层：
+
+- 每周能力运营：查看候选、失败、接管和数据质量；
+- 每两周 Skill Review：评审新 Skill、重大变更和废止；
+- 每月数据治理：处理 Metric 冲突、无 Owner 数据和 ACL 问题；
+- 每季度应用收敛：决定 Headless、Absorb 和 Retire；
+- 重大安全事件：随时触发紧急停止、吊销和复盘。
+
+R0/R1 个人 View 不进入企业委员会，避免治理成本吞噬员工自由组合的价值。
+
+### 20.3 员工能力变化
+
+企业需要培训员工：
+
+- 如何表达目标和验收标准；
+- 如何验证 Agent 引用和结果；
+- 如何理解数据质量和更新时间；
+- 如何使用 Action Preview；
+- 如何接管和恢复任务；
+- 如何保存个人 View；
+- 如何提交知识、模板和 Skill 候选；
+- 如何识别敏感数据和越权风险。
+
+员工不是无条件接受 Agent 的执行者，而是目标设定者、结果验证者和能力共建者。
 
 ## 21. 衡量指标
 
@@ -1076,6 +2310,55 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 
 安全类目标不能用平均值掩盖严重事件。跨租户越权和未经批准的高风险写入上线
 目标必须为零。
+
+### 21.4 价值核算
+
+每个试点建立基线：
+
+```text
+Monthly Value
+  = Saved Work Hours × Loaded Labor Cost
+  + Retired Application Cost
+  + Avoided Error / Delay Cost
+  - Model Cost
+  - Platform Cost
+  - Human Review Cost
+  - Governance Cost
+```
+
+时间节省不能只由员工主观填写。可通过旧流程任务周期、新流程 Work Item 周期和
+抽样访谈共同验证。
+
+### 21.5 能力单元经济
+
+每个 Skill 记录：
+
+- 月运行次数；
+- 成功 Outcome；
+- 平均人工节省；
+- 平均人工复核；
+- 模型和工具费用；
+- 失败和接管成本；
+- 维护投入；
+- 风险事件；
+- 被复用的团队数量。
+
+低使用、高维护或持续需要大量人工修正的 Skill 应降级为团队模板或废止，不能
+因为已经开发而永久保留。
+
+### 21.6 反指标
+
+禁止将以下数据作为单独绩效指标：
+
+- Agent 对话次数；
+- Prompt 数量；
+- Token 使用量；
+- 在线时间；
+- 页面打开次数；
+- 被系统采集的工作事件数量；
+- 自动化比例。
+
+自动化比例过高可能意味着错误地绕过人工门禁，不天然代表成熟。
 
 ## 22. 主要风险与控制
 
@@ -1156,6 +2439,64 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 - 不按提示词、消息和在线时长排名；
 - 原始内容访问需要业务权限或审计工单。
 
+### 22.7 间接 Prompt Injection
+
+风险：文档、工单或网页内容诱导 Agent 泄露数据或调用 Action。
+
+控制：
+
+- 外部内容标记为不可信数据；
+- 系统政策与来源内容分离；
+- 文档内容不能修改工具 Allowlist；
+- Action 参数重新经过 Schema 和 Policy；
+- 高风险动作必须 Preview 和人工批准；
+- Evaluation Suite 包含间接注入样本；
+- 记录被拦截指令和来源对象。
+
+### 22.8 跨租户缓存和索引泄露
+
+风险：共享缓存键、Embedding Namespace 或搜索过滤错误导致跨 Tenant 数据暴露。
+
+控制：
+
+- 所有缓存键包含 Tenant 和 Policy Context；
+- 索引物理或逻辑分区；
+- 召回前过滤和返回前二次鉴权；
+- 跨 Tenant 自动化测试；
+- 高敏感客户使用专属数据平面；
+- 线上抽样验证索引 ACL 与权威 ACL 一致。
+
+### 22.9 能力包供应链
+
+风险：Skill、组件、模型或 Adapter 制品被篡改。
+
+控制：
+
+- 制品签名；
+- SBOM；
+- 依赖和秘密扫描；
+- Registry 最小权限；
+- 发布双人控制；
+- 安装前校验；
+- 运行时 Allowlist；
+- 紧急吊销；
+- 私有化包离线验签。
+
+### 22.10 模型和供应商变化
+
+风险：模型升级导致结果、成本、时延或安全行为变化。
+
+控制：
+
+- Model Gateway 隔离供应商；
+- Skill 不固定依赖单一模型名称；
+- 模型路由策略版本化；
+- Golden Case 和回归评估；
+- 生产灰度；
+- 保留上一稳定路由；
+- 高风险流程使用确定性校验和人工门禁；
+- 记录每次运行的模型、版本和参数。
+
 ## 23. 产品决策门禁
 
 进入工程实施前必须确认：
@@ -1170,6 +2511,45 @@ Work Agent 只能加载企业 Registry 中已签名且当前身份有权使用�
 8. 企业能力发布审批责任人；
 9. SaaS、专属数据平面和私有化的能力差异；
 10. 客户员工制度和数据使用告知流程。
+
+### 23.1 决策记录模板
+
+每项门禁使用统一 ADR：
+
+```text
+Decision ID
+Context
+Problem
+Options
+Chosen Option
+Why
+Scope
+Consequences
+Security / Privacy Impact
+Migration Impact
+Owner
+Effective Version
+Review Date
+```
+
+### 23.2 实施计划输入
+
+设计审阅通过后，实施计划必须输出：
+
+- 项目和仓库拆分；
+- 服务和模块依赖顺序；
+- Schema 与 API 任务；
+- 数据迁移任务；
+- 前端 Renderer 和组件任务；
+- Agent Runtime 和编排任务；
+- Policy 和安全任务；
+- 测试矩阵；
+- 环境和发布任务；
+- 试点客户准备；
+- 每个 Phase 的人员角色和验收人。
+
+实施计划不能直接从 Phase 0 跳到 Evolution Agent，也不能用一个“实现 AI 工作台”
+任务覆盖全部模块。
 
 ## 24. 设计结论
 
