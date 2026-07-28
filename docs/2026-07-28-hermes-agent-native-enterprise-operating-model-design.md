@@ -1,7 +1,7 @@
 # Hermes Agent 原生企业工作模式设计
 
 - 状态：未来产品方向详细设计基线
-- 文档版本：2.0
+- 文档版本：2.1
 - 日期：2026-07-28
 - 适用范围：Hermes 企业 AI 工作台及后续产品扩展
 - 依赖：
@@ -45,6 +45,10 @@ Hermes 在这一方向上的产品定位应升级为：
 
 两层 Agent 运行在同一产品内核和协议体系上，但使用不同身份、权限、数据范围、
 发布节奏和治理流程。不得形成两套不可兼容的 Agent 代码分支。
+
+不同员工的 Work Agent 通过 Collaboration Service 横向协作。Agent 使用独立
+身份和员工委托，通过结构化 Collaboration Request、Work Item 和 Action 交换
+任务与交付物，不通过自由、无限制的 Agent 对话形成业务承诺。
 
 ## 2. 核心理论
 
@@ -436,6 +440,7 @@ Governance Plane 对所有层生效。Evolution Agent 只能提出 Policy 候选
 | Action Gateway | Prepare、Approve、Commit、Compensate | 自行决定业务授权 |
 | Skill Registry | Skill 包、版本、签名和发布范围 | 在线执行 Skill |
 | Skill Runner | 编排已发布 Skill | 发布或修改 Skill |
+| Collaboration Gateway | 人、Agent、委托和结构化消息路由 | 代表员工决定正式承诺 |
 | Collaboration Service | Work Item、审批、交接、异常和 SLA | 保存来源系统正式交易 |
 | Evolution Service | 发现候选、组织评估、效果分析 | 直接发布企业能力 |
 | Evaluation Service | Golden Case、回归、安全和效果评估 | 修改生产数据 |
@@ -512,6 +517,11 @@ Agent 代表员工执行时，同时记录员工身份和 Agent 身份。审计�
 | `POST /v1/actions/{id}:commit` | 执行经过确认的 Action |
 | `GET /v1/commands/{id}` | 查询最终命令状态 |
 | `POST /v1/work-items` | 创建正式协同任务 |
+| `POST /v1/collaboration-requests` | 发起跨员工或 Agent 的结构化协作请求 |
+| `POST /v1/collaboration-requests/{id}:accept` | 接受请求并绑定 Work Item |
+| `POST /v1/collaboration-requests/{id}:deliver` | 提交结构化交付物 |
+| `POST /v1/collaboration-requests/{id}:takeover` | 员工接管 Agent 协作 |
+| `PUT /v1/agent-delegation-policies/{id}` | 配置员工 Agent 自主和委托范围 |
 | `POST /v1/skill-runs` | 启动已发布 Skill |
 | `POST /v1/skill-runs/{id}:resume` | 人工批准或补充后继续 |
 | `POST /v1/evolution-candidates` | 提交能力候选 |
@@ -552,6 +562,12 @@ action.prepared
 action.approval.requested
 action.committed
 action.outcome.unknown
+collaboration.request.sent
+collaboration.request.accepted
+collaboration.request.needs_owner
+collaboration.request.delivered
+collaboration.request.expired
+collaboration.human_takeover
 work.item.state.changed
 evidence.created
 knowledge.asset.changed
@@ -930,6 +946,8 @@ Candidate Priority
 - 时间线；
 - 对象详情；
 - 任务列表；
+- 协作请求；
+- Agent 身份和委托标识；
 - 审批卡；
 - 表单；
 - 差异比较；
@@ -1328,10 +1346,18 @@ View 和 Agent 必须展示数据更新时间和质量状态。`STALE` 或 `BLOC
 - `view_definitions`
 - `view_versions`
 - `view_bindings`
+- `communication_threads`
+- `thread_participants`
+- `collaboration_messages`
+- `collaboration_requests`
+- `collaboration_request_receipts`
+- `agent_delegation_policies`
+- `delegation_grants`
+- `agent_availability_policies`
 - `evolution_candidates`
 - `candidate_evidence_refs`
 - `policy_decisions`
-- `delegation_grants`
+- `access_grants`
 - `command_records`
 - `command_attempts`
 - `outcomes`
@@ -1724,6 +1750,357 @@ Agent 进入以下情况必须支持一键接管：
 接管包至少包含当前目标、已完成步骤、数据引用、未决 Action、错误、建议下一步
 和恢复 Token。员工处理后可以选择继续由 Agent 执行，不能只能重新开始。
 
+### 15.5 员工与员工 Agent 的协作模型
+
+员工之间的 Agent 协作不能实现为自由、无限制的模型对话。Hermes 采用：
+
+```text
+独立身份
+  + 员工委托
+  + 结构化协作消息
+  + Work Item
+  + Policy
+  + 人工责任门禁
+```
+
+Agent 是员工的数字工作代理，但不是员工本人。Agent 发出的每一条消息和每一个
+Action 都必须区分：
+
+- Agent 自己的执行身份；
+- 它代表的员工；
+- 本次委托的权限；
+- 当前业务目的；
+- 是否经过员工确认；
+- 是否形成正式业务承诺。
+
+### 15.6 四种交流关系
+
+| 关系 | 典型用途 | 默认规则 |
+|---|---|---|
+| 员工 A → Agent A | 组织个人工作、草拟和委托 | 使用 A 的当前权限和个人策略 |
+| 员工 A → Agent B | 查询共享事实、请求 B 协作 | 只能使用双方共享范围 |
+| Agent A → 员工 B | 请求补充、确认、审批或接管 | 明确显示“由 A 的 Agent 发起” |
+| Agent A → Agent B | 分工、查询状态、提交结构化交付物 | 通过 Collaboration Service |
+
+Agent A 和 Agent B 不建立绕过平台的点对点信任。即使两个 Agent 都运行在员工
+本地设备上，正式消息仍通过企业 Collaboration Service、Policy 和 Audit。
+
+### 15.7 三类交流载体
+
+#### Conversation
+
+用于讨论、解释、提问、草拟和非正式提醒。Conversation 可以关联 Work Item，
+但聊天内容本身不自动改变正式业务状态。
+
+#### Collaboration Request
+
+用于请求另一个员工或 Agent 完成明确工作：
+
+- 目标；
+- 输入引用；
+- 期望输出；
+- 截止时间；
+- 权限目的；
+- 责任人；
+- 人工门禁；
+- 验收条件。
+
+被接受的 Collaboration Request 必须创建或关联 Work Item。
+
+#### Action / Approval
+
+用于修改业务状态、批准交付物、对外发送或形成承诺。Action 必须使用
+Action Contract，Conversation 中的“同意”“可以”“就这样做”不能被模型自行
+解释为正式批准。
+
+### 15.8 Agent 身份与代理关系
+
+每个 Work Agent 使用独立身份：
+
+```text
+Human Identity: usr_01
+Agent Identity: agt_work_01
+Delegation: agt_work_01 on_behalf_of usr_01
+```
+
+消息和 Trace 必须同时保存 `actor` 和 `on_behalf_of`。界面不能只显示员工头像，
+审计也不能把 Agent 操作记录成员工亲自操作。
+
+Agent 代表员工调用服务时使用短期 Purpose-bound Delegation Token，Token 至少
+绑定：
+
+- Tenant；
+- 员工；
+- Agent；
+- Workspace；
+- Purpose；
+- 允许的资源；
+- 允许的 Action；
+- 风险等级上限；
+- 有效期；
+- 是否需要逐次确认。
+
+员工离职、项目退出、设备吊销或委托撤销后，Delegation Token 必须立即失效。
+
+### 15.9 员工 Agent 自主等级
+
+每个员工可以在企业政策允许范围内配置自己的 Work Agent：
+
+| 等级 | 能力 | 典型行为 |
+|---|---|---|
+| L0 Draft | 只草拟 | 员工亲自检查和发送 |
+| L1 Inform | 自动回复共享事实 | 返回已有项目状态和正式知识 |
+| L2 Collaborate | 接收和推进低风险 Work Item | 更新任务、提交草稿、请求补充 |
+| L3 Act | 执行已授权 R1/R2 Action | 保存 View、分配任务、发起评审 |
+| L4 Commit | 形成外部或高影响承诺 | 默认关闭，逐次人工批准 |
+
+企业 Policy 可以降低员工选择的自主等级，员工不能自行提高超过企业上限。
+
+自主等级按 Action 和场景配置，不建议使用一个覆盖所有工作的总开关。例如员工
+可以允许 Agent 自动接受项目资料整理任务，但仍要求所有客户回复逐次确认。
+
+### 15.10 Agent 可代理状态
+
+Work Agent 对其他人只暴露经员工允许的工作代理状态：
+
+```text
+AVAILABLE_FOR_ROUTINE_REQUESTS
+REQUIRE_OWNER_CONFIRMATION
+FOCUS_MODE
+OUT_OF_OFFICE_WITH_DELEGATION
+UNAVAILABLE
+```
+
+该状态不能泄露私人日程、位置、健康或非工作活动。Agent 可以说明“需要员工本人
+确认”，但不能推断或公开员工未响应的原因。
+
+### 15.11 协作消息契约
+
+自然语言用于人类阅读，后台使用结构化消息：
+
+```json
+{
+  "message_id": "msg_01...",
+  "thread_id": "thr_01...",
+  "work_item_id": "wrk_01...",
+  "sender": {
+    "type": "agent",
+    "id": "agt_a",
+    "on_behalf_of": "usr_a"
+  },
+  "recipients": [
+    {
+      "type": "agent",
+      "id": "agt_b",
+      "owner_id": "usr_b"
+    }
+  ],
+  "message_type": "task_request",
+  "authority": "request",
+  "purpose": "project_delivery",
+  "classification": "internal",
+  "input_refs": [
+    "project://prj_01/interface-delivery"
+  ],
+  "expected_output": {
+    "schema": "delivery-confirmation.v1"
+  },
+  "acceptance_criteria": [
+    "给出预计完成时间",
+    "列出未解决依赖"
+  ],
+  "deadline": "2026-07-31T18:00:00+08:00",
+  "human_gate": "required_before_commitment",
+  "reply_policy": {
+    "max_agent_turns": 4,
+    "allow_partial": true
+  },
+  "expires_at": "2026-07-31T18:00:00+08:00",
+  "trace_id": "trc_01..."
+}
+```
+
+`authority` 使用受控枚举：
+
+- `inform`：提供信息；
+- `propose`：提出建议或草稿；
+- `request`：请求对方完成工作；
+- `delegate`：在授权范围内分配工作；
+- `approve_request`：请求人工批准；
+- `commit`：正式承诺，只能在有效人工或企业授权下产生。
+
+Agent 不能通过自然语言把 `propose` 升级为 `commit`。
+
+### 15.12 Collaboration Request 状态机
+
+```text
+DRAFT
+  -> SENT
+  -> RECEIVED
+  -> POLICY_CHECKED
+  -> ACCEPTED
+  -> IN_PROGRESS
+  -> DELIVERED
+  -> VERIFIED
+  -> CLOSED
+
+POLICY_CHECKED
+  -> NEEDS_OWNER
+  -> ACCEPTED / REJECTED
+
+SENT / RECEIVED / ACCEPTED / IN_PROGRESS
+  -> CANCELLED / EXPIRED
+
+IN_PROGRESS
+  -> BLOCKED
+  -> IN_PROGRESS / NEEDS_HUMAN
+```
+
+每次转换保存操作者、代表关系、时间、原因和资源版本。Agent B 接受请求不等于
+员工 B 接受外部承诺，是否需要 B 本人确认由 `human_gate` 和 Agent B 的自主策略
+共同决定。
+
+### 15.13 接收方处理规则
+
+Agent B 收到请求后按以下顺序处理：
+
+1. 验证发送者和签名；
+2. 检查 Tenant、Workspace 和项目关系；
+3. 检查消息 Purpose 和有效期；
+4. 对每个输入引用执行接收方权限判断；
+5. 检查 Agent B 自主等级和员工代理状态；
+6. 检查任务是否与当前 Work Item 冲突；
+7. 决定自动接受、请求员工确认或拒绝；
+8. 创建或关联 Work Item；
+9. 返回 Receipt；
+10. 在完成、阻塞、过期和交付时发送状态事件。
+
+拒绝响应只返回必要原因代码，例如无权限、超出代理范围、需要本人确认或请求已
+过期，不能通过错误信息泄露受限资源。
+
+### 15.14 数据交换规则
+
+Agent 间优先交换资源引用，不复制正文：
+
+```text
+Agent A 发送 Resource Reference
+  -> Agent B 使用自己的身份访问
+  -> Policy 检查 B 的 ACL 和 Purpose
+  -> 允许后读取
+```
+
+如果 B 没有权限：
+
+- Agent A 不能把正文粘贴进消息绕过 ACL；
+- Agent B 不能让 A 的 Agent 代为摘要；
+- 系统可以创建 Access Request；
+- Data Owner 可以授予限定资源、Purpose 和有效期的访问权；
+- 授权后 B 使用自己的身份重新读取。
+
+正式共享需要创建 `Access Grant`，不能把“员工 A 可以看”解释为“员工 A 的
+Agent 可以转发给任何人”。
+
+Personal Memory 不参与跨员工 Agent 通信。Team Memory 和 Enterprise Asset 只有
+在接收方具备权限时才可引用。
+
+### 15.15 Agent-to-Agent 循环控制
+
+每个协作请求设置：
+
+- 最大 Agent 轮次；
+- 最大总时长；
+- Token 和费用预算；
+- 最大并行子任务数；
+- 允许使用的 Skill；
+- 允许访问的数据范围；
+- 可执行 Action 风险上限；
+- 无进展检测；
+- 冲突检测；
+- 截止时间和 TTL。
+
+以下情况进入 `NEEDS_HUMAN`：
+
+- 连续两轮没有新增证据；
+- 双方给出冲突结论；
+- 请求目标发生变化；
+- 需要扩大权限；
+- 预算或截止时间即将用尽；
+- 涉及员工本人判断或正式承诺；
+- Action 结果未知；
+- 一方 Agent 无可用兼容 Skill。
+
+Agent 不能为完成任务自行增加轮次、扩大预算或更改 Purpose。
+
+### 15.16 冲突和优先级
+
+当 Agent A 和 Agent B 的任务发生冲突时：
+
+1. 不由两个 Agent 私下决定人员优先级；
+2. Collaboration Service 检查项目优先级、SLA 和现有 Work Item；
+3. 可以提出调整建议；
+4. 涉及截止时间、资源分配或目标冲突时通知双方 Owner；
+5. 最终决定写入 Work Item 和 Decision Record；
+6. 后续 Agent 按正式决定执行。
+
+### 15.17 协作界面
+
+统一协作线程必须明确显示：
+
+- 员工 A；
+- 员工 A 的 Hermes Agent；
+- 员工 B；
+- 员工 B 的 Hermes Agent；
+- 每条 Agent 消息代表谁；
+- 自主等级和 Authority；
+- 是否经过本人确认；
+- 引用的数据；
+- 关联 Work Item；
+- 是否产生 Action；
+- 当前状态和截止时间；
+- 接管、拒绝、撤回和纠错入口。
+
+Agent 消息使用不同的身份标识，不能与员工本人消息使用完全相同的头像和样式。
+
+### 15.18 端到端协作示例
+
+场景：员工 A 请求员工 B 确认接口能否在周五完成。
+
+1. A 对 Agent A 提出请求；
+2. Agent A 解析项目、接口、期限和预期输出；
+3. Agent A 发现这是交付承诺，设置 `human_gate`；
+4. Agent A 创建 Collaboration Request；
+5. Collaboration Service 验证双方项目关系；
+6. Agent B 根据自身身份读取项目共享状态；
+7. Agent B 可以自动汇总已完成工作和未解决依赖；
+8. 由于预计完成时间属于 B 的工作承诺，Agent B 请求 B 本人确认；
+9. B 修改预计时间并补充依赖；
+10. Agent B 以 `on_behalf_of=usr_b`、`authority=commit` 返回；
+11. Agent A 把结果写入双方可见的 Work Item；
+12. A 收到确认并决定是否调整项目计划；
+13. Evidence 保存来源、确认人和生效时间；
+14. 后续状态改变时，由 Work Item 事件通知双方，而不是重新开始聊天。
+
+### 15.19 与 Evolution Agent 的边界
+
+Evolution Agent 默认可以使用：
+
+- Collaboration Request 类型和状态；
+- Work Item 周期、阻塞和接管结果；
+- 已确认交付物；
+- 脱敏聚合的重复协作模式；
+- 已进入企业治理范围的 Evidence。
+
+Evolution Agent 默认不能使用：
+
+- 双方全部非正式对话；
+- Personal Memory；
+- 未授权的消息正文；
+- 员工响应速度进行个人排名；
+- 被撤回或标记为私人草稿的内容。
+
+Evolution Agent 可以发现“接口确认流程反复发生”并提出 Skill 候选，但不能得出
+“员工 B 工作态度不好”等人事结论。
+
 ## 16. 版本与升级模型
 
 ### 16.1 四条独立发布轨道
@@ -1994,6 +2371,11 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - Command Plan；
 - Tool Gateway；
 - Work Item；
+- Collaboration Gateway；
+- Communication Thread；
+- Collaboration Request；
+- Agent Delegation Policy；
+- Receipt、TTL 和 Agent 循环控制；
 - 审批、交接、接管和异常；
 - 幂等、补偿和结果证据。
 
@@ -2002,6 +2384,11 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - Agent 不直接写数据库；
 - 所有写操作使用版本化 Action；
 - 高风险 Action 必须人工确认；
+- Agent 消息不会冒充员工本人；
+- 跨员工协作具备结构化请求、接收和交付状态；
+- 接收方使用自己的身份读取资源；
+- 委托撤销后 Agent 不能继续代表员工工作；
+- Agent 对话达到轮次、预算或冲突门槛时转人工；
 - 重复提交不产生重复业务效果；
 - 失败可以补偿、回滚或明确进入人工处理。
 
@@ -2184,7 +2571,28 @@ Skill 和 Evaluation 时，Evolution Agent 只能生成无法治理的建议。
 19. PMO 审核“项目风险识别 Skill”候选；
 20. 评估、灰度、反馈和回滚链路完成后发布。
 
-### 19.5 用户旅程异常
+### 19.5 跨员工 Agent 协作旅程
+
+场景：“项目经理 A 请求技术负责人 B 确认接口交付时间”。
+
+1. A 委托 Agent A 发起确认；
+2. Agent A 创建 `task_request`，设置项目、期限、输出 Schema 和人工门禁；
+3. Collaboration Gateway 验证 Agent A 的委托和双方项目关系；
+4. Agent B 收到请求并返回 Receipt；
+5. Policy Service 允许 Agent B 读取共享接口状态，但不允许读取 A 的 Personal
+   Memory；
+6. Agent B 汇总代码、工单和依赖；
+7. Agent B 判断预计完成时间属于员工承诺，进入 `NEEDS_OWNER`；
+8. B 查看 Agent 草拟的事实、依赖和建议日期；
+9. B 修改并确认；
+10. Agent B 以独立 Agent 身份、`on_behalf_of=B` 和 `authority=commit` 返回；
+11. Agent A 验证交付物 Schema 和确认状态；
+12. Work Item 记录预计时间、依赖、确认人和 Evidence；
+13. A 可以接受、追问或调整项目计划；
+14. 请求进入 `VERIFIED` 和 `CLOSED`；
+15. 后续状态变化由 Work Item 事件通知双方 Agent。
+
+### 19.6 用户旅程异常
 
 | 异常 | 产品响应 |
 |---|---|
@@ -2196,8 +2604,14 @@ Skill 和 Evaluation 时，Evolution Agent 只能生成无法治理的建议。
 | Action 状态变化 | Prepare 失效并要求重新确认 |
 | Commit 结果未知 | 显示处理中，按外部 ID 查询，不重复提交 |
 | Skill 无匹配版本 | 使用稳定旧版本或转人工，不临时生成未知流程 |
+| Agent B 无权读取输入引用 | 创建 Access Request，不接收复制正文 |
+| Agent B 需要员工本人判断 | 进入 `NEEDS_OWNER` |
+| 双方 Agent 结论冲突 | 进入 `NEEDS_HUMAN` 并附双方证据 |
+| Agent 对话达到轮次上限 | 暂停并请求双方员工处理 |
+| A 撤回委托 | 未执行请求取消，已执行结果保留审计 |
+| B 已退出项目 | 权限事件使请求失效并通知 A |
 
-### 19.6 试点验收样本
+### 19.7 试点验收样本
 
 试点前建立固定验收集：
 
@@ -2210,6 +2624,11 @@ Skill 和 Evaluation 时，Evolution Agent 只能生成无法治理的建议。
 - 成员离职或权限撤销项目；
 - 移动端弱网场景；
 - Agent 执行中断恢复；
+- Agent 不能冒充员工发送消息；
+- Agent A 不能转发 B 无权读取的正文；
+- 委托撤销和项目退出即时生效；
+- Agent-to-Agent 无进展后转人工；
+- 员工接管后可以恢复原 Work Item；
 - Skill 新旧版本结果对比。
 
 验收结论以真实任务完成、权限正确和结果可追溯为准，不以生成文字是否流畅为准。
@@ -2558,6 +2977,8 @@ Review Date
 未来企业软件不会简单地从“复杂业务系统”退化为“一个数据仓库”。更可能的
 形态是：核心系统继续保存权威事实，企业把数据语义、业务动作、知识、Skill、
 权限和证据建设成共享能力，员工通过 Hermes Work Agent 按任务动态组织工作台。
+不同员工的 Work Agent 在明确委托和权限下协作，并由员工承担最终目标、承诺和
+审批责任。
 
 ### Chosen approach
 
@@ -2565,6 +2986,8 @@ Review Date
 并通过 Work Agent 快速工作循环和 Evolution Agent 企业能力循环形成双层
 Hermes Agent 迭代机制。页面允许动态变化，读取受权限约束，写入只能通过
 受治理 Action，企业能力必须经过评估、审批、签名、灰度和回滚。
+员工与 Agent 的横向协作采用独立身份、Delegation Policy、结构化消息、Work
+Item、循环预算和人工接管，不建设无边界的 Agent 聊天网络。
 
 ### Open risks
 
