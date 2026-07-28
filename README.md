@@ -1,0 +1,31 @@
+# Hermes Mobile
+
+Cross-platform remote access for a single authoritative Hermes Agent runtime.
+H5/PWA is the primary commercial client. The existing Android application remains
+a native reference client and protocol compatibility surface.
+
+## Product invariants
+
+- The PC or server is the only Agent execution authority.
+- Android and Desktop may observe the same session concurrently.
+- A session has at most one controller.
+- SessionDB is authoritative; Cloud and client storage are bounded read caches.
+- Unknown message delivery is reconciled by client turn ID before retry.
+- Model/provider credentials never leave the Hermes execution host.
+- Hermes Connector is an independent service and does not import Agent internals.
+- The public service never exposes the local Hermes Dashboard directly.
+
+## Architecture
+
+The approved commercial architecture is documented in
+[`docs/2026-07-28-hermes-connector-commercial-architecture-design.md`](docs/2026-07-28-hermes-connector-commercial-architecture-design.md).
+
+The existing Android executable slice discovers a configured Hermes endpoint and
+remains useful for protocol parity tests. New commercial delivery follows the
+H5/PWA, Remote Server, independent Connector, and Agent Local Gateway boundaries.
+
+## Build
+
+```bash
+./gradlew test lint assembleDebug
+```
