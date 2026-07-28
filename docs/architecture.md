@@ -23,6 +23,12 @@ The Remote Server is the public ingress, command fact store, device control plan
 and encrypted read-projection host. It is not a second Agent and does not own the
 authoritative session database or model credentials.
 
+Alibaba Cloud is the initial provider for the Chinese-mainland commercial
+deployment. The current mapping uses WAF 3.0, ALB, ACK Pro, ApsaraDB RDS for
+PostgreSQL, OSS, KMS, and Alibaba Cloud observability services. Product-specific
+integrations remain behind infrastructure adapters and do not enter the
+Connector Protocol.
+
 The Connector is an independent Python service with its own environment and
 release lifecycle. It does not import Agent internals, read SessionDB, expose the
 local Dashboard, or connect directly to NATS, Redis, or PostgreSQL.

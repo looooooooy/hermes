@@ -3,6 +3,7 @@
 - 状态：已确认设计基线
 - 日期：2026-07-28
 - 首发地域：中国大陆
+- 首发云服务商：阿里云（初步选定）
 - 首发规模：A 级，按 10,000 个在线 Connector 设计
 - 扩展目标：架构可平滑扩展到 B 级，约 100,000 个在线 Connector
 - 适用范围：H5/PWA、Hermes Remote Server、Hermes Connector、Hermes Agent Local Gateway
@@ -45,6 +46,7 @@ Connector 只认识 Hermes 自有 WSS 协议。NATS、PostgreSQL、对象存储�
 | 会话事实源 | Hermes Agent |
 | 租户模型 | 个人空间也是标准 Tenant |
 | 首发地域 | 中国大陆 |
+| 首发云服务商 | 阿里云，产品选型保持可迁移边界 |
 | Agent、Connector、Server 发布 | 三条独立发布列车 |
 | 公开可用性目标 | 月度 SLA 99.9% |
 | 内部可用性目标 | 月度 SLO 99.95% |
@@ -522,14 +524,41 @@ READY
 
 ### 12.1 首发拓扑
 
-- 托管 WAF 与负载均衡；
+- 阿里云 WAF 3.0 与 ALB；
+- ACK Pro 托管集群，业务节点池跨可用区；
 - H5 API / Realtime Gateway 至少 2 副本；
 - Connector Gateway 至少 2 副本；
 - NATS JetStream 3 节点，跨可用区；
-- 托管 PostgreSQL HA，启用 PITR；
-- 对象存储启用版本、生命周期和服务端加密；
-- KMS 和 Secrets Manager；
-- 第二个中国大陆地域保存加密灾备副本。
+- ApsaraDB RDS for PostgreSQL 高可用版，多可用区部署并启用 PITR；
+- OSS 启用版本、生命周期、服务端加密和跨区域复制；
+- KMS 与 Secrets Manager；
+- 第二个中国大陆地域部署数据库灾备实例并保存 OSS 加密副本。
+
+#### 12.1.1 阿里云产品映射
+
+| 架构能力 | 阿里云初选产品 | 设计约束 |
+|---|---|---|
+| 域名与证书 | Alibaba Cloud DNS、Certificate Management Service | 域名、证书和服务实例分离管理 |
+| H5 静态资源 | OSS + CDN | Bucket 不允许公共列举；发布制品版本化 |
+| 公网接入 | WAF 3.0 Cloud Native Mode + ALB | WAF 规则、连接限速和 WebSocket 超时纳入版本化配置 |
+| 容器运行 | ACK Pro | 跨可用区节点池、Pod Topology Spread、PDB 和滚动 drain |
+| 容器制品 | ACR Enterprise Edition（镜像签名使用 Advanced Edition） | 镜像摘要固定；使用 KMS 签名并在 ACK 阻止未签名镜像 |
+| NATS | ACK 内自建 3 节点 NATS JetStream | 独立节点池、跨可用区反亲和、独立 ESSD 云盘、定期恢复演练 |
+| 业务数据库 | ApsaraDB RDS for PostgreSQL 高可用版 | 多可用区、SSL、白名单、PITR；应用必须处理连接重建 |
+| 区域灾备 | RDS 跨区域灾备实例 / DTS | 异步复制；切换需要更新连接配置并执行受控 Runbook |
+| Cloud 投影和附件 | OSS | 信封加密、版本控制、生命周期、CRR 和最小权限 RAM Role |
+| 密钥与秘密 | KMS、Secrets Manager | 应用使用 RAM Role 获取；禁止长期 AccessKey 写入配置 |
+| 日志与指标 | SLS、ARMS、CloudMonitor | 正文脱敏；指标、Trace 和审计日志分库分权限 |
+| 云控制审计 | ActionTrail | RAM、KMS、OSS、RDS 和 ACK 管理操作进入独立审计保留 |
+| 基础网络 | VPC、vSwitch、Security Group、NAT Gateway | 数据层无公网入口；服务通过私网访问 RDS、OSS 和 KMS |
+
+NATS 保持标准协议和独立数据卷，不使用阿里云专有消息协议替代
+Connector Protocol。ACK、RDS、OSS 和 KMS 的接入均通过基础设施适配层
+和标准接口封装，避免业务域代码直接依赖云厂商 SDK。
+
+主地域必须同时满足目标用户网络质量、WAF/ALB/ACK/RDS/KMS 产品可用性、
+至少三个可用区和成本预算。正式购买页面是地域与规格可用性的最终依据。
+第二地域限定在中国大陆，用于 RDS 灾备和 OSS CRR，不作为首发业务双活入口。
 
 ### 12.2 服务目标
 
@@ -547,10 +576,25 @@ READY
 ### 12.3 备份
 
 - PostgreSQL 连续归档和 PITR；
-- 每日快照与异地加密副本；
-- 对象存储生命周期和删除标记；
+- RDS 跨区域灾备实例或等价的异步复制链路；
+- 每日快照与第二大陆地域加密副本；
+- OSS CRR、版本控制、生命周期和删除标记；
 - 每季度执行数据库恢复、设备吊销和密钥轮换演练；
 - JetStream 数据不是长期备份，命令事实可由 PostgreSQL Outbox 恢复。
+
+OSS 灾备 Bucket 默认不复制永久删除操作，避免主 Bucket 的误删除同步摧毁
+灾备副本。KMS 加密对象的 CRR 使用专用最小权限 RAM Role，不能直接授予
+账户级 OSS 或 KMS 全权限。
+
+### 12.4 阿里云资料基线
+
+- [ACK 产品说明](https://www.alibabacloud.com/help/en/ack/product-overview/product-introduction)
+- [RDS 高可用与灾备](https://www.alibabacloud.com/help/en/rds/product-overview/high-availability-and-disaster-recovery)
+- [RDS 跨区域灾备](https://www.alibabacloud.com/help/en/rds/support/instance-disaster-recovery)
+- [WAF 3.0 接入 ALB](https://www.alibabacloud.com/help/en/waf/web-application-firewall-3-0/user-guide/add-an-alb-instance-to-waf)
+- [OSS 跨区域复制](https://www.alibabacloud.com/help/en/oss/user-guide/cross-region-replication-overview/)
+- [KMS Secrets Manager](https://www.alibabacloud.com/help/en/kms/key-management-service/user-guide/secret-management-overview)
+- [ACR 镜像签名](https://www.alibabacloud.com/help/en/acr/user-guide/use-container-image-to-sign)
 
 ## 13. 可观测性与运营
 
@@ -702,8 +746,8 @@ Server:    Current / Canary
 
 以下事项不会改变总体架构，但必须在实施计划中完成选型和验证：
 
-1. 中国大陆云供应商、托管 PostgreSQL、对象存储和 KMS 的具体产品。
-2. NATS 自建集群或商业托管服务的选择。
+1. 阿里云主地域、第二灾备地域、实例规格、产品版本和正式商务报价。
+2. NATS 已初选 ACK 内自建；上线前仍需完成托管替代方案和迁移演练评估。
 3. 手机号、邮箱、Passkey 和第三方登录的首发组合。
 4. 支付、发票、退款和订阅管理供应商。
 5. Cloud 投影默认 30 天之外的套餐档位。
@@ -725,7 +769,7 @@ Hermes 商用远程访问需要同时解决实时连接、可靠命令、Agent �
 
 ### Open risks
 
-云供应商、NATS 运维方式、身份供应商、支付供应商和正式合规清单仍需在实施计划前完成选择，但不得改变本文的协议、数据、安全和升级边界。
+阿里云具体地域与规格、NATS 运维细节、身份供应商、支付供应商和正式合规清单仍需在实施计划前完成选择，但不得改变本文的协议、数据、安全和升级边界。
 
 ### Next skill
 
