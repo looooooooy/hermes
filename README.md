@@ -20,6 +20,9 @@ a native reference client and protocol compatibility surface.
 The approved commercial architecture is documented in
 [`docs/2026-07-28-hermes-connector-commercial-architecture-design.md`](docs/2026-07-28-hermes-connector-commercial-architecture-design.md).
 
+The future enterprise AI workbench expansion is documented in
+[`docs/2026-07-28-enterprise-ai-workbench-expansion-design.md`](docs/2026-07-28-enterprise-ai-workbench-expansion-design.md).
+
 The existing Android executable slice discovers a configured Hermes endpoint and
 remains useful for protocol parity tests. New commercial delivery follows the
 H5/PWA, Remote Server, independent Connector, and Agent Local Gateway boundaries.

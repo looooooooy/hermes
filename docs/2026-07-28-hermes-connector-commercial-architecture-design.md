@@ -8,6 +8,9 @@
 - 扩展目标：架构可平滑扩展到 B 级，约 100,000 个在线 Connector
 - 适用范围：H5/PWA、Hermes Remote Server、Hermes Connector、Hermes Agent Local Gateway
 
+未来企业 AI 工作台、公司核心 Skill、权限感知知识库和工作协同的扩展设计见
+[`2026-07-28-enterprise-ai-workbench-expansion-design.md`](2026-07-28-enterprise-ai-workbench-expansion-design.md)。
+
 ## 1. 摘要
 
 Hermes 的商用远程访问产品采用以下主链路：

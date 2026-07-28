@@ -3,6 +3,10 @@
 The canonical commercial architecture is defined in
 [`2026-07-28-hermes-connector-commercial-architecture-design.md`](2026-07-28-hermes-connector-commercial-architecture-design.md).
 
+The future enterprise AI workbench, company Skill, permission-aware knowledge,
+and work-collaboration architecture is defined in
+[`2026-07-28-enterprise-ai-workbench-expansion-design.md`](2026-07-28-enterprise-ai-workbench-expansion-design.md).
+
 ## Deployment boundary
 
 ```text
