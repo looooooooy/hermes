@@ -1,7 +1,7 @@
 # Hermes Agent 原生企业工作模式设计
 
 - 状态：未来产品方向详细设计基线
-- 文档版本：2.1
+- 文档版本：2.2
 - 日期：2026-07-28
 - 适用范围：Hermes 企业 AI 工作台及后续产品扩展
 - 依赖：
@@ -568,6 +568,10 @@ collaboration.request.needs_owner
 collaboration.request.delivered
 collaboration.request.expired
 collaboration.human_takeover
+collaboration.message.queued
+collaboration.message.delivered
+collaboration.message.received
+collaboration.message.dead_lettered
 work.item.state.changed
 evidence.created
 knowledge.asset.changed
@@ -1351,6 +1355,10 @@ View 和 Agent 必须展示数据更新时间和质量状态。`STALE` 或 `BLOC
 - `collaboration_messages`
 - `collaboration_requests`
 - `collaboration_request_receipts`
+- `agent_delivery_sessions`
+- `message_delivery_cursors`
+- `message_outbox`
+- `dead_letter_messages`
 - `agent_delegation_policies`
 - `delegation_grants`
 - `agent_availability_policies`
@@ -2101,6 +2109,274 @@ Evolution Agent 默认不能使用：
 Evolution Agent 可以发现“接口确认流程反复发生”并提出 Skill 候选，但不能得出
 “员工 B 工作态度不好”等人事结论。
 
+### 15.20 Agent-to-Agent 服务端路由原则
+
+所有正式 Agent-to-Agent 消息必须通过服务端 Collaboration Gateway 路由。员工
+设备上的 Agent 不直接建立业务 P2P 连接，也不互相暴露本地监听端口。
+
+原因：
+
+- 服务端统一验证 Agent、设备和员工委托身份；
+- 统一执行 Tenant、Workspace、Purpose 和 ACL；
+- 支持接收方离线；
+- 保存消息和 Work Item 状态；
+- 控制轮次、预算、超时和循环；
+- 支持员工接管、撤回和审计；
+- 隔离不同 Agent 和 Connector 版本；
+- 避免 NAT、设备网络和 P2P 信任问题。
+
+### 15.21 完整消息链路
+
+```text
+员工 A
+  -> Hermes Work Agent A
+  -> Agent Local Gateway A
+  -> Hermes Connector A
+  -> Hermes WSS
+  -> Remote Gateway
+  -> Collaboration Gateway
+  -> Identity / Delegation / Policy
+  -> Message Store / Work Item
+  -> Outbox
+  -> NATS Core / JetStream
+  -> Delivery Session B
+  -> Hermes Connector B
+  -> Agent Local Gateway B
+  -> Hermes Work Agent B
+  -> 员工 B
+```
+
+发送方收到 `SENT` 不代表接收方已经收到。至少区分：
+
+- `ACCEPTED_BY_GATEWAY`：服务端已校验并持久化；
+- `QUEUED`：等待接收方连接或处理；
+- `DELIVERED_TO_CONNECTOR`：已交给 Connector B；
+- `RECEIVED_BY_AGENT`：Agent B 已确认；
+- `SEEN_BY_HUMAN`：员工 B 已查看；
+- `ACCEPTED / REJECTED`：请求被正式处理。
+
+产品界面不得把“服务端已接收”显示成“对方已确认”。
+
+### 15.22 服务端路由职责
+
+Collaboration Gateway 依次执行：
+
+1. 验证 Connector 和设备会话；
+2. 验证 Agent 身份和签名；
+3. 验证 `on_behalf_of` 委托；
+4. 校验消息 Schema 和版本；
+5. 校验 Tenant、Workspace 和参与者关系；
+6. 校验 Purpose、分类、TTL 和自主等级；
+7. 检查消息大小、频率、预算和循环；
+8. 对输入资源引用执行预检查；
+9. 持久化消息和 Receipt；
+10. 通过 Outbox 发布事件；
+11. 根据 Agent B 在线状态选择实时或离线投递；
+12. 记录 Trace 和 Audit；
+13. 处理取消、过期、接管和重新投递。
+
+Collaboration Gateway 不替员工解释正式承诺，也不替 Policy Service 作权限决策。
+
+### 15.23 消息持久化
+
+PostgreSQL 保存权威消息和协作状态：
+
+```text
+communication_threads
+collaboration_messages
+collaboration_requests
+collaboration_request_receipts
+work_items
+agent_delegation_policies
+```
+
+消息正文较大或包含附件时，PostgreSQL 保存元数据和对象引用，正文进入对象存储。
+NATS / JetStream 只负责投递、重试和重放，不承担最终消息状态。
+
+Redis 可以用于：
+
+- 在线连接索引；
+- 短期 Presence；
+- 限流；
+- 短期去重；
+- 短锁；
+- Policy 和路由缓存。
+
+Redis 不能保存唯一的正式消息、审批、委托和审计事实。
+
+### 15.24 在线投递
+
+Agent B 在线时：
+
+1. Collaboration Gateway 解析 B 的活动 Delivery Session；
+2. 向该 Session 发布通知；
+3. Connector B 拉取或接收消息；
+4. Agent Local Gateway 验证本地目标 Agent；
+5. Agent B 返回 Receipt；
+6. 服务端更新 `RECEIVED_BY_AGENT`；
+7. Agent B 按自身 Policy 决定自动处理或请求员工确认。
+
+Connector B 断线重连后使用游标恢复，不能依赖内存中的最后消息位置。
+
+### 15.25 离线投递
+
+Agent B 不在线时：
+
+```text
+消息写入 PostgreSQL
+  -> Transactional Outbox
+  -> JetStream 持久消费者
+  -> 等待 Agent B 重连
+  -> Connector B 恢复 Session
+  -> 按游标重新投递
+  -> Agent B 幂等接收
+  -> Receipt 写回服务端
+```
+
+离线队列必须具备：
+
+- 消息 TTL；
+- 最大积压量；
+- 优先级；
+- 过期处理；
+- 重复投递幂等；
+- 毒消息隔离；
+- 员工可见的失败状态；
+- 管理员可观测但不默认读取正文。
+
+已过期的 Collaboration Request 不在 Agent B 上线后自动重新激活。发送方需要
+重新确认目标和期限。
+
+### 15.26 数据内容路由
+
+Agent-to-Agent 消息优先传递：
+
+- 资源引用；
+- 对象 ID；
+- Data Product 和版本；
+- Work Item；
+- Evidence 引用；
+- 结构化交付物；
+- 必要的最小消息摘要。
+
+接收方使用自己的身份重新读取资源：
+
+```text
+Agent A 发送 Reference
+  -> Collaboration Gateway 路由 Reference
+  -> Agent B 请求资源
+  -> Policy 使用员工 B + Agent B + Purpose 鉴权
+  -> 允许后返回正文或脱敏结果
+```
+
+服务端不能因为 Agent A 有权限，就把同样权限传递给 Agent B。需要主动共享时，
+必须创建有范围、Purpose 和有效期的 Access Grant。
+
+### 15.27 消息加密与服务端可见性
+
+基础要求：
+
+- Connector 与 Gateway 使用双向认证和 TLS；
+- 消息和附件静态加密；
+- Tenant 使用独立数据密钥；
+- 高敏感字段按 Policy 单独加密；
+- 日志不记录消息正文；
+- 原文读取进入内容访问审计。
+
+完全端到端加密会限制服务端执行 DLP、分类、搜索和合规审计，因此不能作为所有
+企业消息的默认模式。确需端到端加密的受限内容，可以只让服务端看到路由元数据、
+密文和 ACL，并要求接收端在本地重新执行 Policy 和 DLP。具体模式由客户安全
+政策决定。
+
+### 15.28 大文件传输
+
+大文件不通过 Agent 消息总线直接传输：
+
+```text
+发送方请求 Upload Grant
+  -> 文件上传对象存储
+  -> 病毒、秘密和 DLP 扫描
+  -> 创建受控 Resource Reference
+  -> Agent 消息传递 Reference
+  -> 接收方重新鉴权
+  -> 获取短期 Download Grant
+```
+
+在私有化环境中使用客户本地对象存储。未来即使支持局域网或 P2P 加速，控制面、
+授权、完整性校验、Receipt 和 Audit 仍然经过 Collaboration Gateway。
+
+### 15.29 四种部署模式中的路由位置
+
+| 交付模式 | Collaboration Gateway 位置 | 消息正文位置 |
+|---|---|---|
+| Shared SaaS | Hermes 共享云 | 共享数据平面内按 Tenant 隔离 |
+| Dedicated Data Plane | 企业专属 VPC | 企业专属数据平面 |
+| Connected Private | 客户云账号/VPC | 客户环境 |
+| Offline Private | 企业内网 | 企业离线环境 |
+
+完全离线模式仍使用企业内部服务端路由，不改成设备间 P2P。四种模式共用相同消息
+契约、Receipt、状态机和审计语义。
+
+### 15.30 NATS 与 Connector 边界
+
+NATS Core / JetStream 是 Remote Server 内部实现：
+
+- Connector 不直接连接 NATS；
+- Agent 不持有 NATS 凭据；
+- NATS Subject 不成为外部协议；
+- 服务端可以更换消息基础设施而不升级 Agent；
+- Connector 只认识 Hermes WSS 和本地协议；
+- Collaboration Gateway 负责外部消息协议与内部事件的转换。
+
+这一边界保证 Agent、Connector 和 Remote Server 可以独立升级。
+
+### 15.31 路由故障和恢复
+
+| 故障 | 处理 |
+|---|---|
+| Gateway 短暂不可用 | Connector 重连并使用发送幂等键 |
+| 消息已持久化但事件未发布 | Outbox 后台补发 |
+| JetStream 重复投递 | Consumer 按 `message_id` 幂等 |
+| Connector B 收到后断线 | Agent Receipt 未确认则重新投递 |
+| Agent B 已执行但 Receipt 丢失 | 按 Request/Action ID 查询最终状态 |
+| 消息 Schema 不兼容 | 拒绝并返回支持版本 |
+| 消息超过 TTL | 标记 `EXPIRED`，不继续投递 |
+| 积压超过租户配额 | 限流并通知发送方和管理员 |
+
+服务端路由采用“至少一次投递、业务效果幂等”。不能把网络层消息恰好一次等同于
+业务动作恰好一次。
+
+### 15.32 Connector WSS 消息类型
+
+Connector 与 Remote Gateway 之间使用版本化 Hermes WSS 消息：
+
+| 消息类型 | 方向 | 作用 |
+|---|---|---|
+| `collaboration.send` | Connector A → Server | 提交带幂等键的协作消息 |
+| `collaboration.accepted` | Server → Connector A | 服务端已持久化 |
+| `collaboration.available` | Server → Connector B | 通知存在待收消息 |
+| `collaboration.pull` | Connector B → Server | 按游标拉取消息 |
+| `collaboration.message` | Server → Connector B | 交付结构化消息 |
+| `collaboration.receipt` | Connector B → Server | Agent B 已接收或拒绝 |
+| `collaboration.status` | Server → Connector A/B | 状态变化 |
+| `collaboration.cancel` | Connector A → Server | 在允许状态下取消 |
+
+每个消息携带：
+
+- Protocol Schema Version；
+- Message ID；
+- Idempotency Key；
+- Tenant；
+- Agent Session；
+- Sequence / Cursor；
+- Trace ID；
+- Payload Hash；
+- Expiry；
+- 签名或会话完整性信息。
+
+Connector 可以缓存待发送消息，但服务端返回 `collaboration.accepted` 后，
+PostgreSQL 才是消息权威事实源。
+
 ## 16. 版本与升级模型
 
 ### 16.1 四条独立发布轨道
@@ -2375,6 +2651,8 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - Communication Thread；
 - Collaboration Request；
 - Agent Delegation Policy；
+- Connector WSS 协作消息；
+- 服务端 Message Store、Outbox 和离线队列；
 - Receipt、TTL 和 Agent 循环控制；
 - 审批、交接、接管和异常；
 - 幂等、补偿和结果证据。
@@ -2389,6 +2667,9 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - 接收方使用自己的身份读取资源；
 - 委托撤销后 Agent 不能继续代表员工工作；
 - Agent 对话达到轮次、预算或冲突门槛时转人工；
+- Agent B 离线和重连后能够按游标恢复消息；
+- 消息重复投递不会产生重复业务效果；
+- Agent 和 Connector 不直接连接 NATS；
 - 重复提交不产生重复业务效果；
 - 失败可以补偿、回滚或明确进入人工处理。
 
@@ -2629,6 +2910,10 @@ Skill 和 Evaluation 时，Evolution Agent 只能生成无法治理的建议。
 - 委托撤销和项目退出即时生效；
 - Agent-to-Agent 无进展后转人工；
 - 员工接管后可以恢复原 Work Item；
+- 接收方离线、重连和游标恢复；
+- Outbox 补发和 JetStream 重复投递；
+- 消息 TTL 过期后不再执行；
+- 大文件通过受控对象引用传递；
 - Skill 新旧版本结果对比。
 
 验收结论以真实任务完成、权限正确和结果可追溯为准，不以生成文字是否流畅为准。
@@ -2988,6 +3273,9 @@ Hermes Agent 迭代机制。页面允许动态变化，读取受权限约束，�
 受治理 Action，企业能力必须经过评估、审批、签名、灰度和回滚。
 员工与 Agent 的横向协作采用独立身份、Delegation Policy、结构化消息、Work
 Item、循环预算和人工接管，不建设无边界的 Agent 聊天网络。
+所有正式 Agent-to-Agent 消息通过部署边界内的 Collaboration Gateway 服务端
+路由，使用持久化消息、Outbox、内部消息总线和 Receipt 支持在线与离线投递；
+Agent 和 Connector 不直接连接 NATS，也不使用设备间 P2P 建立业务信任。
 
 ### Open risks
 
