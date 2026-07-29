@@ -11,6 +11,12 @@ The future agent-native enterprise operating model, dynamic workbench, and
 two-layer Hermes Agent evolution loop are defined in
 [`2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md).
 
+The canonical governance and technology baseline for work information, files,
+internal and external data, agent data exchange, AI processing, dynamic
+visualization, data integration, distribution, and lifecycle propagation is
+defined in
+[`2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md`](2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md).
+
 The owner-level operating philosophy, dual ILPO, external growth, internal
 capability, and organizational AI theory are defined in
 [`2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md).

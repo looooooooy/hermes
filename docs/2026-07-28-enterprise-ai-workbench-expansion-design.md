@@ -11,6 +11,10 @@
 设计见
 [`2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md)。
 
+工作过程信息、文件、内部与外部系统数据，以及 Agent 协作中的权限、血缘、保留、
+删除传播和先进技术栈的详细基线见
+[`2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md`](2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md)。
+
 ## 1. 产品定位
 
 Hermes 企业 AI 工作台不是员工设备监控软件，而是企业工作过程、知识资产和

@@ -1,18 +1,25 @@
 # Hermes Agent 原生企业工作模式设计
 
 - 状态：未来产品方向详细设计基线
-- 文档版本：2.3
+- 文档版本：2.4
 - 日期：2026-07-29
 - 适用范围：Hermes 企业 AI 工作台及后续产品扩展
 - 依赖：
   - [Hermes Connector 商用首发架构](2026-07-28-hermes-connector-commercial-architecture-design.md)
   - [Hermes 企业 AI 工作台扩展设计](2026-07-28-enterprise-ai-workbench-expansion-design.md)
   - [Hermes AI 原生企业工作台投资论证与经营价值实现方案](2026-07-29-hermes-ai-native-enterprise-investment-business-case.md)
+  - [Hermes Agent 原生企业数据治理与 AI 数据平台技术设计](2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md)
 - 核心命题：从“企业建设固定业务页面”转向“企业建设可信数据与可执行能力，
   员工通过 Agent 按任务组织工作界面”
 
 老板视角的经营心智、双层 ILPO、外部增长、内部能力和组织 AI 化理论见
 [`2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md)。
+
+工作过程信息、文件、外部与内部系统数据的权威来源、权限传播、删除传播，以及
+前后端 AI、动态可视化、数据集成、处理和分发的正式技术基线见
+[`2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md`](2026-07-29-hermes-agent-native-data-governance-and-ai-data-platform-design.md)。
+本文负责定义企业工作模式和经营对象；涉及数据治理对象、生命周期或技术组件边界时，
+以该数据平台设计为准。
 
 ## 1. 执行结论
 
