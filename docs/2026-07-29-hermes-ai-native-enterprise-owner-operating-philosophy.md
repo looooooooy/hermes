@@ -1,7 +1,7 @@
 # Hermes AI 原生企业：老板经营心智与组织进化理论
 
 - 状态：公司战略、经营操作系统与对外商业理论基线
-- 版本：1.0
+- 版本：1.1
 - 日期：2026-07-29
 - 主要读者：老板、创始人、CEO、核心管理层
 - 延伸读者：客户决策者、合作伙伴、投资人与组织 AI 化负责人
@@ -490,6 +490,464 @@ AI 可以让内容供给大幅增加，但内容数量不是增长。营销的�
 
 持续不等于无限自动发布。品牌承诺、价格、客户敏感沟通和高风险内容仍需要人工
 Owner。
+
+### 8.6 DTC+：“强品牌、全渠道”的增长操作系统
+
+本文件吸收 DTC+ 渠道力理念，但不把 DTC+ 定义为一个独立站项目。Hermes 中的
+DTC+ 是：
+
+```text
+直接客户关系和客户事实
+  + 强品牌
+  + 创作者传播生态
+  + 产品与内容营销
+  + 电商增长变现
+  + 线下零售
+  + 数字驱动
+  + 客户复购
+```
+
+DTC 官网只是一个渠道。DTC+ 的核心是企业能否跨平台持续识别客户、理解客户、
+兑现承诺并形成复购，而不是企业是否拥有一个网站。
+
+### 8.7 DTC+ 的四个经营域
+
+| 经营域 | 作用 | 典型能力 |
+|---|---|---|
+| 传播创作者生态 | 让市场知道、理解并相信品牌 | 达人、用户内容、本地化内容和社媒 |
+| 产品及内容营销 | 把正确产品和内容送到正确人群 | 站外、站内、DSP、开放互联网广告 |
+| 电商增长变现 | 把兴趣转为交易、服务和复购 | Marketplace、Social Commerce、DTC |
+| 线下零售 | 扩大触达、信任和购买便利 | 零售合作、门店、陈列和渠道扩展 |
+
+四个经营域不能由四个部门独立优化。它们必须共享客户、产品、内容、库存、价格、
+渠道、订单、利润和 Evidence。
+
+### 8.8 传播创作者生态
+
+传播创作者生态包括：
+
+- 海外红人和达人营销；
+- 本土化品牌文案；
+- 海外品牌视觉塑造；
+- 海外社交媒体运营；
+- 本土化视频创意与拍摄；
+- 用户内容收集与授权；
+- 创作者关系和长期合作；
+- 不同市场的文化与合规适配。
+
+企业不应只购买单次发帖，而应管理完整 Creator Lifecycle：
+
+```text
+Creator Discovery
+  -> Audience & Brand Fit
+  -> Brief
+  -> Contract / Rights
+  -> Content Production
+  -> Review
+  -> Publish
+  -> Engagement / Conversion
+  -> Customer Outcome
+  -> Creator Evaluation
+  -> Reuse / Stop
+```
+
+### 8.9 产品及内容营销
+
+产品及内容营销覆盖：
+
+- 站外广告；
+- Marketplace 站内广告；
+- Retail Media；
+- DSP；
+- Open Internet；
+- 搜索；
+- 社交平台；
+- 再营销；
+- 品牌内容；
+- 商品内容；
+- 促销内容；
+- 客户教育内容。
+
+广告 Agent 不能只优化点击和平台 ROAS。必须同时读取：
+
+- 产品毛利；
+- 库存和在途；
+- 退货和质量；
+- 客户生命周期；
+- 渠道费用；
+- 品牌规范；
+- 现金预算；
+- 履约能力。
+
+### 8.10 电商增长变现
+
+电商域包括：
+
+- Amazon 等 Marketplace 运营；
+- TikTok Shop 等 Social Commerce；
+- DTC 官网；
+- 商品上架；
+- 价格和促销；
+- 库存分配；
+- 订单和履约；
+- 客服；
+- 评论和 VOC；
+- 复购；
+- 会员和生命周期经营。
+
+电商不是营销活动的最后一个按钮，而是客户承诺兑现和经营结果确认的位置。
+
+### 8.11 线下零售
+
+线下零售包括：
+
+- 零售商合作；
+- 渠道准入；
+- 门店和区域扩展；
+- 采购和补货；
+- 陈列和促销；
+- Retail Media；
+- 门店库存；
+- Sell-in 与 Sell-through；
+- 渠道账单；
+- 退货和损耗；
+- 线上线下客户反馈。
+
+Walmart、Target、Home Depot、Best Buy 等大零售商只是渠道示例。Hermes 不把
+某个零售商写入核心契约，而使用 `retail_partner`、`store`、`retail_order`、
+`retail_inventory` 和 `retail_settlement` 等通用对象。
+
+### 8.12 数字驱动的闭环
+
+图中的“数字驱动”在 Hermes 中不是建设更多营销报表，而是建立统一经营事实：
+
+```text
+Creator / Content / Ad / Channel
+  -> Customer Signal
+  -> Visit / Engagement
+  -> Lead / Cart / Order
+  -> Delivery / Return / Service
+  -> Revenue / Margin / Cash
+  -> Repurchase / Churn
+  -> Evidence
+  -> 下一轮 Insight 与 Leverage
+```
+
+每个经营对象必须通过可追溯 ID 连接到后续 Outcome。无法连接到客户、订单、毛利、
+现金或有效品牌结果的活动只能被视为探索性投入。
+
+### 8.13 用户复购是 DTC+ 的中心结果
+
+获客只能证明企业获得一次机会，复购才开始证明：
+
+- 产品价值成立；
+- 品牌承诺被兑现；
+- 交付和服务可接受；
+- 客户关系可以积累；
+- 获客成本有机会被摊薄；
+- DTC 客户资产正在形成。
+
+DTC+ 不应把复购简化为再次推送促销。复购经营包括：
+
+- 产品使用周期；
+- 补充和替换周期；
+- 客户满意；
+- 质量和退货；
+- 售后服务；
+- 内容教育；
+- 新产品关联；
+- 频率控制；
+- 客户授权；
+- 长期价值和毛利。
+
+### 8.14 DTC+ 成熟度
+
+结合图中的 L2/L2++ 复购和 L4 精准营销，本文件定义：
+
+| 等级 | 主要能力 | 经营状态 |
+|---|---|---|
+| L0 渠道存在 | 开账号、上架、发布内容 | 有渠道，没有闭环 |
+| L1 运营协同 | 内容、广告和电商基础运营 | 能获得流量和订单 |
+| L2 交易复购 | 订单、服务和复购可识别 | 开始形成客户生命周期 |
+| L2++ 客户资产 | 跨渠道客户事实和复购运营 | DTC 关系不再依赖单一平台 |
+| L3 全渠道协同 | 创作者、广告、电商和零售共享事实 | 可以按客户和产品协调资源 |
+| L4 精准经营 | 数据、AI 和 Agent 按 Outcome 动态编排 | 实现人群、内容、产品、渠道和时机匹配 |
+
+L4 不是“广告定向更细”，而是：
+
+- Insight 来自真实客户和经营事实；
+- Leverage 可以跨品牌、产品、渠道和内容选择；
+- Process 由员工 Agent 动态协同；
+- Output 同时满足收入、利润、现金、复购和品牌约束。
+
+### 8.15 DTC+ 业务 ILPO
+
+| ILPO | DTC+ 经营定义 | 老板和 Owner 的责任 |
+|---|---|---|
+| Insight | 客户、市场、产品、渠道和内容的真实变化 | 判断哪些变化值得相信 |
+| Leverage | 品牌、产品、价格、Creator、内容、广告、渠道和零售 | 选择资源投入杠杆 |
+| Process | 研究、创作、投放、交易、履约、服务和复盘 | 定义跨域过程和责任 |
+| Output | 收入、毛利、现金、复购、客户资产和品牌信任 | 确认结果和是否扩围 |
+
+### 8.16 DTC+ 执行 ILPO
+
+| ILPO | 员工 Work Agent 的执行内容 |
+|---|---|
+| Input | Product、Audience、Creator、Content、Inventory、Price、Channel、Budget、Order、VOC |
+| Logic | 品牌规范、毛利底线、库存约束、内容权利、频控、渠道政策和合规 |
+| Process | Creator、Content、Media、Commerce、Retail、Service、Finance Agent 协作 |
+| Output | Brief、Creative、Campaign、Listing、Order、Service、Repurchase、Evidence、Skill Candidate |
+
+Business ILPO 通过 DTC+ Task Contract 下发，员工 Agent 不自行改变预算、品牌承诺、
+客户授权和利润红线。
+
+### 8.17 KOL、KOC、KOS、KOA 的角色体系
+
+本文件将图中的四类角色作为 DTC+ 内部运营角色，不视为所有行业通用术语：
+
+| 角色 | 核心任务 | 主要结果 |
+|---|---|---|
+| KOL | 让目标人群知道品牌和形成话题 | Reach、Brand Search、Qualified Attention |
+| KOC | 以真实使用体验建立信任 | Trust、Review Quality、Consideration |
+| KOS | 以销售和场景能力促成购买 | Qualified Conversion、Order、Margin |
+| KOA | AI 数字创作者，规模化生成和适配内容 | Content Variant、Coverage、Response Speed |
+
+四类角色不是线性漏斗，也不是互相替代：
+
+- KOL 提供注意力和社会证明；
+- KOC 提供真实体验和同伴信任；
+- KOS 把产品价值转化为购买理由；
+- KOA 扩展创意供给、语言、格式、时间和渠道适配。
+
+### 8.18 KOA 的正确边界
+
+图中“无限量产出内容、全天候承接流量”表达了 AI 的规模优势，但企业不能把它
+直接作为生产目标。Hermes 将 KOA 定义为：
+
+> 在品牌、事实、知识产权、渠道、预算和人工确认边界内持续生成、适配、测试和
+> 回收内容的 AI 数字创作者。
+
+KOA 可以：
+
+- 将已批准核心创意适配为不同语言和比例；
+- 根据渠道格式生成变体；
+- 提取产品和客户 Evidence；
+- 生成 A/B 测试候选；
+- 在授权知识范围内回答标准问题；
+- 将流量路由到合适内容、商品和人工；
+- 识别高风险、敏感和无证据问题并升级。
+
+KOA 不可以：
+
+- 编造产品能力和客户评价；
+- 无限制发布内容；
+- 复制未授权创作者作品；
+- 擅自使用人物肖像和声音；
+- 绕过品牌和法务审核；
+- 擅自改变价格、促销和库存承诺；
+- 用私人数据进行定向；
+- 在高风险客户沟通中替企业作承诺。
+
+### 8.19 KOL/KOC/KOS/KOA 的 Agent 协作
+
+```text
+Brand Owner
+  -> Campaign Task Contract
+
+Creator Agent
+  -> KOL / KOC 筛选、Brief 和权利
+
+KOA
+  -> 内容草案、本地化和渠道适配
+
+Brand / Legal Human Gate
+  -> 事实、品牌、版权和合规确认
+
+Media Agent
+  -> 站内、站外、DSP 和 Open Internet 投放
+
+KOS / Sales Agent
+  -> 场景解释、购买引导和异议处理
+
+Commerce / Retail Agent
+  -> 库存、交易、履约和渠道协调
+
+Service Agent
+  -> 客户结果、问题和复购
+
+Finance Agent
+  -> 毛利、现金和渠道费用
+
+Evolution Agent
+  -> Evidence、知识、Skill 和停用建议
+```
+
+这些 Agent 使用员工身份和 Task Contract 横向协作，不由一个中央营销 Agent
+无边界控制所有渠道。
+
+### 8.20 DTC+ 核心 Data Product
+
+- `customer.identity_consent`
+- `customer.segment`
+- `customer.lifecycle`
+- `customer.voc`
+- `product.catalog`
+- `product.claims`
+- `product.margin`
+- `inventory.available_to_promise`
+- `creator.profile`
+- `creator.audience`
+- `creator.contract_rights`
+- `creative.asset`
+- `creative.performance`
+- `campaign.plan`
+- `media.spend`
+- `media.attribution`
+- `channel.listing`
+- `channel.price_promotion`
+- `commerce.order`
+- `commerce.return`
+- `service.case`
+- `retail.partner`
+- `retail.inventory`
+- `retail.sell_through`
+- `customer.repurchase_cohort`
+
+客户身份匹配、Cookie、广告 ID 和跨渠道归因必须符合适用法律、平台政策和客户
+授权。无法合法匹配时使用聚合 Cohort，不强行构建个人级全景。
+
+### 8.21 DTC+ 核心 Task Contract
+
+建议定义：
+
+- 市场洞察 Task Contract；
+- Creator 招募和 Brief Task Contract；
+- 内容生产和本地化 Task Contract；
+- 产品 Claim 审核 Task Contract；
+- 站内广告 Task Contract；
+- 站外/DSP 投放 Task Contract；
+- Marketplace Listing Task Contract；
+- Social Commerce Task Contract；
+- DTC 生命周期 Task Contract；
+- 线下零售准入 Task Contract；
+- 零售补货和 Sell-through Task Contract；
+- 客户服务和复购 Task Contract；
+- Campaign 复盘和 Skill Candidate Task Contract。
+
+每个 Contract 绑定：
+
+- 目标客户；
+- 产品和版本；
+- 市场和语言；
+- 渠道；
+- 预算；
+- 毛利和库存约束；
+- 品牌和产品 Claim；
+- 内容权利；
+- 人工确认；
+- Output Schema；
+- Attribution Window；
+- 停用条件。
+
+### 8.22 DTC+ 指标树
+
+#### 品牌和认知
+
+- Qualified Reach；
+- Brand Search Lift；
+- Share of Qualified Voice；
+- 内容事实准确率；
+- 品牌一致性；
+- Creator Audience Fit。
+
+#### 信任和考虑
+
+- 有效观看和互动；
+- Review Quality；
+- KOC 内容采纳；
+- 商品详情深度访问；
+- 客户问题解决率；
+- 内容引用和证据完整性。
+
+#### 转化和盈利
+
+- Qualified Conversion；
+- 新客户收入；
+- Contribution Margin；
+- 广告和渠道费用；
+- 退货和退款；
+- 履约成本；
+- 库存周转；
+- 现金回收。
+
+#### 复购和客户资产
+
+- Cohort Repurchase；
+- Repeat Revenue；
+- Customer Lifetime Margin；
+- Service Recovery；
+- Churn；
+- 客户授权和可触达率；
+- 跨渠道客户事实完整度。
+
+#### AI 和能力
+
+- KOA 内容被批准率；
+- 内容变体有效率；
+- 人工确认成本；
+- Skill 有效 Outcome；
+- Agent 接管率；
+- 从市场信号到有效内容的周期；
+- 从客户反馈到 Skill 更新的周期。
+
+### 8.23 Attribution 原则
+
+DTC+ 不以单一平台归因作为经营事实。至少区分：
+
+- 平台报告归因；
+- 企业订单和客户事实；
+- Incrementality 实验；
+- Cohort 复购；
+- 品牌搜索和直接流量；
+- 零售 Sell-through；
+- 服务和退货；
+- 财务毛利和现金。
+
+不同 Attribution 结果发生冲突时，不能让 Agent 自动选择对本部门最有利的口径。
+Metric Owner 定义正式使用场景和优先级。
+
+### 8.24 全渠道而非渠道大一统
+
+“全渠道”不意味着所有渠道使用相同内容、价格和动作，而是：
+
+- 客户承诺一致；
+- 品牌事实一致；
+- 产品和库存事实一致；
+- 渠道角色清楚；
+- 数据可以解释差异；
+- Outcome 可以比较；
+- 客户可以顺畅迁移；
+- 组织可以在渠道之间重新配置资源。
+
+Marketplace、Social Commerce、DTC 和线下零售保留各自规则与优势。Hermes 统一
+契约和经营事实，不强行统一渠道运营细节。
+
+### 8.25 老板的 DTC+ 门禁
+
+老板和经营 Owner 在扩张渠道前必须确认：
+
+1. 目标客户和问题是否明确；
+2. 品牌和产品 Claim 是否有证据；
+3. 渠道角色是否清楚；
+4. 库存、履约和服务能否支持增长；
+5. 收入能否转化为毛利和现金；
+6. Creator 内容权利是否完整；
+7. 客户数据使用是否合法透明；
+8. KOA 和自动化内容是否有人工门禁；
+9. 渠道冲突如何处理；
+10. 复购和客户资产如何沉淀；
+11. 无效活动如何停止；
+12. 结果如何形成 Evidence 和 Skill。
 
 ## 9. 营销增长与客户资产
 
@@ -1129,13 +1587,17 @@ Market Signal
 | Agent | 主要执行 |
 |---|---|
 | 市场 Agent | 信号、竞争、客户问题和机会假设 |
-| 内容 Agent | 基于品牌和事实生成内容草案 |
+| Creator Agent | KOL/KOC/KOS 发现、Brief、权利和合作效果 |
+| KOA / 内容 Agent | 基于品牌和事实生成、本地化、适配和测试内容 |
+| Media Agent | 站内、站外、DSP、Open Internet 和预算执行 |
 | 销售 Agent | 客户研究、机会推进和承诺检查 |
+| Commerce Agent | Marketplace、Social Commerce、DTC 交易和复购 |
+| Retail Agent | 零售合作、门店、库存和 Sell-through |
 | 交付 Agent | 任务、依赖、风险和交付物 |
 | 服务 Agent | 问题处理、知识匹配和升级 |
 | 财务 Agent | 利润、现金、预算和账单影响 |
 
-这些不是六套独立应用，而是不同员工 Work Agent 在不同 Task Contract 下加载的
+这些不是多套独立应用，而是不同员工 Work Agent 在不同 Task Contract 下加载的
 能力组合。
 
 ### 19.4 外部承诺
@@ -1201,6 +1663,8 @@ Market Signal
 - 让经验变成企业知识和 Skill；
 - 让 Agent 可以安全协作；
 - 让 AI 输出进入正式工作链；
+- 让 DTC、Marketplace、Social Commerce、广告、Creator 和线下零售形成全渠道
+  Outcome 闭环；
 - 让企业保留权限、责任和审计；
 - 让已有系统逐步无头化而非一次性重建；
 - 让企业能力可以在 SaaS、专属和私有环境运行。
@@ -1347,13 +1811,19 @@ Adapter，不是客户业务正文。
 交付：
 
 - 客户和市场 Data Product；
+- DTC+ 客户、Creator、Content、Media、Commerce 和 Retail 对象；
 - 营销、销售、交付和服务主链；
+- KOL/KOC/KOS/KOA 协作；
+- Marketplace、Social Commerce、DTC 和线下零售连接；
 - 赢单、失单和客户 Outcome Evidence；
 - 首批营销和销售 Skill。
 
 门禁：
 
 - 可以把活动连接到收入、毛利、现金和客户结果；
+- 可以识别 L2/L2++ 复购并逐步进入 L4 精准经营；
+- KOA 内容受到品牌、事实、版权、预算和人工确认约束；
+- 全渠道统一经营事实，不强行统一每个渠道的运营方式；
 - 内容产量不作为成功标准。
 
 ### Stage 4：内部能力飞轮
@@ -1488,6 +1958,8 @@ Adapter，不是客户业务正文。
 10. 我们保留停止、降级、回滚和人工接管的能力。
 11. 我们不依赖单一模型、供应商和部署方式。
 12. 我们建设的不是 AI 功能，而是一家能持续学习和进化的公司。
+13. 我们以 DTC 客户关系为中心连接 Creator、内容、广告、电商和零售，以收入、
+    毛利、现金、复购和品牌信任判断全渠道价值。
 
 ## 27. 设计结论
 
@@ -1507,6 +1979,9 @@ Work Agent 执行 Execution ILPO，Evolution Agent 再把经过结果验证的�
 权限、资本、责任和审计；员工拥有自己的 Work Agent 和动态工作台，在明确契约
 内组织任务和协作。外部增长飞轮与内部能力飞轮通过客户 Outcome、经营结果和
 Evidence 相互驱动。
+在外部增长侧，DTC+ 将传播创作者生态、产品与内容营销、电商增长变现和线下零售
+组织为统一经营闭环；KOL、KOC、KOS 和 KOA 由员工 Work Agent 在品牌、利润、
+库存、客户授权和人工确认边界内协作。
 
 ### Open risks
 
