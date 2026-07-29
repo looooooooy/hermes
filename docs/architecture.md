@@ -15,6 +15,11 @@ The owner-level operating philosophy, dual ILPO, external growth, internal
 capability, and organizational AI theory are defined in
 [`2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md).
 
+The board- and CEO-facing investment case, evidence boundaries, value
+realization gates, ROI/TCO method, and low-maintenance operating model are
+defined in
+[`2026-07-29-hermes-ai-native-enterprise-investment-business-case.md`](2026-07-29-hermes-ai-native-enterprise-investment-business-case.md).
+
 ## Deployment boundary
 
 ```text

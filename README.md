@@ -30,6 +30,10 @@ The owner-level operating philosophy, dual ILPO, growth, and organizational AI
 strategy is documented in
 [`docs/2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](docs/2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md).
 
+The decision-ready investment case, evidence review, value realization path,
+ROI/TCO model, stage gates, and low-maintenance operating model are documented in
+[`docs/2026-07-29-hermes-ai-native-enterprise-investment-business-case.md`](docs/2026-07-29-hermes-ai-native-enterprise-investment-business-case.md).
+
 The existing Android executable slice discovers a configured Hermes endpoint and
 remains useful for protocol parity tests. New commercial delivery follows the
 H5/PWA, Remote Server, independent Connector, and Agent Local Gateway boundaries.

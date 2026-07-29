@@ -9,6 +9,7 @@
   - [Hermes Agent 原生企业工作模式设计](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md)
   - [Hermes 企业 AI 工作台扩展设计](2026-07-28-enterprise-ai-workbench-expansion-design.md)
   - [Hermes Connector 商用首发架构](2026-07-28-hermes-connector-commercial-architecture-design.md)
+  - [Hermes AI 原生企业工作台投资论证与经营价值实现方案](2026-07-29-hermes-ai-native-enterprise-investment-business-case.md)
 - 核心命题：企业 AI 化不是给旧组织增加 AI 工具，而是重构“洞察、杠杆、执行、
   结果、学习和能力复用”的经营循环
 
@@ -24,6 +25,9 @@
 
 本文件既是内部经营纲领，也是对外商业理论。内部使用时，它负责统一老板和核心
 管理层的判断；对外使用时，它解释 Hermes 帮助企业建立什么样的新型组织能力。
+涉及投资额度、外部研究、路线对比、ROI/TCO、试点门禁和低维护运行时，应以
+[投资论证与经营价值实现方案](2026-07-29-hermes-ai-native-enterprise-investment-business-case.md)
+为决策主文件。
 
 本文件不是：
 
