@@ -10,6 +10,9 @@
 - 核心命题：从“企业建设固定业务页面”转向“企业建设可信数据与可执行能力，
   员工通过 Agent 按任务组织工作界面”
 
+老板视角的经营心智、双层 ILPO、外部增长、内部能力和组织 AI 化理论见
+[`2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md)。
+
 ## 1. 执行结论
 
 Hermes 的长期产品方向不应局限为远程使用 Agent 的 H5，也不应继续沿用“每个

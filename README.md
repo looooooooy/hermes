@@ -26,6 +26,10 @@ The future enterprise AI workbench expansion is documented in
 The future agent-native enterprise operating model is documented in
 [`docs/2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](docs/2026-07-28-hermes-agent-native-enterprise-operating-model-design.md).
 
+The owner-level operating philosophy, dual ILPO, growth, and organizational AI
+strategy is documented in
+[`docs/2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](docs/2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md).
+
 The existing Android executable slice discovers a configured Hermes endpoint and
 remains useful for protocol parity tests. New commercial delivery follows the
 H5/PWA, Remote Server, independent Connector, and Agent Local Gateway boundaries.

@@ -11,6 +11,10 @@ The future agent-native enterprise operating model, dynamic workbench, and
 two-layer Hermes Agent evolution loop are defined in
 [`2026-07-28-hermes-agent-native-enterprise-operating-model-design.md`](2026-07-28-hermes-agent-native-enterprise-operating-model-design.md).
 
+The owner-level operating philosophy, dual ILPO, external growth, internal
+capability, and organizational AI theory are defined in
+[`2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md`](2026-07-29-hermes-ai-native-enterprise-owner-operating-philosophy.md).
+
 ## Deployment boundary
 
 ```text
