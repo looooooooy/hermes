@@ -1,12 +1,13 @@
 # Hermes Agent 原生企业工作模式设计
 
 - 状态：未来产品方向详细设计基线
-- 文档版本：2.2
-- 日期：2026-07-28
+- 文档版本：2.3
+- 日期：2026-07-29
 - 适用范围：Hermes 企业 AI 工作台及后续产品扩展
 - 依赖：
   - [Hermes Connector 商用首发架构](2026-07-28-hermes-connector-commercial-architecture-design.md)
   - [Hermes 企业 AI 工作台扩展设计](2026-07-28-enterprise-ai-workbench-expansion-design.md)
+  - [Hermes AI 原生企业工作台投资论证与经营价值实现方案](2026-07-29-hermes-ai-native-enterprise-investment-business-case.md)
 - 核心命题：从“企业建设固定业务页面”转向“企业建设可信数据与可执行能力，
   员工通过 Agent 按任务组织工作界面”
 
@@ -48,6 +49,11 @@ Hermes 在这一方向上的产品定位应升级为：
 
 两层 Agent 运行在同一产品内核和协议体系上，但使用不同身份、权限、数据范围、
 发布节奏和治理流程。不得形成两套不可兼容的 Agent 代码分支。
+
+所有员工 Work Agent 由 **Enterprise Agent Bootstrap Kernel** 初始化。它将企业
+基线、角色能力包、员工身份与委托、团队和项目授权、个人配置解析为签名的
+Agent Bootstrap Manifest。Bootstrap Kernel 是企业控制面的逻辑能力，不是第三个
+超级 Agent，也不拥有所有员工个人记忆。
 
 不同员工的 Work Agent 通过 Collaboration Service 横向协作。Agent 使用独立
 身份和员工委托，通过结构化 Collaboration Request、Work Item 和 Action 交换
@@ -197,6 +203,8 @@ Hermes Data / Capability Plane
 8. **运行时升级与业务能力升级分离。**
 9. **企业 Agent 不是拥有全量明文权限的超级账号。**
 10. **现有核心系统采用渐进式无头化，不进行一次性推倒重建。**
+11. **员工 Agent 共享企业基线，不共享个人记忆。**
+12. **Agent 初始化必须可签名、可评估、可撤销、可重放和可审计。**
 
 ## 5. Hermes 产品定位
 
@@ -213,7 +221,8 @@ Hermes Data / Capability Plane
 - Work Item；
 - View；
 - Policy；
-- Evidence。
+- Evidence；
+- Agent Bootstrap Manifest。
 
 一个新的业务场景优先通过组合这些对象实现，而不是先新建菜单和页面。
 
@@ -354,6 +363,8 @@ Skill
 | 客户、订单、库存、合同等业务状态 | 对应 System of Record |
 | Tenant、Workspace 和成员关系 | Enterprise Workspace Service |
 | Data Product、Metric、Action、View、Skill 定义 | 各自 Registry |
+| Enterprise Baseline 和 Role Capability Package | Bootstrap / Capability Registry |
+| 已签发 Agent Bootstrap Manifest 和激活状态 | Agent Bootstrap Service |
 | Work Item 当前状态 | Collaboration Service |
 | 权限政策 | Policy Registry |
 | 一次权限判断结果 | Policy Decision Log |
@@ -392,6 +403,27 @@ Hermes 的搜索、向量、图谱、缓存和管理驾驶舱都是投影，不�
 
 公共信封只定义治理字段，业务正文仍由对象自己的 Schema 定义。
 
+### 6.10 Agent Bootstrap Manifest
+
+Agent Bootstrap Manifest 是员工 Work Agent 某次启动、重连或权限变化后实际生效
+的初始化清单。它不是 Prompt，也不是复制到所有 Agent 的企业知识正文，而是引用
+当前有效的企业基线、角色能力包、授权和评估结果。
+
+它至少回答：
+
+- 该 Agent 属于哪个 Tenant、员工和设备；
+- 当前员工承担什么角色和项目责任；
+- 可以读取哪些 Data Product 和 Knowledge；
+- 可以加载哪些 Skill、Action、View 和工具；
+- 使用什么协作、自主、模型、费用和留存策略；
+- 哪些高风险行为必须由员工确认；
+- 当前基线和各引用对象使用什么版本；
+- 何时生效、何时过期、如何撤销；
+- 该 Agent 是否已完成当前版本的上岗评估。
+
+Manifest 是解析结果，不取代各 Registry 和 Policy 的权威事实。员工身份、组织关系、
+权限、Skill 和知识发生变化时，Bootstrap Service 重新解析并生成新版本。
+
 ## 7. 总体产品架构
 
 ```mermaid
@@ -402,6 +434,7 @@ flowchart TB
     KNOWLEDGE["Knowledge Plane<br/>Evidence / Asset / Graph"]
     CAPABILITY["Capability Plane<br/>Action / Skill / Workflow"]
     GOVERNANCE["Governance Plane<br/>Identity / Policy / DLP / Audit"]
+    BOOTSTRAP["Agent Bootstrap Kernel<br/>Baseline / Role / Delegation / Attestation"]
     WORK["Hermes Work Agent"]
     EVOLUTION["Hermes Evolution Agent"]
     VIEW["Dynamic Workbench<br/>Web / Mobile / Mini Program"]
@@ -414,6 +447,11 @@ flowchart TB
     GOVERNANCE -.-> FACT
     GOVERNANCE -.-> KNOWLEDGE
     GOVERNANCE -.-> CAPABILITY
+    GOVERNANCE --> BOOTSTRAP
+    KNOWLEDGE --> BOOTSTRAP
+    CAPABILITY --> BOOTSTRAP
+    BOOTSTRAP --> WORK
+    BOOTSTRAP --> EVOLUTION
     FACT --> WORK
     KNOWLEDGE --> WORK
     CAPABILITY --> WORK
@@ -433,6 +471,7 @@ Governance Plane 对所有层生效。Evolution Agent 只能提出 Policy 候选
 |---|---|---|
 | Workbench Gateway | H5/PWA 会话、流式响应、View 交付 | 业务事实和权限决策 |
 | Identity & Org Service | Tenant、组织、成员、身份映射 | 业务对象正文 |
+| Agent Bootstrap Service | 解析企业基线、角色包、委托和能力，签发初始化清单 | 保存个人记忆或替 Agent 规划工作 |
 | Work Event Gateway | 接入、校验、去重和规范化事件 | 知识发布 |
 | Catalog Service | Data、Metric、Action、View、Skill 元数据目录 | 执行 Action |
 | Query Planner | 将意图转换为 Read Plan | 绕过 Policy 读取数据 |
@@ -456,6 +495,9 @@ Governance Plane 对所有层生效。Evolution Agent 只能提出 Policy 候选
 控制平面保存“应该如何运行”：
 
 - Tenant 配置；
+- Enterprise Baseline；
+- Role Capability Package；
+- Agent Bootstrap Manifest 元数据；
 - Registry 元数据；
 - Policy；
 - Schema；
@@ -513,6 +555,10 @@ Agent 代表员工执行时，同时记录员工身份和 Agent 身份。审计�
 | API | 用途 |
 |---|---|
 | `POST /v1/intents:interpret` | 将员工表达转换为 Intent Contract |
+| `POST /v1/agent-bootstraps:resolve` | 按身份、角色、设备和 Purpose 解析初始化清单 |
+| `GET /v1/agents/{id}/bootstrap-manifest` | 获取当前签名 Manifest 与引用版本 |
+| `POST /v1/agents/{id}:attest` | 上报运行时、能力、评估和设备证明 |
+| `POST /v1/agents/{id}:activate` | 在评估和 Policy 通过后激活指定自主等级 |
 | `POST /v1/views:compose` | 生成 View Draft |
 | `POST /v1/views:validate` | 校验 Schema、Binding、Policy 和终端能力 |
 | `POST /v1/read-plans:execute` | 执行受控读取 |
@@ -538,8 +584,8 @@ Agent 代表员工执行时，同时记录员工身份和 Agent 身份。审计�
 
 | 存储 | 保存内容 | 不能保存为权威事实的内容 |
 |---|---|---|
-| PostgreSQL | Registry、Workspace、Work Item、Command、Policy 元数据 | 大附件和搜索索引 |
-| Object Storage | 原文、附件、Evidence、Skill 包、评估制品 | 权限最终判断 |
+| PostgreSQL | Registry、Workspace、Bootstrap 元数据、Work Item、Command、Policy 元数据 | 大附件和搜索索引 |
+| Object Storage | 原文、附件、Evidence、签名基线包、Skill 包、评估制品 | 权限最终判断 |
 | Search Index | 全文、过滤字段、检索投影 | 正式资产状态 |
 | Vector Index | Embedding 和语义召回投影 | ACL 和业务主键事实 |
 | Graph Store | 对象和知识关系投影 | 交易状态 |
@@ -555,6 +601,12 @@ Redis 是可选基础设施，用于降低热点读取和协调成本；Redis �
 
 ```text
 work.intent.created
+agent.bootstrap.resolved
+agent.bootstrap.attested
+agent.bootstrap.activated
+agent.bootstrap.rejected
+agent.bootstrap.revoked
+agent.baseline.changed
 view.draft.generated
 view.saved
 view.template.proposed
@@ -600,6 +652,8 @@ Schema 版本。生产者使用 Transactional Outbox，消费者按 `event_id` �
 | Workbench Shell 可交互时间 | 典型 4G 网络 P75 不高于 2.5 秒 |
 | 首个 View 骨架返回 | P75 不高于 3 秒 |
 | Policy Decision | 缓存命中 P95 不高于 50 毫秒 |
+| Bootstrap Manifest 解析 | 不含远程身份提供商耗时 P95 不高于 1 秒 |
+| 紧急撤销传播 | 在线 Agent P95 不高于 30 秒；离线 Agent 重连前阻断 |
 | 常用只读数据加载 | P95 不高于 2 秒 |
 | Action Prepare | 不含来源系统耗时 P95 不高于 500 毫秒 |
 | Command 状态可查询 | 100% |
@@ -779,6 +833,481 @@ Hermes 记忆分为四层：
 - 结果复核：可以使用独立模型或规则，避免同一输出自我证明。
 
 模型更换不得改变 Data、Action、View 和 Skill 契约。
+
+### 8.8 Enterprise Agent Bootstrap Kernel
+
+Enterprise Agent Bootstrap Kernel（企业 Agent 基础脑）负责把企业共同规则解析成
+每个 Agent 可以执行的初始化状态。
+
+它是以下控制面能力的逻辑组合：
+
+- Agent Bootstrap Service；
+- Identity & Organization；
+- Policy 与 Delegation；
+- Catalog / Capability Registry；
+- Knowledge Registry；
+- Model Gateway Policy；
+- Collaboration Policy；
+- Evaluation 与 Attestation；
+- 签名、版本、吊销和审计。
+
+它不是：
+
+- 第三个负责日常任务的超级 Agent；
+- 拥有企业全部数据的统一模型上下文；
+- 所有员工共享的一份长期记忆；
+- 绕过来源系统和 Policy 的管理员账号；
+- 替员工决定目标、优先级和正式承诺的中央控制者；
+- Work Agent 与 Evolution Agent 之外的新运行时分支。
+
+首版可以由同一个 Remote Server 部署单元中的多个模块共同实现，不要求立即拆分为
+独立微服务。但 Bootstrap Manifest、Policy Decision、身份事实和评估结果必须保持
+独立契约和事实归属。
+
+### 8.9 四层初始化模型
+
+```text
+Enterprise Baseline
+  ├─ 企业语义、指标和业务对象
+  ├─ 身份、权限、风险和审计政策
+  ├─ 协作、模型、费用和留存政策
+  └─ 企业批准的能力目录
+          ↓
+Role Capability Package
+  ├─ 角色允许使用的数据和知识类别
+  ├─ 默认 Skill、Action、View 和工具
+  ├─ 角色任务模板和评估集
+  └─ 角色自主等级上限
+          ↓
+Employee and Work Grants
+  ├─ 员工身份、岗位和代理关系
+  ├─ Tenant、Workspace、团队和项目
+  ├─ 当前客户、业务对象和临时授权
+  └─ 设备、地域和工作状态
+          ↓
+Personal and Task Context
+  ├─ 本人明确保存的偏好
+  ├─ Personal Memory 引用
+  ├─ 当前 Work Item 和 Task Contract
+  └─ 当前会话必要上下文
+```
+
+解析结果：
+
+```text
+Employee Work Agent
+  = Hermes Runtime Capability
+  + Enterprise Baseline
+  + Role Capability Package
+  + Employee Identity and Delegation
+  + Team / Project Grants
+  + Personal Configuration
+  + Current Work Context
+```
+
+四层的事实归属和更新节奏不同，不能合并为一个长期 Prompt。
+
+### 8.10 Enterprise Baseline
+
+Enterprise Baseline 是某一 Tenant 当前批准的最小共同企业基线，至少引用：
+
+- Canonical Business Model；
+- Data Classification；
+- Metric 与语义目录；
+- 身份、委托和最小权限政策；
+- Action 风险等级和人工门禁；
+- Collaboration Message Schema；
+- Agent 自主等级政策；
+- 数据留存、DLP 和审计政策；
+- Model Gateway 路由和成本上限；
+- 企业默认 Skill、View 和工具目录；
+- Evaluation Profile；
+- 紧急停止、吊销和人工接管策略。
+
+Enterprise Baseline 只下发规则、目录和资源引用，不默认下发：
+
+- 企业知识库全部正文；
+- 所有客户、订单、项目和员工数据；
+- 数据库和第三方系统长期凭据；
+- 管理员拥有但员工无权访问的内容；
+- 其他员工的个人记忆；
+- 未发布的 Skill、Policy 和知识草稿。
+
+Agent 在具体 Work Item 中根据 Purpose 和当前权限读取最小必要正文。
+
+### 8.11 Role Capability Package
+
+Role Capability Package 描述某类角色通常需要的能力，不直接授予具体员工权限。
+
+示例：
+
+```text
+Sales Role Package
+  ├─ customer.summary Data Product
+  ├─ opportunity.health Metric
+  ├─ proposal.draft Skill
+  ├─ product.claim.request Collaboration Template
+  ├─ quote.prepare Action
+  ├─ sales.pipeline View Template
+  ├─ 默认 L1 Inform / L2 Collaborate
+  └─ 客户承诺和价格例外必须人工确认
+```
+
+Role Package 至少包含：
+
+- `role_package_id` 和版本；
+- 适用的组织角色；
+- Data Product 和 Knowledge 类别选择器；
+- Skill、View、Action 和工具引用；
+- Task Contract 与 Collaboration Request 模板；
+- 默认自主等级和 Action 上限；
+- 模型、Token、费用和时延预算；
+- 必须通过的角色评估集；
+- 适用地域、业务线和部署模式；
+- Owner、有效期、灰度和回滚版本。
+
+Role Package 中声明“销售角色可以申请客户数据”不等于具体员工已经获得客户数据
+权限。最终授权由员工身份、Workspace、项目、Purpose 和 Policy 共同决定。
+
+### 8.12 员工专属配置
+
+员工专属配置只保存形成个人 Work Agent 所需的治理信息：
+
+- `human_id` 和 `agent_id`；
+- 员工与 Agent 的 `on_behalf_of` 关系；
+- 当前岗位、团队、项目和 Workspace；
+- 允许代理的业务 Purpose；
+- 自主等级偏好，但不得超过企业上限；
+- 通知、可代理状态和接收请求策略；
+- 明确保存的个人 View 和工作偏好引用；
+- 设备、地域和模型使用限制；
+- 临时 Access Grant 和有效期；
+- 员工同意版本和可见的审计入口。
+
+Personal Memory 正文默认保存在员工选择的数据边界内。Bootstrap Manifest 可以
+包含 Personal Memory 的受控引用和读取策略，不包含可被其他 Agent 使用的个人
+记忆副本。
+
+### 8.13 Agent Bootstrap Manifest
+
+Bootstrap Service 根据当前事实生成签名 Manifest。示例：
+
+```json
+{
+  "manifest_id": "abm_01...",
+  "manifest_version": 12,
+  "tenant_id": "ten_01...",
+  "workspace_id": "wsp_01...",
+  "human_id": "usr_01...",
+  "agent_id": "agt_work_01...",
+  "device_id": "dev_01...",
+  "runtime": {
+    "minimum_version": "2.4.0",
+    "attested_version": "2.4.1",
+    "required_capabilities": [
+      "purpose_token",
+      "skill_resume",
+      "collaboration_receipt"
+    ]
+  },
+  "baseline": {
+    "id": "ebl_01...",
+    "version": "3.2.0",
+    "policy_context_version": "pcv_109",
+    "semantic_model_version": "sem_24"
+  },
+  "role_packages": [
+    {
+      "id": "role_sales",
+      "version": "2.1.0"
+    }
+  ],
+  "grants": {
+    "workspaces": ["wsp_sales_cn"],
+    "purpose_tags": ["customer_service", "sales_delivery"],
+    "classification_ceiling": "confidential",
+    "temporary_grant_refs": ["agr_01..."]
+  },
+  "capabilities": {
+    "skill_refs": ["proposal.draft@3.1"],
+    "action_refs": ["quote.prepare@2.x"],
+    "view_refs": ["sales.pipeline@1.4"],
+    "knowledge_scope_refs": ["ksc_sales_cn"]
+  },
+  "collaboration": {
+    "policy_ref": "acp_sales_02",
+    "maximum_hops": 2,
+    "maximum_rounds": 4,
+    "default_request_ttl_seconds": 86400
+  },
+  "autonomy": {
+    "default_level": "L1",
+    "maximum_level": "L2",
+    "human_gate_action_classes": ["R3", "R4"]
+  },
+  "model_policy": {
+    "route_policy_ref": "mrp_cn_04",
+    "daily_budget_ref": "mbg_usr_01"
+  },
+  "memory": {
+    "personal_memory_ref": "local://personal-memory",
+    "team_memory_refs": ["tm_project_01"],
+    "enterprise_asset_scope_ref": "eas_sales"
+  },
+  "evaluation": {
+    "profile_ref": "eval_sales_02",
+    "result_ref": "evr_01...",
+    "status": "passed"
+  },
+  "issued_at": "2026-07-28T09:00:00Z",
+  "effective_at": "2026-07-28T09:05:00Z",
+  "expires_at": "2026-07-29T09:00:00Z",
+  "key_id": "bootstrap-signing-2026-q3",
+  "signature": "base64..."
+}
+```
+
+Manifest 不携带：
+
+- 数据库密码；
+- 模型供应商长期密钥；
+- 第三方系统 Refresh Token；
+- 知识和客户数据正文；
+- 其他员工 Personal Memory；
+- 未经过 Policy 的临时高权限凭据。
+
+工具访问使用短期、Purpose-bound Token，在实际调用时重新授权。
+
+### 8.14 初始化状态机
+
+```text
+UNENROLLED
+  -> IDENTITY_VERIFIED
+  -> BASELINE_RESOLVED
+  -> RUNTIME_ATTESTED
+  -> EVALUATING
+  -> ACTIVE_L0
+  -> ACTIVE_L1 / ACTIVE_L2 / ACTIVE_L3
+
+任意状态
+  -> REEVALUATION_REQUIRED
+  -> SUSPENDED
+  -> QUARANTINED
+  -> REVOKED
+```
+
+状态含义：
+
+| 状态 | 含义 |
+|---|---|
+| `UNENROLLED` | Agent 尚未绑定合法员工和设备 |
+| `IDENTITY_VERIFIED` | 员工、Agent、设备和 Tenant 已确认 |
+| `BASELINE_RESOLVED` | 已解析企业基线、角色包和授权 |
+| `RUNTIME_ATTESTED` | Runtime、Connector 和必要 capability 通过证明 |
+| `EVALUATING` | 正在运行角色、安全和协作评估 |
+| `ACTIVE_L0` | 只允许草拟，不自动发送和执行 |
+| `ACTIVE_L1–L3` | 按具体场景开放查询、协作和受控 Action |
+| `REEVALUATION_REQUIRED` | 基线、角色、权限或能力变化，需要重新评估 |
+| `SUSPENDED` | 临时停止执行，可保留可见历史 |
+| `QUARANTINED` | 检测到安全或完整性问题，仅允许诊断和恢复 |
+| `REVOKED` | 员工离职、设备吊销或代理关系终止，不可继续执行 |
+
+不存在全局默认 `ACTIVE_L4`。外部承诺和高影响 Action 继续逐次人工批准。
+
+### 8.15 员工 Agent 初始化流程
+
+```text
+1. 员工完成企业身份登录
+2. 设备生成并注册独立设备身份
+3. Agent 生成独立 Agent Identity
+4. Identity & Org Service 验证成员、岗位和状态
+5. Bootstrap Service 解析 Enterprise Baseline
+6. 按组织角色匹配 Role Capability Package
+7. Policy 计算 Workspace、项目、Purpose 和分类上限
+8. Registry 解析兼容的 Skill、Action、View 和工具版本
+9. Model Gateway 解析模型和费用政策
+10. Collaboration Gateway 解析请求、委托和自主边界
+11. Evaluation Service 生成当前角色的上岗评估
+12. Agent 上报 Runtime、Connector、设备和 capability attestation
+13. Bootstrap Service 签发仅允许沙箱和评估的短期 provisional Manifest
+14. Agent 验签并装载评估所需的最小能力引用
+15. Agent 在沙箱完成评估
+16. Evaluation Service 写入签名评估结果
+17. Bootstrap Service 按 Policy 签发 L0/L1 或更高场景能力的 active Manifest
+18. 员工确认个人偏好、通知和可代理状态
+19. Audit 记录初始化版本、来源、评估结果和激活人
+```
+
+首次初始化不能因为员工拥有高级职位就跳过评估，也不能因为其他员工同角色已经
+通过而复制其 Personal Memory 和 Access Grant。
+
+### 8.16 上岗评估与渐进自主
+
+上岗评估至少覆盖：
+
+| 评估类别 | 验证内容 |
+|---|---|
+| Identity | Agent 不能冒充员工或共享服务账号 |
+| Data | 无权字段、对象、搜索和向量结果不能出现 |
+| Semantics | 核心业务对象、Metric 和状态理解正确 |
+| Skill | 输入输出、异常、成本和引用符合 Manifest |
+| Action | 风险等级、Prepare / Commit 和人工门禁正确 |
+| Collaboration | 双身份、Purpose、Receipt、TTL 和循环限制正确 |
+| Memory | Personal、Team 和 Enterprise 范围不混淆 |
+| Model | 数据分类、模型路由、成本和降级符合 Policy |
+| Recovery | 断网、过期、吊销、回滚和人工接管可恢复 |
+
+自主等级按 Action 和场景逐项开放：
+
+```text
+草拟通过
+  -> 允许 L0 Draft
+共享事实评估通过
+  -> 允许指定场景 L1 Inform
+协作和循环控制通过
+  -> 允许指定场景 L2 Collaborate
+低风险 Action 和恢复评估通过
+  -> 允许指定场景 L3 Act
+```
+
+不能使用一次综合分数把所有工作同时提升到更高自主等级。
+
+### 8.17 重连、离线和缓存
+
+Agent 可以缓存最后一个经过验签的 Bootstrap Manifest，但必须保存：
+
+- Manifest 版本；
+- 签发和过期时间；
+- 签名 Key ID；
+- Policy Context Version；
+- 引用能力的摘要和版本；
+- 上次成功吊销同步时间；
+- 当前允许的离线行为。
+
+在线重连时：
+
+1. 先上报当前 Manifest、Runtime、Connector 和 capability；
+2. 服务端比较身份、组织、Policy、Registry 和评估版本；
+3. 未变化时续签短期 Manifest；
+4. 发生变化时返回增量解析结果或要求完整重新初始化；
+5. 紧急吊销优先于普通版本更新；
+6. 完成新 Manifest 验签后才能恢复受影响能力。
+
+Manifest 过期或无法确认吊销状态时：
+
+- 可以查看本地已有的低敏感草稿；
+- 可以继续不涉及新数据读取的个人整理；
+- 不得发起新的高风险 Action；
+- 不得形成新的外部承诺；
+- 不得扩大 Agent-to-Agent 协作；
+- 需要在线授权的数据和工具必须阻断；
+- 界面明确显示降级原因和恢复条件。
+
+Offline Private 部署在客户离线环境内运行同一 Bootstrap Service 和签名体系，不依赖
+Hermes 公有云在线续签。离线不等于取消身份、Policy、评估和吊销。
+
+### 8.18 基线变化与重新初始化
+
+以下事件触发重新解析：
+
+- 员工入职、转岗、离职或停用；
+- 团队、项目和 Workspace 成员变化；
+- 临时 Access Grant 生效、过期或撤销；
+- Enterprise Baseline 发布或回滚；
+- Role Capability Package 发布或回滚；
+- Policy、数据分类或 Metric 口径变化；
+- Skill、Action、View 或模型兼容性变化；
+- Agent Runtime 或 Connector 升级；
+- 设备吊销或安全状态变化；
+- 上岗评估失效；
+- 员工主动降低自主等级。
+
+变化处理分为：
+
+| 变化类型 | 行为 |
+|---|---|
+| 紧急安全吊销 | 立即阻断受影响能力，在线推送，离线重连前拒绝 |
+| 权限收缩 | 立即生效，不等待当前会话结束 |
+| 权限扩大 | 重新 Policy Decision，必要时人工审批和重新评估 |
+| 兼容性新增 | 灰度解析，新旧 Manifest 可并行 |
+| 语义或 Metric 变更 | 正在执行的 Work Item 固定旧版本，新任务使用新版本 |
+| Role Package 变更 | 生成差异、重新评估受影响能力 |
+| Personal Preference 变更 | 仅影响本人，不能提高企业自主上限 |
+
+已开始的 Work Item 保存其 Manifest、Task Contract、Skill、知识和 Policy 版本。
+如果继续执行会违反新安全政策，必须暂停；否则允许按固定版本完成，并在下一个
+Work Item 使用新基线。
+
+### 8.19 与 Evolution Agent 的升级关系
+
+Evolution Agent 可以根据授权的 Outcome 和 Evidence 提出：
+
+- Enterprise Baseline 变更候选；
+- Role Capability Package 变更候选；
+- 新角色评估样本；
+- 协作策略和 Task Contract 模板候选；
+- 过期 Skill、Knowledge 和 View 的停用建议；
+- 模型和费用策略的效果分析。
+
+Evolution Agent 不能：
+
+- 直接签发 Bootstrap Manifest；
+- 自动扩大员工权限；
+- 把 Personal Memory 晋升为企业基线；
+- 自行提高员工自主等级；
+- 修改身份、组织和任职事实；
+- 跳过 Owner、Policy、Evaluation 和签名发布；
+- 依据消息量或在线时长生成员工评价。
+
+正式更新链路：
+
+```text
+Work Agent Outcome / Evidence
+  -> Evolution Candidate
+  -> Baseline / Role / Capability Owner 评审
+  -> Policy 与安全影响分析
+  -> Evaluation Suite
+  -> 签名发布
+  -> 灰度 Bootstrap Resolution
+  -> 受影响 Agent 重新评估
+  -> 激活 / 暂停 / 回滚
+```
+
+### 8.20 基础脑的数据和责任边界
+
+| 对象 | 权威事实源 | Bootstrap Kernel 的职责 |
+|---|---|---|
+| 员工、组织和岗位 | Identity & Org Service | 读取，不自行修改 |
+| 项目和 Workspace 成员 | Enterprise Workspace Service | 读取并解析适用范围 |
+| 权限和 Purpose | Policy Registry / Decision Log | 请求决策，不复制管理员权限 |
+| Data / Metric / Skill / Action / View | 各 Registry | 解析兼容版本和引用 |
+| Personal Memory | 员工选择的本地或专属存储 | 只下发读取策略和引用 |
+| Team Memory | Collaboration / Knowledge Service | 按成员和 Purpose 过滤 |
+| Enterprise Asset | Knowledge Registry | 下发目录和范围，不默认下发正文 |
+| 模型选择 | Model Gateway Policy | 解析路由、费用和降级 |
+| 评估结果 | Evaluation Service | 验证当前版本是否可激活 |
+| Manifest | Bootstrap Service | 生成、签名、续签和撤销 |
+
+Bootstrap Kernel 不成为业务交易、员工记忆和知识正文的新事实源。
+
+### 8.21 失败模式
+
+| 失败 | 默认处理 |
+|---|---|
+| 员工或 Agent 身份无法验证 | 停留在 `UNENROLLED`，不加载企业能力 |
+| Role Package 无兼容版本 | 激活 L0 并提示管理员，不临时猜测角色能力 |
+| Policy Service 不可用 | 拒绝新授权和高风险行为，使用有限缓存拒绝规则 |
+| Runtime capability 不足 | 返回 `CAPABILITY_UNAVAILABLE`，提供升级或稳定旧版本 |
+| Manifest 签名错误 | 进入 `QUARANTINED`，禁止执行 |
+| Manifest 过期 | 按离线降级规则运行，阻断外部和高风险动作 |
+| 评估失败 | 保持 L0 或暂停对应能力，提供失败样本和修复建议 |
+| 基线引用资源被撤回 | 立即失效对应能力，不使用缓存正文替代 |
+| 员工离职或委托撤销 | 立即 `REVOKED`，停止 Agent 代表关系 |
+| 新旧基线结果冲突 | 暂停灰度，固定旧版本并进入人工评审 |
+| Bootstrap Service 暂时不可用 | 已签名有效 Manifest 可按策略继续，不影响事实源 |
+
+失败时不能临时把 Agent 切换成共享管理员身份，也不能为了保持“在线”而忽略过期、
+签名、评估和吊销。
 
 ## 9. 双层迭代升级循环
 
@@ -2481,6 +3010,33 @@ Registry 根据 Tenant 发布策略、Agent capability、Policy 和灰度范围�
 客户先在预生产环境生成兼容报告，再批准进入生产。离线环境不能因为无法访问
 中央服务而停止已授权的本地工作。
 
+### 16.7 Bootstrap 版本与重新初始化
+
+Bootstrap Manifest 是对多条发布轨道和当前授权事实的解析快照，不增加第五套
+Agent 代码分支。Manifest 同时记录：
+
+- Runtime 和 Connector capability；
+- Enterprise Baseline 版本；
+- Role Capability Package 版本；
+- Policy Context Version；
+- Skill、Action、View 和 Knowledge 范围；
+- Evaluation Profile 和结果；
+- 签发、过期、撤销和签名信息。
+
+版本变化遵循：
+
+1. Runtime、Connector、Capability 和 Experience 仍独立发布；
+2. Baseline 和 Role Package 使用独立语义版本；
+3. Bootstrap Service 只组合兼容版本，不重新打包 Runtime；
+4. 安全吊销和权限收缩立即触发新 Manifest 或阻断；
+5. 一般能力新增按员工、团队和 Tenant 灰度；
+6. 需要新 Runtime capability 时，旧 Agent 保留稳定能力而不是加载不兼容包；
+7. 重新初始化失败时回到上一有效 Manifest 或安全 L0，不形成半更新状态；
+8. 每次解析和激活都保留版本差异、评估结果和回滚点。
+
+Manifest 版本不能代替其引用对象的版本。审计和 Evidence 必须能够还原每次工作
+实际使用的 Baseline、Policy、Skill、Action、Knowledge、模型和 Runtime。
+
 ## 17. 现有系统迁移方法
 
 ### 17.1 四类处置
@@ -2559,7 +3115,7 @@ Registry 根据 Tenant 发布策略、Agent capability、Policy 和灰度范围�
 | Agent & Model | Intent、Planner、Context、Verifier 和 Model Gateway |
 | Workbench | Shell、Renderer、Component、View 和多端适配 |
 | Capability | Action、Skill、Workflow、Registry 和 Evaluation |
-| Governance & Security | Identity、Policy、DLP、Audit 和员工透明度 |
+| Governance & Security | Identity、Bootstrap、Policy、DLP、Attestation、Audit 和员工透明度 |
 | Platform & Delivery | API、事件、存储、可观测、SaaS 和私有化 |
 
 每个 Phase 的完成标准是“一个真实业务闭环可以安全运行”，不是七条工作流分别
@@ -2604,7 +3160,13 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - Data Classification；
 - Policy Decision API；
 - Audit Event；
-- Data、Action、View 和 Skill Schema Registry。
+- Data、Action、View 和 Skill Schema Registry；
+- Enterprise Baseline Schema；
+- Role Capability Package Schema；
+- Agent Bootstrap Service；
+- Bootstrap Manifest 签名、续签和吊销；
+- Runtime / Connector capability attestation；
+- Agent 上岗 Evaluation Profile。
 
 验收门槛：
 
@@ -2612,7 +3174,10 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - 来源 ACL 可以映射；
 - 拒绝规则优先；
 - 读写均产生审计；
-- 协议具备兼容性测试。
+- 协议具备兼容性测试；
+- 未绑定合法员工和设备的 Agent 不能加载企业能力；
+- Manifest 签名错误、过期和吊销均按安全规则处理；
+- 同角色员工不会自动共享 Personal Memory 和 Access Grant。
 
 ### 18.5 Phase 1：只读动态工作台
 
@@ -2632,7 +3197,11 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - 权限感知查询；
 - Personal View；
 - Team Template；
-- 来源引用。
+- 来源引用；
+- 员工 Work Agent 初始化和状态界面；
+- 角色能力包解析；
+- L0/L1 上岗评估；
+- 签名 Manifest 本地缓存和重连解析。
 
 验收门槛：
 
@@ -2640,7 +3209,11 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - 同一 View 可在 Web 和移动端安全渲染；
 - 无权限数据不会出现在标题、摘要、统计和向量召回中；
 - 所有回答和指标可以追溯来源；
-- 不产生正式写操作。
+- 不产生正式写操作；
+- Agent 只能加载 Manifest 允许且版本兼容的能力；
+- 无权限数据不会因为 Role Package 默认配置而被授予；
+- Manifest 过期和离线状态有明确降级；
+- 基线、角色和权限变化可以触发重新初始化。
 
 ### 18.6 Phase 2：受控 Action 与工作协同
 
@@ -2654,6 +3227,7 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - Communication Thread；
 - Collaboration Request；
 - Agent Delegation Policy；
+- Agent Bootstrap Manifest 校验；
 - Connector WSS 协作消息；
 - 服务端 Message Store、Outbox 和离线队列；
 - Receipt、TTL 和 Agent 循环控制；
@@ -2669,6 +3243,7 @@ Skill 和 View 可以比 Runtime 更快发布，但都必须经过 Sandbox 和 C
 - 跨员工协作具备结构化请求、接收和交付状态；
 - 接收方使用自己的身份读取资源；
 - 委托撤销后 Agent 不能继续代表员工工作；
+- 接收方 Agent 必须使用自己的有效 Manifest 和身份处理请求；
 - Agent 对话达到轮次、预算或冲突门槛时转人工；
 - Agent B 离线和重连后能够按游标恢复消息；
 - 消息重复投递不会产生重复业务效果；
@@ -3018,7 +3593,24 @@ R0/R1 个人 View 不进入企业委员会，避免治理成本吞噬员工自�
 安全类目标不能用平均值掩盖严重事件。跨租户越权和未经批准的高风险写入上线
 目标必须为零。
 
-### 21.4 价值核算
+### 21.4 初始化和基线健康
+
+- 合法员工 Work Agent 的 Manifest 解析成功率；
+- 从登录到 `ACTIVE_L0/L1` 的 P50、P95 时间；
+- Runtime / Connector capability attestation 通过率；
+- Role Package 与 Runtime 不兼容比例；
+- 上岗评估通过率和主要失败类别；
+- 紧急吊销对在线 Agent 的传播时间；
+- 过期 Manifest 继续执行高风险 Action 的次数；
+- 权限变化到重新初始化完成的时间；
+- 使用上一稳定 Manifest 回滚的成功率；
+- 无 Owner、无有效期或无评估的 Baseline / Role Package 数量；
+- Personal Memory 被错误装入其他员工 Manifest 的次数。
+
+签名错误、被吊销 Manifest 继续执行、跨员工 Personal Memory 泄露的上线目标均为
+零。初始化速度不能通过跳过 Policy、评估和签名获得。
+
+### 21.5 价值核算
 
 每个试点建立基线：
 
@@ -3036,7 +3628,7 @@ Monthly Value
 时间节省不能只由员工主观填写。可通过旧流程任务周期、新流程 Work Item 周期和
 抽样访谈共同验证。
 
-### 21.5 能力单元经济
+### 21.6 能力单元经济
 
 每个 Skill 记录：
 
@@ -3053,7 +3645,7 @@ Monthly Value
 低使用、高维护或持续需要大量人工修正的 Skill 应降级为团队模板或废止，不能
 因为已经开发而永久保留。
 
-### 21.6 反指标
+### 21.7 反指标
 
 禁止将以下数据作为单独绩效指标：
 
@@ -3204,20 +3796,41 @@ Monthly Value
 - 高风险流程使用确定性校验和人工门禁；
 - 记录每次运行的模型、版本和参数。
 
+### 22.11 基础脑变成中央超级 Agent
+
+风险：为了统一初始化，把企业全部知识、员工记忆、权限和决策集中到一个长期模型
+上下文，重新形成中央瓶颈、隐私风险和单点故障。
+
+控制：
+
+- Bootstrap Kernel 定义为确定性的解析和签名控制面，不负责日常任务规划；
+- Manifest 下发引用和范围，不默认下发企业知识正文；
+- Personal Memory 留在员工选择的数据边界；
+- 身份、组织、Policy、Registry 和业务事实继续由各自事实源负责；
+- Work Agent 和 Evolution Agent 保持独立身份和职责；
+- 同角色 Agent 使用共同 Role Package，但分别解析员工和项目授权；
+- Bootstrap Service 故障时，有效签名 Manifest 可以有限运行；
+- 高风险行为在 Manifest 过期或吊销状态不明时阻断；
+- Baseline、Role Package 和 Manifest 均有 Owner、版本、评估、灰度和回滚；
+- 禁止使用 Agent 消息量、个人记忆和协作网络生成隐性员工评价。
+
 ## 23. 产品决策门禁
 
 进入工程实施前必须确认：
 
 1. Hermes 定位是否正式从“远程 Agent 客户端”升级为企业 Agent 工作操作系统；
 2. Work Agent 和 Evolution Agent 是否采用同一内核、不同身份的模式；
-3. 首个试点是否采用项目交付工作台；
-4. 首批接入的文档、任务、代码和工单系统；
-5. 首批可信组件目录；
-6. 首批 Data Product 和 Metric Owner；
-7. 首批允许写入的低风险 Action；
-8. 企业能力发布审批责任人；
-9. SaaS、专属数据平面和私有化的能力差异；
-10. 客户员工制度和数据使用告知流程。
+3. Enterprise Agent Bootstrap Kernel 是否被确认是逻辑控制面而非第三个超级 Agent；
+4. 首个 Enterprise Baseline、Role Package 和 Evaluation Profile 的 Owner；
+5. Manifest 的签名、过期、吊销、离线和重新初始化策略；
+6. 首个试点是否采用项目交付工作台；
+7. 首批接入的文档、任务、代码和工单系统；
+8. 首批可信组件目录；
+9. 首批 Data Product 和 Metric Owner；
+10. 首批允许写入的低风险 Action；
+11. 企业能力发布审批责任人；
+12. SaaS、专属数据平面和私有化的能力差异；
+13. 客户员工制度和数据使用告知流程。
 
 ### 23.1 决策记录模板
 
@@ -3249,6 +3862,7 @@ Review Date
 - 数据迁移任务；
 - 前端 Renderer 和组件任务；
 - Agent Runtime 和编排任务；
+- Bootstrap Service、Baseline、Role Package、Manifest 和 Attestation 任务；
 - Policy 和安全任务；
 - 测试矩阵；
 - 环境和发布任务；
@@ -3266,7 +3880,9 @@ Review Date
 形态是：核心系统继续保存权威事实，企业把数据语义、业务动作、知识、Skill、
 权限和证据建设成共享能力，员工通过 Hermes Work Agent 按任务动态组织工作台。
 不同员工的 Work Agent 在明确委托和权限下协作，并由员工承担最终目标、承诺和
-审批责任。
+审批责任。Enterprise Agent Bootstrap Kernel 将企业基线、角色能力、员工身份、
+项目授权和个人配置解析为签名 Manifest，使员工 Agent 属于同一企业规则体系，
+但不共享个人记忆和越过各自权限。
 
 ### Chosen approach
 
@@ -3274,6 +3890,10 @@ Review Date
 并通过 Work Agent 快速工作循环和 Evolution Agent 企业能力循环形成双层
 Hermes Agent 迭代机制。页面允许动态变化，读取受权限约束，写入只能通过
 受治理 Action，企业能力必须经过评估、审批、签名、灰度和回滚。
+员工 Work Agent 由逻辑控制面的 Bootstrap Kernel 初始化。Bootstrap Kernel
+不是第三个 Agent，不承担业务规划；它通过 Enterprise Baseline、Role Capability
+Package、Identity、Delegation、Policy、Evaluation 和 Attestation 生成短期签名
+Manifest。员工 Agent 从 L0/L1 开始，在具体场景评估通过后逐步开放自主能力。
 员工与 Agent 的横向协作采用独立身份、Delegation Policy、结构化消息、Work
 Item、循环预算和人工接管，不建设无边界的 Agent 聊天网络。
 所有正式 Agent-to-Agent 消息通过部署边界内的 Collaboration Gateway 服务端
@@ -3283,8 +3903,9 @@ Agent 和 Connector 不直接连接 NATS，也不使用设备间 P2P 建立业�
 ### Open risks
 
 首批试点系统、可信组件目录、企业语义模型、Policy Engine、模型兼容矩阵和
-客户治理流程仍需在实施计划中明确。完全动态的工作方式必须通过试点数据验证，
-不能仅凭趋势判断替换核心系统。
+客户治理流程仍需在实施计划中明确。Enterprise Baseline、Role Package、
+Bootstrap 签名和上岗 Evaluation Profile 也必须通过首个试点冻结。完全动态的
+工作方式必须通过试点数据验证，不能仅凭趋势判断替换核心系统。
 
 ### Next skill
 
