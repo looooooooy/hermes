@@ -1,0 +1,1 @@
+"""Generated wire-contract resources."""

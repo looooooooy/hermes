@@ -1,0 +1,198 @@
+{
+  "contract_version": 1,
+  "message_types": [
+    {
+      "direction": "connector_to_cloud",
+      "effect": "session_negotiate",
+      "name": "connector.hello",
+      "payload_schema": "schemas/cloud/payloads/connector-hello-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "session_establish",
+      "name": "connector.welcome",
+      "payload_schema": "schemas/cloud/payloads/connector-welcome-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "bidirectional",
+      "effect": "session_maintain",
+      "name": "connector.heartbeat",
+      "payload_schema": "schemas/cloud/payloads/connector-heartbeat-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "command_persist_and_dispatch",
+      "name": "command.deliver",
+      "payload_schema": "schemas/cloud/payloads/command-deliver-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "command_delivery_receipt",
+      "name": "command.receipt",
+      "payload_schema": "schemas/cloud/payloads/command-receipt-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "command_terminal_result",
+      "name": "command.result",
+      "payload_schema": "schemas/cloud/payloads/command-result-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "owner_control_request_route",
+      "name": "control.request",
+      "payload_schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "owner_control_response_route",
+      "name": "control.response",
+      "payload_schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_session_directory_stage_or_replace",
+      "name": "session.catalog.snapshot.page",
+      "payload_schema": "schemas/cloud/payloads/session-catalog-snapshot-page-v1.schema.json",
+      "required_capability": "session.catalog.v1",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_session_directory_apply",
+      "name": "session.catalog.event",
+      "payload_schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "required_capability": "session.catalog.v1",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "catalog_business_commit_acknowledge",
+      "name": "session.catalog.ack",
+      "payload_schema": "schemas/cloud/payloads/session-catalog-ack-v1.schema.json",
+      "required_capability": "session.catalog.v1",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "catalog_full_snapshot_recovery_request",
+      "name": "session.catalog.nack",
+      "payload_schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "required_capability": "session.catalog.v1",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_projection_replace",
+      "name": "session.snapshot",
+      "payload_schema": "schemas/cloud/payloads/session-snapshot-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_projection_append",
+      "name": "session.event",
+      "payload_schema": "schemas/cloud/payloads/session-event-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_subscription_open",
+      "name": "session.observe.open",
+      "payload_schema": "schemas/cloud/payloads/session-observe-open-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_subscription_close",
+      "name": "session.observe.close",
+      "payload_schema": "schemas/cloud/payloads/session-observe-close-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_commit_acknowledge",
+      "name": "stream.ack",
+      "payload_schema": "schemas/cloud/payloads/stream-ack-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_recovery_request",
+      "name": "stream.nack",
+      "payload_schema": "schemas/cloud/payloads/stream-nack-v1.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_projection_replace_v2",
+      "name": "session.snapshot.v2",
+      "payload_schema": "schemas/cloud/payloads/session-snapshot-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "connector_to_cloud",
+      "effect": "authoritative_projection_append_v2",
+      "name": "session.event.v2",
+      "payload_schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_subscription_open_v2",
+      "name": "session.observe.open.v2",
+      "payload_schema": "schemas/cloud/payloads/session-observe-open-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_subscription_close_v2",
+      "name": "session.observe.close.v2",
+      "payload_schema": "schemas/cloud/payloads/session-observe-close-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_commit_acknowledge_v2",
+      "name": "stream.ack.v2",
+      "payload_schema": "schemas/cloud/payloads/stream-ack-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "observer_recovery_request_v2",
+      "name": "stream.nack.v2",
+      "payload_schema": "schemas/cloud/payloads/stream-nack-v2.schema.json",
+      "status": "frozen"
+    },
+    {
+      "direction": "bidirectional",
+      "effect": "none",
+      "name": "file.transfer",
+      "payload_schema": null,
+      "status": "reserved"
+    },
+    {
+      "direction": "bidirectional",
+      "effect": "none",
+      "name": "a2a.message",
+      "payload_schema": null,
+      "status": "reserved"
+    },
+    {
+      "direction": "cloud_to_connector",
+      "effect": "none",
+      "name": "view.card.invalidate",
+      "payload_schema": null,
+      "status": "reserved"
+    }
+  ]
+}

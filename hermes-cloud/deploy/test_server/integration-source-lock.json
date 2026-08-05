@@ -1,0 +1,946 @@
+{
+  "schema_version": 2,
+  "algorithm": "sha256-declared-integration-snapshot-v2",
+  "files": [
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/__init__.py",
+      "sha256": "f5178b06117dd11478a394dd3e32c0dfb410809818137a8f9ca45c5fca414799"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/__init__.py",
+      "sha256": "a54c1e0270236d5d597794cf9c645493ff0a751c91995abf844db0d4777f4963"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/__init__.py",
+      "sha256": "4745927df8d577d38f60402b18e81cb64cfab8d537524a40ab4c596b1b64fc48"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/extension.py",
+      "sha256": "205734158f6b75b8760b0c948ba9fb9d047ebb72e8fc6fd033c136a67cc37023"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/lifecycle.py",
+      "sha256": "433de717b43680d69b6eeb1a902c7b194330e97a3b93c3bf1c330975fb0d7a80"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/observer_v2.py",
+      "sha256": "37dc0a3387fe583f8bf28c0b8572236139ec7d999da40d2a1b182af75427e08c"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/owner_actions.py",
+      "sha256": "80bfe066fb9b50229e9336fcde4f18531116b7d77a066b9143276f357e3a44b8"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/spi_v1.py",
+      "sha256": "2941de818b8bcb3f22d38a79c5d39ddddbc49ad24d7cd28c55927dc92251b9b1"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/__init__.py",
+      "sha256": "3f53258f741fcf584c64982c6dc677547919eb3b882d544663e116d79196f895"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/control_relay.py",
+      "sha256": "91c4bd7922d19bc1e70dc330e3d2d91655eab468ed607911acfb723b58100483"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/control_v1.py",
+      "sha256": "ff1bdcdd06b58914bb93dfd51a2da2b2cbb5852222bf3f040495891d7e4971c5"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/frame_codec.py",
+      "sha256": "2cb25777126afb0fc2c427aa4f2e639b18aee261b3f38bae46ac91f3cf82fb6c"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/handshake_v1.py",
+      "sha256": "5fd20c1625c8ef85bfa068c6d3b260c75f2b276bc51a7d216e96695817151848"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/observer_relay.py",
+      "sha256": "97410be3fc7174c222475f87ae88c89beef87d87a01fdbd039384770d32e4a4e"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/observer_sequence.py",
+      "sha256": "6a2b56686ad01472be29f2b1aa8ce96572c52643c31b94298ec90226f63e9342"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/profile.py",
+      "sha256": "32298178607da54f227aa86c27578ea17619b817207ee909b79e08f80fd4ce9e"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/local_protocol/session_catalog_v1.py",
+      "sha256": "84ed973e85b085b7bd9d341c3878a22b315cd96da34ec574a7922aa89031d0a2"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/__init__.py",
+      "sha256": "8eb58df1798f3c325de2d602d9cbf9d85472b407f0622082bae27a7fda321dd7"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/capabilities.py",
+      "sha256": "e937c22fbe21509e7fc26c8736594b37a2760957d69fe588d56536a4e94133a0"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/linux/__init__.py",
+      "sha256": "6f98a26ef6caee94354ec9f4e495e452c0f498ebfa8f0c48b63ff29e6fc38d48"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/linux/availability.py",
+      "sha256": "c26eafcfd96df2003b3c8bd9df48f17bbc0278b725481eec17421094a34f19a4"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/linux/local_gateway_transport.py",
+      "sha256": "92fa2772ef116d3d6a158e364ca07f42f3b8d63c56dac1d2647c553e4c617337"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/linux/local_relay.py",
+      "sha256": "925f83443c30c2d2b0c2288b0c9c0a3f7668b88d7d4d7512f3ebe2df2e4ebb69"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/__init__.py",
+      "sha256": "7fc16720f91140ed0ae024fcffc210e71cf51f983f19f16de77373e86d18c05b"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/availability.py",
+      "sha256": "c06e30a1e739fdd713c4b8381ffdde710641ae19e5fcd715d51db231962a5682"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/control_relay.py",
+      "sha256": "c1b2977e4ee1c5833027f427ccd18b72dddee9aea99dcacdb49934c894d67abc"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/host_endpoint_opener.py",
+      "sha256": "24b3a7c2aff876eecb1ce9530a2021643934d45a92d29665f0e52be9fa6cc998"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/local_gateway_paths.py",
+      "sha256": "9c9b90007beb5d5a845fbbd642d866e586c1723c0dc4fd79ff6de8cb133b6d54"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/local_gateway_transport.py",
+      "sha256": "ef79c8480ff6976006983b2c7168453e9122a96a8c71e04e850ffca9997d2442"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/local_relay.py",
+      "sha256": "05be8459b20c62bb752a6289af2de7480db739c1aae4bac6f3a2e6031dda6710"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/local_trust.py",
+      "sha256": "9229052c8e6749a20d859ceded28a21d27c695705274f4d32e7f45f7a238719a"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/observer_relay.py",
+      "sha256": "24544dd277d30449bcd30f9ae36fff6152bf0f29e6f101981215d224e6dd5655"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/relay_server_lifecycle.py",
+      "sha256": "4a5f0ce62a11be26e4379fdb28b0eb6b68d10d9a6377dd420447f7fe37495f97"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/runtime_descriptor_v2.py",
+      "sha256": "6be0358df51dc627ce0a5b50c444998deae86c508bd3a04e965c0ba8c2715b57"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/__init__.py",
+      "sha256": "a360eb3298ddda13d189bbff59167b5471983cc7df6fc39f2b0f641f78155313"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/availability.py",
+      "sha256": "b48914a97f2307132f022309c2f3ac4d22259abe95ea636a9ebd7cc9c6ee5e50"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_gateway_transport.py",
+      "sha256": "bfbc886c6ffef32338ed374f50d3118ffdfb4e719999641ed180ee0205e2e3d5"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_relay.py",
+      "sha256": "17b06e8bc11d6c42949887a7d83b1c706c634fbe6aa59f302d0af5fc1f8bb5f9"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/__init__.py",
+      "sha256": "dd955f17f169179e78cbb07ab99df14d8e82ab6ba4014831bc45bb58d27944e2"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/control_commands.py",
+      "sha256": "ebd6e2559b9b29bc7ea59316cf09ea1f13e0ec2069599431b6b0d6fbcfce2756"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/control_dispatcher.py",
+      "sha256": "ec19348b84bd82420277ff8a3a70efc355bf338787f4fcb0e949e1c83de7f9ce"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/lifecycle.py",
+      "sha256": "89630863300fcf07541f66237109c6e814aad5e517dd6bf774b04a8338f22c49"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/__init__.py",
+      "sha256": "abb46a102f3a13612e550c07d3180248489c47601e17bdd3e29107ffe5cf57b1"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py",
+      "sha256": "ee9733c025bc54ed89fc8d199a3d01607f96a70f56bb404fa4db11c48e0ac36e"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/registration.py",
+      "sha256": "fbf7be9a442081baea5be6987766744a8ed5d484b55f5008513f4a0a725f1885"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/runtime.py",
+      "sha256": "472078526baa10756369b271f3652bd07f7ec56974a665a85b963b250ca2dd3e"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/__init__.py",
+      "sha256": "7569c836361bd7f0bd9fcb44317fd4470ea3fa15e6834f2bb441b4d54c60f17d"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/__init__.py",
+      "sha256": "8e9c53c5a15d817fa594f860c623e28fca48d4e77ef1ace15fd44c99586d8202"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/mobile-control-v1.json",
+      "sha256": "63932834f935a0e29c2c44357f2f47aa62921c9cca1886503d8df60ec011f139"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/observer-output-parity-v2.json",
+      "sha256": "f20350c48a978a96c9aad7b7522c645c3f17fa7ac831c97acf3d733dc8a35df7"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/schemas/cloud/payloads/session-event-v2.schema.json",
+      "sha256": "c7821bbb25f1db86779c568a0295977329fcf89009920775c086208678060e18"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/schemas/cloud/payloads/session-snapshot-v2.schema.json",
+      "sha256": "46a6f8f49a78ddaf4027d04224ed60a696141bb747229ee41477587723e442ee"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/schemas/local/session-catalog-rpc-v1.schema.json",
+      "sha256": "9381c73c6c145a8a12c9c7c1eb25c90f62bb5147b90a629ec5a7b23faf300309"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/schemas/session-catalog-entry-v1.schema.json",
+      "sha256": "32f12e999d4985c33f63cffc03a5eca1f2977c1d5114fbd5988c5a47fd4416f9"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/contracts/generated/session-catalog-v1.json",
+      "sha256": "94dacbfcf2c53aeb1348746f90ee36b691d67a525b04a4c1a640221c7c6a7491"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/diagnostics.py",
+      "sha256": "dc300ca86099bc9cd1cfec4621b704c01410d9e20198c418cd89b5e72f5d9312"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/domain/__init__.py",
+      "sha256": "2467957ce89466986ac4196524bdc179796c09a26a29f92abe4db4c0bcfcc941"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/domain/control_lease.py",
+      "sha256": "0ebe39662f06c6a2ba53f5e28a825814924a8bce8c2bd4a0a9eb9cc1974baa14"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/domain/lifecycle.py",
+      "sha256": "76b25cc211f8a220485b9ee2a26ed314f039e467ef6ae0c6723cd3cd5f9df106"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/host_compatibility.py",
+      "sha256": "fab0dac7b7259f7e0e87ebecdbda88411989c36e2d4926d078e63a33c1cf32ce"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/ports/__init__.py",
+      "sha256": "2686bc8851497895a92608eeb2ebdad34803a6197c7b4faf3cd4baa2a23f72da"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/ports/lifecycle.py",
+      "sha256": "e3bf69e0bee74e2826d2f8d8c2dc2fbccdc007a93ca010636351ddde8a9763a6"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/ports/local_relay.py",
+      "sha256": "0490b00cb5bc3be8b003e6a72be0f8e84ca404f0d9424617488d8e248f27a745"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/__init__.py",
+      "sha256": "ad2e5d0b1f7e93d250c32c7e4035881a260d7cc99b31234669b9f936b237454c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/__init__.py",
+      "sha256": "832f9092e34228d3ff2b58bef3a570264f84580c85f08dd80a09843b1cc1ffc9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/cloud/__init__.py",
+      "sha256": "593cdf47e182fc284fc4108b0a7c78f87dd339e07f7686fd960327b14244be55"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/cloud/codec.py",
+      "sha256": "104d7d071a9a92b185ff45f9ad37bf9b500720aed38fca3096972fa3c4f50728"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/cloud/pairing_http.py",
+      "sha256": "9f1f83d919eeda429fb29bdb8840c78cd99340ffaddab563cb4a956e8a7da50d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/cloud/websocket_transport.py",
+      "sha256": "03d1281b98f94315c59e798e6802af6cd50119a24ea6adb29c9c381e9636aba7"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/contract_codec.py",
+      "sha256": "1478fe6cd669621746ad8d0f38b0b3a2455d7dfd2bc8ec89db5fa294b425affe"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/__init__.py",
+      "sha256": "03826f8cbefdb070f664ae20f38427514f122203b3f93c7c8f2b688e25691612"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/__init__.py",
+      "sha256": "e78d8e81fecf03996e8be45bb4cf1085d0bf5318e9746ad5262fc017554dbde8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/__init__.py",
+      "sha256": "b098bad7387116a90074ae652db6e24de24b2a79bf2208e451893eacc2946d0b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/cloud_session_v2.py",
+      "sha256": "e1d87a43a8b969742ecc352b2ca87ef3f563ae328c3d53dd0673e60eb1e4435b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/control_command_v3.py",
+      "sha256": "c29532800690cca8650ca3a70f6ffcc5c538015cd806c484ff8fd829b05d7ec9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/durable_transport_v6.py",
+      "sha256": "5cc93aae5086f871451cf573d3fbeae52855de58a25eeb3cb4a8f3c95b3b2983"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/observer_attempt_v5.py",
+      "sha256": "de67de54245207c0fda383651a9d7608a89b2bdb003b404d872f5405f5d7ec57"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/observer_outbox_v4.py",
+      "sha256": "667583aedafc58a5c71633eabd9dbed9eafab4c1fbb62e408c98fb30580e580e"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/observer_v2_v7.py",
+      "sha256": "5f717387e91ee536f0d4f52355a3e29c244fc7a8e664eb247bfda69d0ad2e8f2"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/session_catalog_ack_receipt_v9.py",
+      "sha256": "931980e7c179cd5feb8e5994e5c240cd3d0213870c359737d4da8b9f2d94ade8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/migrations/session_catalog_v8.py",
+      "sha256": "c62f384afb7078b32955bba4b1d76b1a97a8b4d010f2a61d91dd88fec324cc8a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/__init__.py",
+      "sha256": "001b44f8141c1a183b0f774317a91f72926f6f74d97b79f7d6b69194a1c21d3d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/cloud_session.py",
+      "sha256": "5d66e30e21676333cfb20cf9ee907dca98a80c36ce462380599a154eaccf549f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/control_command.py",
+      "sha256": "b6c52b0c06e951ed667f039a8a523c3c69366856c193a9a1b4e65f5c71882eea"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/observer_outbox.py",
+      "sha256": "9642af284c06571f4dfe36b9f49045f1df409279e1bc3294d0128859fd57bd09"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/owner_control.py",
+      "sha256": "d68233a63b746f1dd4fa9ce4d52a0ae107a969a459bcfdc6c4740a8339c31989"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/session_catalog_ack_receipt.py",
+      "sha256": "323c20e03d601530f848f059aca9a6ce6b76eaf9293b49f3606cb118c337523d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/session_catalog_outbox.py",
+      "sha256": "429b02d2bd8d3c6a8c63259a4c2341d833b783556e86d0ffeb145758340d9b1f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/models/transport_journal.py",
+      "sha256": "9a1e77490f421c270f9206abd79aa99890c5c506612715534a84f18eb7beaec0"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/__init__.py",
+      "sha256": "31fe56d4d0890fbc318caa7a9442a37bcab027315a7aa72690a1b3ea7ff29162"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/cloud_session.py",
+      "sha256": "6f1b64e11126f7857ce4feb657d9f7dc3271fc9f9ab262802ed7e5623a26de1c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/control_command.py",
+      "sha256": "3642cac76754f9870e3530bc05228adb79ef204cf17232047ef8c4cf8be68bce"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/observer_outbox.py",
+      "sha256": "623666f499c420862470f2a5eeb2c0f12c33d068100ac09f30a1e48eecfcf636"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/owner_control.py",
+      "sha256": "b85df345f2b7c006dccb2a5fd476b55b5fa5ffad2b5e23a017de61a94777a2df"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/session_catalog_outbox.py",
+      "sha256": "af16f48c0992bcc57f79415161bc903300291613f6cce9b3a8ce27c5f11d2e97"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/persistence/sqlite/repositories/transport_journal.py",
+      "sha256": "9464350e0019f7cd97a8eb6464ab87e87ca46d7be69b8c659955dd8bf0c958ae"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/__init__.py",
+      "sha256": "56b6bda5685ece1b89cc16a7e6681f9b727b636e58bfbc9a701669645564f318"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/availability.py",
+      "sha256": "0149fc65113dd210cb3ca8c2967192f4746c400545e8419735d22ef887b355b7"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/linux/__init__.py",
+      "sha256": "8d2a1926fa11542598483da1b15f881ebd1f85c00128f669c6f327e0b868a67f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/linux/availability.py",
+      "sha256": "950692937510873246888d48c5b950919ca83fe6ba18f666d757bce5b17b77ff"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/__init__.py",
+      "sha256": "cad96ae830c42c87df797dc4b6b9efeafdb44d627ff84ad7eaeeaf1728e35c01"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/agent_discovery.py",
+      "sha256": "b4e36c65a3a8bbfcbdcbddc972a9e2cb8b3b6e1709cf6044196767347756d07c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/availability.py",
+      "sha256": "cdd27ccddb26b3ada57f5eb55065d967e7ed3fbfcadef42cad03a8013ec3f327"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/credentials.py",
+      "sha256": "ae3102ee393236ed89275883d2b29a93ee65c934e6913df34bdc818c4387bb98"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/device_identity.py",
+      "sha256": "c62eb5c2b1a4138dcd8bc3930bdb92e0b9cb24c10e237efef3b371c863fbf669"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/foundation_projection.py",
+      "sha256": "6d4ba177bfc5b292f511d0c9b0471dcff0aafdc027f7dc2e8958a9ec10be415d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_identity.py",
+      "sha256": "513cc6f8eb8daba582fa03ab63e9bc996e7264ff4263c0b2dbd9fd63eaadcc15"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_lock.py",
+      "sha256": "875cf6eac49069ae7af8b370a18cf69e6bc5f423c4d39f29a3c39bbf566c7219"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/keychain.py",
+      "sha256": "d43216db10d4ebac4edd96caf5dd5a4e452cedcb76156cf63d96f44967b6557b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/keychain_broker.py",
+      "sha256": "97ad1ab3c3fa6fd883884fc8f0bfcc390e8c65ac516d9df9cedd17c7d4c1742b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/keychain_direct.py",
+      "sha256": "d1efc0267da87706926d6debb844c2b6b6bf88ec60353b066c78469b7d479036"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/keychain_errors.py",
+      "sha256": "f5cb88f9e155e5c59ec0284e82d545d9515610996fb1407c1f86f1e7f23ac727"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/keychain_helper.py",
+      "sha256": "f950b1b5713328c4479e780209c4c9f14ba717c0ac49a8f9b0bd1c15b148a3e8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/local_gateway_transport.py",
+      "sha256": "ff3c2f760974407ee2470887e361bc8392bae7aa5361a510fb412b6469339c15"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/local_runtime_preflight.py",
+      "sha256": "1f51f200c088b67de7a2b2573d5f2d3550e776cc5d980ab57ea4d5c63254a4a1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/observer_client.py",
+      "sha256": "1616c12312191271a77d22ca15e03a418fe2cd30fd1aa666b18f6c158b3dfaad"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/observer_discovery.py",
+      "sha256": "b50a360b6a3f25cd0bf3bd37331aa8b4f2c566ace767ff6c4f261745ea9ac9e3"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_command_lock.py",
+      "sha256": "f70a7011fc9f9d5fb9c623a79c64a51736ccd3508451e08627f742b4deef7801"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py",
+      "sha256": "0b4dd9ad28885b37a9ede89bcae0d6fb1f360587d76d043b7370c15aad082dc5"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/plugin_control_relay.py",
+      "sha256": "f939d7d8e5539f300ca545eedbedcb69e1e536cb92016e6649531d63e6849a9d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/process_identity.py",
+      "sha256": "2ea7ccdb1b076fdd874cad881cde2bd26763a6852e1f45d0a97edea61220b289"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/security_framework.py",
+      "sha256": "ed8f3d551701de962a30f59e436570adacbb5117368bbbd59b8b352d337de4b1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/session_catalog_client.py",
+      "sha256": "bd0decc378d2039d15d5caf2318fd7cbbcc0766c82585966dbbd36fb3a1d8884"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/status_receipt.py",
+      "sha256": "4f3370a7ccc33c818e40d15597d0971638d902035aff93aae796d3f6ea6f98c1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/__init__.py",
+      "sha256": "b5bc7baf46ddecd9c0dcdf8c4ee68f2c4787364e336263e34463a1fb2345fd54"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py",
+      "sha256": "288ef6cda5ad20b5fa5063ac0136bd773381e876a32454194cec984dfde666c2"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/posix_agent_discovery.py",
+      "sha256": "706fd229eac68eb4e3ae8b362675f73d774a44bc1626e0c7948a0ba0a6ce2471"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/posix_local_gateway_transport.py",
+      "sha256": "74a46760746d4614d59520dc944945ea744c85b835bddf99afeb358f6e5e362d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/posix_lock.py",
+      "sha256": "08dea32bba628ef61ac42cdd36a25439ba59ed5ad3d9758d9c4a3a109d39ae4a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/sqlite_migrations.py",
+      "sha256": "810734b85c534e7a0f04efc363cd652c1404710742fcb6d62a323e95bcf16089"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/sqlite_models.py",
+      "sha256": "ce225054d69c2944f895b3fb9c9c9fbcae426098cb9adf486a1660b57442a0db"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/sqlite_policy.py",
+      "sha256": "afad6a3a55e87e9f4fb9fcd05db72fffb2374944138c1516e6d5400c9bf0c764"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/sqlite_storage.py",
+      "sha256": "634caf596c48dba6306ba842ed59d364f1c5bdb67a83122665a68689e7680e05"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/__init__.py",
+      "sha256": "c4a09293321b811b30ced82b214100797277fd22e9ab2262fa37a0c7f06c95b9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/capability_negotiation.py",
+      "sha256": "355cc7131a280e4ef55febe4142df974edb983ec3afd11153bd9f19ec5a25687"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/cloud_wss_client.py",
+      "sha256": "c92a1ffd813cb3b3ddf6bcd905f3f6654278fdba4b5cf0c7920f425c3a52ce8b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/command_lane.py",
+      "sha256": "0c475c7527c4d1756c6f903f7971b19b2daaf52e02913e843f88c18c1249ec76"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/device_bound_token_provider.py",
+      "sha256": "11e593c16c3a9c653f26d23f483d1e379941e3d663f6c8ca9825084a250f76e2"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/file_credential_migration.py",
+      "sha256": "5e3e3b3ae90b29faa7a0bee484c8d353d3f4e55f64827e05d57f43dc13710865"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/local_gateway_client.py",
+      "sha256": "0476ccb4051583757e0b22f35ef04007bca70a647633569d4b397f4bdf118a44"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/observer_intent_lane.py",
+      "sha256": "0c639b56b782f582bcbe88a2a0172473c1de81ad2d8a3e49c4f58679f6e681c5"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/observer_outbound_lane.py",
+      "sha256": "9ae16d3bc4306c661b247c752ee14395ca75ecd4c09424652ebcd080716589fc"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/observer_projection_v2.py",
+      "sha256": "cd1b7a0763ee3b8d8e95182c814d41d885ae4782d5f130819aa9ee1db3194381"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/observer_sequence.py",
+      "sha256": "2dc9c1d40ff8109cf35072db841060ffd12eff5378cd51cf805b994a8cfd7971"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/owner_control_lane.py",
+      "sha256": "db670d0fcf95ea5a6f881323e5c2d98ca88274abd85a81c0664ddc81d1dc3d3b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/pairing_coordinator.py",
+      "sha256": "04437b50999de47493162ca829edd8d1198b086185fb5932a331338352da2512"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/readiness_status.py",
+      "sha256": "23ccb1741d5871778329a8c21242b2f004a6e72a496e01f3979b38d2b1ff0545"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/service_runner.py",
+      "sha256": "46bbf862bb6a6f9148d5c7cd9da820eaf4fc2dadbe947a47b1291a39ff51d05e"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/session_catalog_outbound_lane.py",
+      "sha256": "e9caf02f641483451d31acecabec15d4492177ec910ce559fcca332e738058d5"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/session_catalog_sync.py",
+      "sha256": "4260209234cf96f9637a3345053f7edfc3e4cfd85e7ac8b63b1a68158332cc22"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/application/supervisor.py",
+      "sha256": "23097b019528e26b84533a8b2c9f56c696a9265c69a5af320495226f24de9ffc"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/__init__.py",
+      "sha256": "5ced639dd093d4b9335b79964104c8d0bde32db40ff8c1a29c96045424cbc852"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/cloud.py",
+      "sha256": "ff6a59933d33fc99f5334562d4c77e7bcf94f8b0499b15ec73ceb3e6340ba5eb"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/config.py",
+      "sha256": "87ba0f1a45983538aa068a1e43c7da4f8ad7e70dd4789f0f67ad043647368636"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/macos.py",
+      "sha256": "e5b0530f11a0aac1c6273e3b9c6d4ccd497b537df27e6d692ee514453c3abfd8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/platform.py",
+      "sha256": "6c1928c5dd1d09f986b722a49ff71166bf0ad61647b058251f69094477691047"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/runtime.py",
+      "sha256": "a63f3932fb467d45b1bf72cbc136bcaef995133c8b9a62cc0b99964d9b1e364d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/safe_logging.py",
+      "sha256": "9d77eec7b112cf6094e7bf6e262ed5770da2d42579e5cf1ffdfc049588269dd9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/settings.py",
+      "sha256": "1c8e4fea5cc13305ef053a2c96849de32140078989d6b9f9539345d533135ed7"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/cli.py",
+      "sha256": "8e21666acf1c093bfdb03b14169cbc77ed631a38f6903be1c187a8baf1088597"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/__init__.py",
+      "sha256": "3eb7c3292965454a56aa043b739514272b3706e90c54101487c1e307e3d90958"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/__init__.py",
+      "sha256": "6f9d4de846d7b276dc644561c438c8a545cfd6511052a21e39f08f9a72ebec11"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/canonical-payload-digest-v1.json",
+      "sha256": "0f91d009929e0216e7bc84022fc47d4e4754bf39df683d5a17d0fca36f388800"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/message-types-v1.json",
+      "sha256": "cc0cf47d27e4c106fbb2e89b2c77e90c8edd709a687db1399dc8324bb89b8a22"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/observer-output-parity-v2.json",
+      "sha256": "f20350c48a978a96c9aad7b7522c645c3f17fa7ac831c97acf3d733dc8a35df7"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/connector-envelope-v1.schema.json",
+      "sha256": "5d227d6e8d0faf974591c471a10f8b6dfa8f318ca8efe989709df47584580a4c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/command-deliver-v1.schema.json",
+      "sha256": "9dd61b298f466299b21769627a5efb4dc56cb781db2b1b05b3dd0ee507cf7115"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/command-receipt-v1.schema.json",
+      "sha256": "318a6bc88d342b397907fa996cc528d76255ae10f9428a147b2b80c269d84b85"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/command-result-v1.schema.json",
+      "sha256": "bf9591be774aab61d2d278cefb85dfed9cfc0caa956e977ef11a2df5c382de1a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/control-request-v1.schema.json",
+      "sha256": "34b47b4295a9385247423cdc41a1bf4402aaf44d781ee3fab086fdd2b530992a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/control-response-v1.schema.json",
+      "sha256": "287a57d9fffe132aec6e35fec0f4269ac25d7c97686a69d541df74ca840e5755"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-catalog-ack-v1.schema.json",
+      "sha256": "37e49b55e532119e76394bf5b969d26086ef1b809edc1959511da6ba0520b970"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "sha256": "934bb0d28cf1866ce3dadc880e560878ef55c836c02c7e6e5c9337634d7e8967"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "sha256": "8bab7aa1137c8a3001517841aa31a87d57b0b122e2971a0640ca819305f57b0b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-catalog-snapshot-page-v1.schema.json",
+      "sha256": "20bb1bf9d9824f9da04960fec482d17c0ff6fc548d818c822f1cae6c70fe84fd"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-event-v1.schema.json",
+      "sha256": "b091aec8fca44f81070faafe84907a4e1b9d9a92a9f2390788261495f9a792a5"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-event-v2.schema.json",
+      "sha256": "c7821bbb25f1db86779c568a0295977329fcf89009920775c086208678060e18"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-observe-close-v1.schema.json",
+      "sha256": "754cb4985535c14204da39d12c804db51a67e26c12a26d5eab9e1e6c76b1ead2"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-observe-close-v2.schema.json",
+      "sha256": "133c32c6f60c8b41bff2b656b40d253aac7e447b34de1490e2e38fbef4b130d6"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-observe-open-v1.schema.json",
+      "sha256": "698af204e281957993b7f5262024b95ad24714f0ec5c6b5a3cb0c2530b94596f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-observe-open-v2.schema.json",
+      "sha256": "28a80ed6b377acef907b4c3fcf806457341271162341adfaaa5677cc8162af36"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-snapshot-v1.schema.json",
+      "sha256": "2225791de9f2fb5c3f9e4344f088ff5c7e2819dc26154133dd5f677c60e3d2ea"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/session-snapshot-v2.schema.json",
+      "sha256": "46a6f8f49a78ddaf4027d04224ed60a696141bb747229ee41477587723e442ee"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/stream-ack-v1.schema.json",
+      "sha256": "9eedbe841b9fbf29a7bce4e5dd9dfae62bbeb6c3a1b69adf565b4a10b851ddfd"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/stream-ack-v2.schema.json",
+      "sha256": "84f3ad78acb23fd9958ad246e328051f037ee2ae7a461de478f6e9f38272e315"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/stream-nack-v1.schema.json",
+      "sha256": "4b99aa3e6eb7630bc75230f9231cf7da4a14dafdaad2d55148c902c7a29b3e1b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/cloud/payloads/stream-nack-v2.schema.json",
+      "sha256": "b88a1453f633145511b551b9b44ea2292b66551f00a20a9d5f1198b07856003e"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/local/session-catalog-rpc-v1.schema.json",
+      "sha256": "9381c73c6c145a8a12c9c7c1eb25c90f62bb5147b90a629ec5a7b23faf300309"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/schemas/session-catalog-entry-v1.schema.json",
+      "sha256": "32f12e999d4985c33f63cffc03a5eca1f2977c1d5114fbd5988c5a47fd4416f9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/session-catalog-v1.json",
+      "sha256": "94dacbfcf2c53aeb1348746f90ee36b691d67a525b04a4c1a640221c7c6a7491"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/generated/sources/mobile-control-v1.json",
+      "sha256": "63932834f935a0e29c2c44357f2f47aa62921c9cca1886503d8df60ec011f139"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/mobile_control.py",
+      "sha256": "d3ddbbfd9d7e56da9a8fcab4d1565264249f53e0eee37e7759ce079014ffe26a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/contracts/observer_v2.py",
+      "sha256": "98d7097c593a7dadbc6393a804b0736cdbf6f3cc5cd0119fdc7584bdfdd777bf"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/__init__.py",
+      "sha256": "b4f7636e2da5a60bd69b23e9411d66338011966968b0687ba5564c23c2dc7c50"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/canonical_json.py",
+      "sha256": "72b758cd31bab33a0a4f67a96034fc61c0674062c26b3a3cb34630457040aa70"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/cloud_protocol.py",
+      "sha256": "7eaebcca1083b5071571e9d6e6cb14cf8a1fd462456ada07ef188abee92efe53"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/cloud_session.py",
+      "sha256": "8eb8adb66128cc16d689388a665762a4d5984e521722ce60f851cb11699bcd21"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/contract_messages.py",
+      "sha256": "650fcf0cc55a34c49bb15600af3b96d33c59f17380ea54cafb3fcb32cdd725af"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/control_command.py",
+      "sha256": "410f8034a1aba64989696f953edba541a71865386ec737dce7c52ca6f54ab0c1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/device_auth.py",
+      "sha256": "202efce122753ac266d887c2b151329c1ad1e19c11e052eb4d27d017b408cced"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/health.py",
+      "sha256": "f64e09abe76b2090459a8cc131eca1a0ffc4ae5a28af032e448326c3d576de41"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/identifiers.py",
+      "sha256": "470e04418c96f2897347d59e14949cf4d0dfad3ee6a5e36c48e41905da3f0071"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/local_gateway.py",
+      "sha256": "c5e494841477a15bd23d50d4b9dfcd546fee5efc5034574fadc2a357274b724d"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/observer.py",
+      "sha256": "8a8846c1bf95fc5013be2480a94dcc99943c9864e91e16b6bc2ed51c516c498c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/owner_control.py",
+      "sha256": "1503755248f53a92b4a6a2b8e50eb20e088de7469d8b8eb0e218be8317179cbd"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/pairing.py",
+      "sha256": "862bb7eee5ba3d8fab7ed43f4167fce0865366b9c27761c7dd923111fbad7d38"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/readiness_status.py",
+      "sha256": "9d290c2702f06c3246dbcf1d7b3bb760a854343b4bc4275fac06a3af4a78c8dc"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/session_catalog.py",
+      "sha256": "1a5bb688859eec6e0ccbf0ecaaf12e3c4fe80504f5945f0a40a87916c2fae675"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/state.py",
+      "sha256": "04d175e9b2c120a90ec061ad6c1d90ed952cf3744266072b55cdc10c04c8cda6"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/domain/storage.py",
+      "sha256": "250ef54fd2ac099dac06ad948ac7483184a9754333a6d1ec2655c5547f031428"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/__init__.py",
+      "sha256": "7060abc4fb5fcc81fdb01e22a25ba2e270bfd2755e03292f88122f8cca5e8c2e"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/cloud.py",
+      "sha256": "62e31af0d80c231242296fc538c97d1ae188df6143878d5f0a19baa9f9a7229f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/component.py",
+      "sha256": "1fe47b5997887b72dc734adf65ad2c29519cde014affa74f43e6feb675f40827"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/configuration.py",
+      "sha256": "3208b68a40dbf8518c696a99da44cba03e267faab4743a0c7be387794c0b9c19"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/control_command.py",
+      "sha256": "6f1cc2f7ed6d1639e57f4fdab5674489ae7f24eb7f306750a7a9506f6374391c"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/device_identity.py",
+      "sha256": "954116993ff6659f4b5552cb5ef04f0326128f7de9443525432f0b7aaffef2bd"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/instance_lock.py",
+      "sha256": "309c74e09f71eb9600abe2003899e9fbe3848b034ebd9da8fd9dc5c4a618b957"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/local_gateway.py",
+      "sha256": "322590a0db165ab6f4457ee2563b91d3695f3c92c294a8f5939eb2d1752f20f8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/logging.py",
+      "sha256": "af68e7c4557c5f098f85b99f1a1e22928ac94c95497e43568e1be1c3d1843159"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/observer.py",
+      "sha256": "3b28f993c0411e885629501a74d0d131a8346dc8a83ba6f376ae077cab12a627"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/operation_lock.py",
+      "sha256": "60cdf6091630f8de7d952fda19431fbd99e620e33a4872603ba21bb471709b36"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/owner_control.py",
+      "sha256": "142001355b3bb57cdbef72cd1e0a7d6b742126330880846f7b20bb15f38b45e3"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/pairing.py",
+      "sha256": "fdefbc9c5a28d22aa21606c611b2a6c462a84dbd91cf1f5378f766ab3f2acf64"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/reliable_storage.py",
+      "sha256": "3910ef038a3ff5538dc1bd2aac939b38d8234916e97158f0225c1b20b67bd0aa"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/secure_storage.py",
+      "sha256": "558742c72b20e5360b47087f4fe26977aef768b7e145d9b7c93214b6224c3554"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/session_catalog.py",
+      "sha256": "644976f03de80bce9c66487bf35976b1aaa20ee1fe5fa9e2e85256726f439d11"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/ports/supervisor.py",
+      "sha256": "0aad751e839982db8d084303df8cb3fd400b065641ab2b03e860543b6358c227"
+    },
+    {
+      "path": "tests/__init__.py",
+      "sha256": "4c0cb40622cd6f21d8a960b44e1cf1f49863bf0f7bb3201c052b1e546e9aa2bd"
+    },
+    {
+      "path": "tests/e2e/control_pipeline/__init__.py",
+      "sha256": "ed5b2420a2c55404cb98a9a41d5143b9545d45b6b94440592ad68577ffacdc3a"
+    },
+    {
+      "path": "tests/e2e/control_pipeline/harness.py",
+      "sha256": "169c996bec18db4cbbfb8f935b85976fcde67f603941216cb83c08c2737bdef8"
+    },
+    {
+      "path": "tests/e2e/plugin_test_runtime.py",
+      "sha256": "768c48dfa0210621ee17f754d39bb391fdc33b22835eb01bada680c827213565"
+    },
+    {
+      "path": "tests/test_support/__init__.py",
+      "sha256": "78effdd36fac6377ebc0edc0519447e1e852d203487ac5733baca405c2d7d437"
+    },
+    {
+      "path": "tests/test_support/host_spi_v1.py",
+      "sha256": "297ca4979eca330c046489450e86d9d3d784efd294c8ec31c2c665879c4761df"
+    },
+    {
+      "path": "upstream/hermes-core-host-spi-v1/patches/0001-gateway-extension-host-spi-v1-stage1.patch",
+      "sha256": "0d5b946e809e0792305a1f0b8f234ece6054b7eb14d208c871b53a03c9bcf8aa"
+    },
+    {
+      "path": "upstream/hermes-core-host-spi-v1/upstream.lock.json",
+      "sha256": "c824876b75cccba197e4fdef360d1059085503c067549634938d3697befbad1c"
+    }
+  ]
+}

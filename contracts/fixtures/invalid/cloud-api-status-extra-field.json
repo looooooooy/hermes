@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "gateway_running": true,
+  "gateway_state": "ready",
+  "auth_required": true,
+  "auth_providers": [
+    "basic"
+  ],
+  "auth_flows": [
+    "password"
+  ],
+  "overall": "healthy",
+  "android": true
+}

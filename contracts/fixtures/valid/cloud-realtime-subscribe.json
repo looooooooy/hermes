@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "session.observe.subscribe",
+  "params": {
+    "session_key": "session-root-1",
+    "profile": "default"
+  }
+}

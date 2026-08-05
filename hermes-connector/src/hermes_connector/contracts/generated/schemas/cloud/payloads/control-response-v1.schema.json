@@ -1,0 +1,1012 @@
+{
+  "$defs": {
+    "approval_response_result": {
+      "$ref": "#/$defs/pending_response_result",
+      "properties": {
+        "kind": {
+          "const": "approval"
+        }
+      }
+    },
+    "canonical_uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "clarify_response_result": {
+      "$ref": "#/$defs/pending_response_result",
+      "properties": {
+        "kind": {
+          "const": "clarify"
+        }
+      }
+    },
+    "command_state": {
+      "enum": [
+        "accepted",
+        "queued",
+        "rejected"
+      ]
+    },
+    "command_status_result": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "client_turn_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "server_turn_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "status": {
+          "$ref": "#/$defs/command_state"
+        }
+      },
+      "required": [
+        "status",
+        "client_request_id"
+      ],
+      "type": "object"
+    },
+    "effect_unknown_error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "const": 4307
+        },
+        "reason": {
+          "const": "effect_unknown"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "code": {
+              "const": 4200
+            },
+            "reason": {
+              "const": "control_role_required"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4201
+            },
+            "reason": {
+              "const": "control_contract_unsupported"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4202
+            },
+            "reason": {
+              "const": "live_runtime_unavailable"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4203
+            },
+            "reason": {
+              "const": "controller_conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4204
+            },
+            "reason": {
+              "const": "lease_required"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4205
+            },
+            "reason": {
+              "const": "lease_expired"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4206
+            },
+            "reason": {
+              "const": "lease_mismatch"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4207
+            },
+            "reason": {
+              "const": "request_id_payload_conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4208
+            },
+            "reason": {
+              "const": "pending_request_conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4209
+            },
+            "reason": {
+              "const": "method_not_allowed"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4210
+            },
+            "reason": {
+              "const": "command_unknown"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4211
+            },
+            "reason": {
+              "const": "revision_conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4212
+            },
+            "reason": {
+              "const": "session_binding_mismatch"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4213
+            },
+            "reason": {
+              "const": "invalid_pending_response"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4214
+            },
+            "reason": {
+              "const": "owner_adapter_unavailable"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4215
+            },
+            "reason": {
+              "const": "relay_overloaded"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4306
+            },
+            "reason": {
+              "const": "deadline_exceeded_before_effect"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4307
+            },
+            "reason": {
+              "const": "effect_unknown"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "lease_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lease_result": {
+      "additionalProperties": false,
+      "properties": {
+        "control_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "controller_kind": {
+          "const": "mobile"
+        },
+        "controller_label": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expires_at_epoch_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "pending_input": {
+          "$ref": "#/$defs/pending_input"
+        }
+      },
+      "required": [
+        "lease_id",
+        "expires_at_epoch_ms",
+        "control_revision",
+        "controller_kind",
+        "controller_label",
+        "pending_input"
+      ],
+      "type": "object"
+    },
+    "operation": {
+      "enum": [
+        "control.transport.open",
+        "session.control.acquire",
+        "session.control.renew",
+        "session.control.release",
+        "session.control.status",
+        "session.command.status",
+        "prompt.submit",
+        "session.interrupt",
+        "session.steer",
+        "approval.respond",
+        "clarify.respond",
+        "control.transport.close"
+      ]
+    },
+    "pending_approval": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "items": {
+            "enum": [
+              "allow_once",
+              "allow_session",
+              "allow_always",
+              "deny"
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "command": {
+          "maxLength": 131072,
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "expires_at_epoch_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "approval"
+        },
+        "request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "title": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "kind",
+        "title",
+        "description",
+        "command",
+        "choices",
+        "expires_at_epoch_ms"
+      ],
+      "type": "object"
+    },
+    "pending_clarify": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_other": {
+          "type": "boolean"
+        },
+        "choices": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/request_identifier"
+              },
+              "label": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "expires_at_epoch_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "clarify"
+        },
+        "question": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "request_id": {
+          "$ref": "#/$defs/request_identifier"
+        }
+      },
+      "required": [
+        "request_id",
+        "kind",
+        "question",
+        "choices",
+        "allow_other",
+        "expires_at_epoch_ms"
+      ],
+      "type": "object"
+    },
+    "pending_input": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/pending_approval"
+        },
+        {
+          "$ref": "#/$defs/pending_clarify"
+        }
+      ]
+    },
+    "pending_response_result": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "control_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "approval",
+            "clarify"
+          ]
+        },
+        "request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "status": {
+          "const": "accepted"
+        }
+      },
+      "required": [
+        "status",
+        "kind",
+        "request_id",
+        "client_request_id",
+        "control_revision"
+      ],
+      "type": "object"
+    },
+    "prompt_result": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "client_turn_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "server_turn_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "status": {
+          "$ref": "#/$defs/command_state"
+        }
+      },
+      "required": [
+        "status",
+        "client_request_id",
+        "client_turn_id"
+      ],
+      "type": "object"
+    },
+    "release_result": {
+      "additionalProperties": false,
+      "properties": {
+        "control_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "released": {
+          "const": true
+        }
+      },
+      "required": [
+        "released",
+        "control_revision"
+      ],
+      "type": "object"
+    },
+    "request_identifier": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "simple_command_result": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "status": {
+          "$ref": "#/$defs/command_state"
+        }
+      },
+      "required": [
+        "status",
+        "client_request_id"
+      ],
+      "type": "object"
+    },
+    "status_result": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "controller_label": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "controller_kind": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "controller_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "controller_label": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "control_revision": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "controller_kind": {
+          "enum": [
+            "mobile",
+            "desktop",
+            "none"
+          ]
+        },
+        "controller_label": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          ]
+        },
+        "lease_expires_at_epoch_ms": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pending_input": {
+          "$ref": "#/$defs/pending_input"
+        }
+      },
+      "required": [
+        "controller_kind",
+        "controller_label",
+        "control_revision",
+        "lease_expires_at_epoch_ms",
+        "pending_input"
+      ],
+      "type": "object"
+    },
+    "transport_close_result": {
+      "additionalProperties": false,
+      "properties": {
+        "closed": {
+          "const": true
+        }
+      },
+      "required": [
+        "closed"
+      ],
+      "type": "object"
+    },
+    "transport_open_result": {
+      "additionalProperties": false,
+      "properties": {
+        "attached": {
+          "const": true
+        },
+        "connection_role": {
+          "const": "control"
+        }
+      },
+      "required": [
+        "attached",
+        "connection_role"
+      ],
+      "type": "object"
+    },
+    "utc_instant": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    }
+  },
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/control-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "required": [
+            "result"
+          ]
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "error"
+          ]
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error": {
+            "$ref": "#/$defs/effect_unknown_error"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/error"
+              },
+              {
+                "not": {
+                  "$ref": "#/$defs/effect_unknown_error"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "control.transport.open"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/transport_open_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "session.control.acquire",
+              "session.control.renew"
+            ]
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/lease_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.release"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/release_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.status"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/status_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.command.status"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/command_status_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "prompt.submit"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/prompt_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "enum": [
+              "session.interrupt",
+              "session.steer"
+            ]
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/simple_command_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "approval.respond"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/approval_response_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "clarify.respond"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/clarify_response_result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "control.transport.close"
+          },
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "#/$defs/transport_close_result"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "completed_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "control_transport_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    },
+    "operation": {
+      "$ref": "#/$defs/operation"
+    },
+    "request_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "result": {
+      "type": "object"
+    },
+    "state": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    }
+  },
+  "required": [
+    "request_id",
+    "control_transport_id",
+    "operation",
+    "state",
+    "completed_at"
+  ],
+  "title": "Hermes Owner Control Response Payload v1",
+  "type": "object"
+}

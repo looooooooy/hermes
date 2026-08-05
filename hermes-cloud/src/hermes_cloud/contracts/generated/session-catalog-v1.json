@@ -1,0 +1,92 @@
+{
+  "acknowledgement": "cloud_orm_commit_then_exact_business_ack_before_outbox_cleanup",
+  "authority": "Hermes Host SPI v1 SessionCatalog DTOs",
+  "capability": "session.catalog.v1",
+  "cloud_message_types": {
+    "ack": "session.catalog.ack",
+    "event": "session.catalog.event",
+    "nack": "session.catalog.nack",
+    "snapshot_page": "session.catalog.snapshot.page"
+  },
+  "cloud_snapshot_semantics": {
+    "late_old_generation": "reject_with_runtime_mismatch_nack",
+    "page_scope": "all_pages_same_snapshot_profile_generation_revision",
+    "session_key_uniqueness": "across_entire_snapshot",
+    "stale_writer": "reject_with_stale_writer_nack"
+  },
+  "contract_version": 1,
+  "event_buffer_maximum": 1024,
+  "event_order": "first_is_snapshot_catalog_revision_plus_one_then_contiguous",
+  "event_rules": {
+    "catalog_sequence": "exact_host_session_catalog_event_sequence",
+    "entry_scope": "entry_inherits_outer_profile_and_runtime_generation_no_duplicate_fields",
+    "remove": "delete_same_session_key_only_when_stored_authority_revision_exactly_matches_entry",
+    "upsert": "replace_same_session_key_only_at_equal_or_newer_authority_revision",
+    "without_committed_snapshot": "reject_and_require_new_full_snapshot"
+  },
+  "forbidden_payload_identity": [
+    "agent_id",
+    "tenant_id",
+    "device_id"
+  ],
+  "frame_maximum_utf8_bytes": 262144,
+  "host_cursor_scope": "local_only_never_cloud",
+  "identity_mapping": {
+    "agent_id": "cloud_resolves_from_authenticated_pairing_never_payload",
+    "profile": "host_profile",
+    "runtime_generation": "host_runtime_generation",
+    "session_key": "host_durable_session_key"
+  },
+  "local_rpc_methods": {
+    "event": "session.catalog.event",
+    "page": "session.catalog.page",
+    "reset_required": "session.catalog.reset_required",
+    "subscribe": "session.catalog.subscribe",
+    "unsubscribe": "session.catalog.unsubscribe"
+  },
+  "local_snapshot_race": {
+    "buffer_overflow": "close_subscription_and_reset_required",
+    "cursor_stale": "close_subscription_and_reset_required",
+    "event_visibility": "buffer_until_final_page_response_write_succeeds",
+    "listener_order": "register_listener_before_first_page",
+    "page_revision_change": "close_subscription_and_reset_required"
+  },
+  "local_transport": "persistent_observer_role_uds_not_local_gateway_handshake",
+  "page_size_maximum": 128,
+  "pairing_boundary": "pairing_authorizes_cloud_identity_but_never_proves_local_runtime_binding",
+  "public_projection_identity": {
+    "control_resolution": "stable_session_id_to_authenticated_agent_profile_host_session_key_before_ticket_or_command",
+    "host_session_key": "lineage_root_id_exact_host_session_key",
+    "stable_session_id": "cloud_generated_rfc4122_uuid_persisted_by_orm_for_authenticated_agent_profile_host_session_key"
+  },
+  "recovery": {
+    "cloud_reconnect": "resume_durable_pages_or_new_full_snapshot",
+    "event_gap": "discard_staging_and_require_new_full_snapshot",
+    "local_disconnect": "new_subscription_and_full_snapshot",
+    "page_gap": "discard_staging_and_require_new_full_snapshot",
+    "runtime_generation_change": "new_snapshot_id_and_full_snapshot"
+  },
+  "remove_representation": "action_remove_with_complete_host_entry",
+  "semantic_conformance": {
+    "invalid_input_result": "invalid_vector",
+    "operation_commit": "only_when_current_operation_has_no_errors",
+    "validator": "tools/session_catalog_conformance.py",
+    "vector_schema": "schemas/conformance/session-catalog-semantic-vector-v1.schema.json"
+  },
+  "snapshot_rules": {
+    "first_page_index": 0,
+    "page_order": "strictly_contiguous",
+    "replacement_scope": "authenticated_agent_plus_profile_retiring_all_older_generations",
+    "snapshot_id": "connector_generated_canonical_uuid",
+    "superseded_snapshot": "discard",
+    "visibility": "atomic_only_after_is_last_and_all_prior_pages_exist"
+  },
+  "state_machine": [
+    "disconnected",
+    "subscribing",
+    "staging_pages",
+    "snapshot_committed",
+    "live"
+  ],
+  "writer_fencing": "one_current_pairing_bound_connector_writer_per_agent_with_monotonic_fence"
+}

@@ -1,0 +1,41 @@
+{
+  "sessions": [
+    {
+      "id": "88888888-8888-4888-8888-888888888888",
+      "agent_id": "8de6a4ec-d15a-4d59-a8cc-94670bd333aa",
+      "workspace_id": null,
+      "_lineage_root_id": "durable-session-real",
+      "parent_session_id": null,
+      "title": null,
+      "preview": null,
+      "source": null,
+      "model": null,
+      "profile": "default",
+      "cwd": null,
+      "git_branch": null,
+      "started_at": null,
+      "ended_at": null,
+      "last_active": null,
+      "message_count": 0,
+      "tool_call_count": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "is_active": true,
+      "archived": false,
+      "directory_source": "host_catalog",
+      "availability": "live",
+      "runtime_generation": "runtime-20260803-01",
+      "surface": "gateway",
+      "authority_revision": 3,
+      "available_actions": [
+        "prompt.submit",
+        "session.interrupt",
+        "session.steer"
+      ],
+      "transcript_available": false
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}

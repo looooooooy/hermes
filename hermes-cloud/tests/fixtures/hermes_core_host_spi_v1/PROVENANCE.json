@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "source_scope": "hermes-core-host-spi-stage1-fixture",
+  "upstream": {
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "version": "0.19.0",
+    "commit": "14db1a99e21e5523ee61f10f5c3300a5087e8449",
+    "lock_path": "upstream/hermes-core-host-spi-v1/upstream.lock.json",
+    "lock_sha256": "c824876b75cccba197e4fdef360d1059085503c067549634938d3697befbad1c"
+  },
+  "stage1_patch": {
+    "path": "upstream/hermes-core-host-spi-v1/patches/0001-gateway-extension-host-spi-v1-stage1.patch",
+    "sha256": "0d5b946e809e0792305a1f0b8f234ece6054b7eb14d208c871b53a03c9bcf8aa"
+  },
+  "files": [
+    {
+      "path": "hermes_cli/extension_host_v1.py",
+      "extracted_from": "hermes_cli/extension_host_v1.py",
+      "sha256": "2b64ba5af6548823462a3fa189570389574c970c05910f28b585228494ea6619"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-observe-open-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "subscription_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_source": {
+      "const": "cloud_authorized_binding"
+    }
+  },
+  "required": [
+    "request_id",
+    "subscription_id",
+    "profile",
+    "session_key",
+    "target_source",
+    "requested_at"
+  ],
+  "title": "Session Observe Open v1",
+  "type": "object"
+}

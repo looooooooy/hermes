@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes Mobile · Authoritative Active Work</title>
+<style>
+  :root {
+    --stage: #121419;
+    --phone: #0a0c0f;
+    --active: #0e1115;
+    --surface: #13161b;
+    --surface-2: #171b20;
+    --line: #272c33;
+    --line-strong: #343b45;
+    --text: #f0f1f3;
+    --body: #c8cdd3;
+    --muted: #8b929d;
+    --subtle: #656d78;
+    --accent: #65d2e2;
+    --success: #73d7a1;
+    --warning: #e7b56d;
+    --danger: #eb9898;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    color: var(--text);
+    background: var(--stage);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, textarea { font: inherit; }
+  button { cursor: pointer; }
+
+  .stage {
+    min-height: 100vh;
+    padding: 26px 20px 42px;
+  }
+  .board {
+    width: min(100%, 1080px);
+    margin: 0 auto;
+  }
+  .board-head {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 24px;
+    margin-bottom: 18px;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font: 800 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .16em;
+  }
+  h1 {
+    margin: 7px 0 5px;
+    font-size: 22px;
+    letter-spacing: -.025em;
+  }
+  .lede {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .switcher {
+    display: flex;
+    gap: 6px;
+  }
+  .switcher button {
+    min-height: 36px;
+    padding: 0 12px;
+    color: var(--muted);
+    background: #181b20;
+    border: 1px solid #303640;
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .switcher button.active {
+    color: #07181c;
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 750;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 390px minmax(280px, 1fr);
+    justify-content: center;
+    align-items: start;
+    gap: 34px;
+  }
+  .phone {
+    width: 390px;
+    height: 844px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    background: var(--phone);
+    border: 1px solid #3b414b;
+    border-radius: 34px;
+    box-shadow: 0 28px 90px #0008;
+  }
+  .system {
+    height: 26px;
+    flex: 0 0 26px;
+    padding: 9px 19px 0;
+    display: flex;
+    justify-content: space-between;
+    color: var(--body);
+    font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .topbar {
+    height: 56px;
+    flex: 0 0 56px;
+    padding: 0 16px;
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .back {
+    width: 48px;
+    height: 48px;
+    margin-left: -12px;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    font-size: 22px;
+    text-align: center;
+  }
+  .session-title { font-size: 14px; font-weight: 760; }
+  .session-sub {
+    margin-top: 3px;
+    color: #717985;
+    font: 600 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .live {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--success);
+    font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .live i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+  }
+
+  .transcript {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 15px 16px 22px;
+    scrollbar-width: none;
+  }
+  .transcript::-webkit-scrollbar { display: none; }
+  .prompt {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 7px;
+    margin-bottom: 14px;
+  }
+  .prompt-mark {
+    color: var(--accent);
+    font: 800 17px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .prompt-copy {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .prompt-meta {
+    margin-top: 5px;
+    color: var(--subtle);
+    font: 600 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .process {
+    margin-left: 7px;
+    padding-left: 19px;
+    position: relative;
+    border-left: 1px solid var(--line-strong);
+  }
+  .section {
+    position: relative;
+    margin-bottom: 13px;
+  }
+  .section:last-child { margin-bottom: 0; }
+  .section::before {
+    content: "";
+    position: absolute;
+    left: -23px;
+    top: 18px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--phone);
+    border: 1.5px solid var(--subtle);
+  }
+  .section.done::before {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .section.running::before {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px #65d2e21b;
+  }
+  .section.interrupted::before {
+    background: var(--warning);
+    border-color: var(--warning);
+    box-shadow: 0 0 0 3px #e7b56d1b;
+  }
+  .section-head {
+    width: 100%;
+    min-height: 48px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    text-align: left;
+  }
+  .section-label {
+    display: block;
+    color: #d2d6dc;
+    font: 760 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .04em;
+  }
+  .section-summary {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .section-meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+  }
+  .section.running .section-meta { color: var(--accent); }
+  .section.interrupted .section-meta { color: var(--warning); }
+  .chevron {
+    display: inline-block;
+    color: var(--subtle);
+    transition: transform .16s ease;
+  }
+  .section.collapsed .chevron { transform: rotate(-90deg); }
+  .section-body {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 2px;
+  }
+  .section.collapsed .section-body { display: none; }
+
+  .todo-row {
+    min-height: 29px;
+    display: grid;
+    grid-template-columns: 14px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    color: #b8bec7;
+    font-size: 11px;
+  }
+  .todo-state {
+    width: 12px;
+    height: 12px;
+    border: 1px solid #57606b;
+    border-radius: 50%;
+    position: relative;
+  }
+  .todo-row.complete .todo-state {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .todo-row.complete .todo-state::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 1px;
+    width: 3px;
+    height: 6px;
+    border: solid #0a2317;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+  .todo-row.current { color: var(--text); }
+  .todo-row.current .todo-state {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 3px var(--phone);
+    background: var(--accent);
+  }
+  .row-status {
+    color: var(--subtle);
+    font: 650 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+  }
+  .todo-row.current .row-status { color: var(--accent); }
+  .todo-row.interrupted { color: var(--warning); }
+  .todo-row.interrupted .todo-state { border-color: var(--warning); }
+  .todo-row.interrupted .row-status { color: var(--warning); }
+  .todo-row.cancelled { color: var(--subtle); }
+
+  .agent-row {
+    min-height: 50px;
+    padding: 7px 0;
+    display: grid;
+    grid-template-columns: 23px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+  .agent-index {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    border: 0;
+    font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .agent-row.active .agent-index {
+    color: var(--accent);
+    background: transparent;
+  }
+  .agent-name {
+    display: block;
+    color: #d8dce2;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .agent-goal {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 9px;
+    line-height: 1.35;
+  }
+  .agent-status {
+    color: var(--success);
+    font: 750 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .agent-row.active .agent-status { color: var(--accent); }
+  .agent-row.waiting .agent-status { color: var(--muted); }
+  .agent-row.complete .agent-index,
+  .agent-row.complete .agent-status { color: var(--success); }
+  .agent-row.interrupted .agent-index,
+  .agent-row.interrupted .agent-status { color: var(--warning); }
+
+  .response {
+    margin: 15px 0 0 7px;
+    padding-left: 13px;
+    border-left: 2px solid var(--accent);
+  }
+  .response-label {
+    color: var(--accent);
+    font: 800 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .1em;
+  }
+  .response p {
+    margin: 6px 0 0;
+    color: #d8dce2;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .phone.running .response,
+  .phone.interrupted .response { display: none; }
+  .interruption {
+    display: none;
+    margin: 15px 0 0 7px;
+    padding: 9px 0 9px 13px;
+    color: var(--warning);
+    border-left: 2px solid var(--warning);
+    font: 750 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .phone.interrupted .interruption { display: block; }
+
+  .composer-dock {
+    flex: 0 0 auto;
+    padding: 8px 11px 12px;
+    background: #0b0d10;
+    border-top: 1px solid var(--line);
+  }
+  .long-task-dock {
+    margin: 0 2px 7px;
+    border-bottom: 1px solid var(--line);
+  }
+  .long-task-locator {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 8px;
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    text-align: left;
+  }
+  .long-task-locator:hover,
+  .long-task-locator:focus-visible {
+    background: #15191f;
+    outline: none;
+  }
+  .locator-mark {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .locator-copy {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--body);
+    font: 720 13px/19px ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .locator-elapsed {
+    color: var(--muted);
+    font: 700 12px/19px ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .process.located .section-head { background: #171b20; }
+  .agent-input {
+    min-height: 103px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 13px;
+    transition: border-color .16s ease, box-shadow .16s ease;
+  }
+  .agent-input:focus-within,
+  .phone.guide-mode .agent-input {
+    border-color: #4c7881;
+    box-shadow: 0 0 0 2px #65d2e20e;
+  }
+  .composer-context {
+    display: none;
+    padding: 7px 10px 0;
+    color: var(--accent);
+    font: 750 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .phone.guide-mode .composer-context { display: block; }
+  textarea {
+    width: 100%;
+    min-height: 57px;
+    max-height: 92px;
+    resize: none;
+    padding: 12px 12px 5px;
+    color: var(--text);
+    caret-color: var(--accent);
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  textarea::placeholder { color: #69717c; }
+  .phone.guide-mode textarea { min-height: 47px; padding-top: 7px; }
+  .input-toolbar {
+    min-height: 42px;
+    padding: 4px 6px 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .input-tool {
+    min-width: 38px;
+    height: 36px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+  .input-tool:hover,
+  .input-tool:focus-visible {
+    color: var(--text);
+    background: #1b1f25;
+    outline: none;
+  }
+  .input-tool.selected {
+    color: var(--accent);
+    background: #65d2e212;
+  }
+  .input-tool .plus { font-size: 19px; line-height: 1; font-weight: 350; }
+  .toolbar-spacer { flex: 1; }
+  .voice.listening { color: var(--warning); }
+  .stop {
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    color: var(--warning);
+    border: 1px solid #67583d;
+  }
+  .stop i {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--warning);
+  }
+  .send {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: #07181c;
+    background: var(--accent);
+    border: 0;
+    border-radius: 9px;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .send:disabled {
+    color: #666e78;
+    background: #23272d;
+    cursor: default;
+  }
+  .queue-label {
+    margin: 6px 3px 0;
+    color: var(--subtle);
+    font: 600 9px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .queue-label strong { color: var(--body); font-weight: 700; }
+
+  .toast {
+    position: absolute;
+    left: 50%;
+    bottom: 132px;
+    z-index: 5;
+    transform: translate(-50%, 8px);
+    opacity: 0;
+    pointer-events: none;
+    padding: 8px 11px;
+    color: #0b1518;
+    background: #e9fbff;
+    border-radius: 8px;
+    box-shadow: 0 10px 28px #0008;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: .18s ease;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .notes {
+    max-width: 430px;
+    padding-top: 22px;
+  }
+  .note-block {
+    padding: 17px 0;
+    border-top: 1px solid var(--line);
+  }
+  .note-block:first-child { border-top: 0; }
+  .note-kicker {
+    color: var(--accent);
+    font: 800 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .1em;
+  }
+  .note-block h2 {
+    margin: 7px 0 7px;
+    font-size: 15px;
+  }
+  .note-block p,
+  .note-block li {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .note-block p { margin: 0; }
+  .note-block ul { margin: 8px 0 0; padding-left: 18px; }
+  .spec {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 7px 16px;
+    margin-top: 10px;
+  }
+  .spec dt {
+    color: var(--subtle);
+    font: 700 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-transform: uppercase;
+  }
+  .spec dd {
+    margin: 0;
+    color: var(--body);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .phone.idle .now { display: none; }
+  .phone.idle .long-task-dock { display: none; }
+  .phone.idle .stop { display: none; }
+  .phone.idle .guide { display: none; }
+  .phone.idle .queue-label { display: none; }
+  .phone.idle .agent-input { min-height: 92px; }
+  .phone.idle .response p::after { content: " 已完成。"; }
+  .phone.idle .section.running::before { background: var(--success); border-color: var(--success); box-shadow: none; }
+  .phone.idle .section.running .section-meta { color: var(--success); }
+  .phone.idle .agent-row.active .agent-index { color: #0a2317; background: var(--success); border-color: var(--success); }
+  .phone.idle .agent-row.active .agent-status { color: var(--success); }
+
+  @media (max-width: 840px) {
+    .stage { padding: 18px 10px 30px; }
+    .board-head { display: block; width: min(100%, 390px); margin: 0 auto 14px; }
+    .switcher { margin-top: 14px; overflow-x: auto; }
+    .workspace { display: block; }
+    .phone { width: min(100%, 390px); margin: 0 auto; }
+    .notes { width: min(100%, 390px); margin: 18px auto 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="board">
+    <header class="board-head">
+      <div>
+        <div class="eyebrow">HERMES MOBILE · INTERACTION STUDY 02</div>
+        <h1>Agent conversation + native composer</h1>
+        <p class="lede">对话、Todo、Subagent 使用同一条事件层级；输入区采用 Hermes Agent 的一体式 composer。</p>
+      </div>
+      <nav class="switcher" aria-label="Prototype state">
+        <button class="active" data-view="running">Running</button>
+        <button data-view="todo">Todo focus</button>
+        <button data-view="subagents">Subagent focus</button>
+        <button data-view="idle">Complete</button>
+      </nav>
+    </header>
+
+    <div class="workspace">
+      <section class="phone running" aria-label="Hermes Mobile conversation prototype">
+        <div class="system"><span>9:41</span><span>●●● 5G⌁</span></div>
+
+        <header class="topbar">
+          <button class="back" aria-label="Back">‹</button>
+          <div>
+            <div class="session-title">Hermes Agent</div>
+            <div class="session-sub">session · android-ui</div>
+          </div>
+          <div class="live"><i></i><span>LIVE</span></div>
+        </header>
+
+        <div class="now">
+          <i class="now-mark"></i>
+          <div>
+            <div class="now-label">CURRENTLY EXECUTING</div>
+            <div class="now-copy">Subagent 1/2 · reviewing composer hierarchy</div>
+          </div>
+          <span class="elapsed">00:17</span>
+        </div>
+
+        <div class="transcript">
+          <article class="prompt">
+            <span class="prompt-mark">❯</span>
+            <div>
+              <p class="prompt-copy">继续设计移动端对话，把输入框做成 Hermes Agent 的样式，并显示 Todo 和子 Agent。</p>
+              <div class="prompt-meta">YOU · 09:40</div>
+            </div>
+          </article>
+
+          <div class="process">
+            <section class="section done todo-section">
+              <button class="section-head" aria-expanded="true">
+                <span>
+                  <span class="section-label">TODO · 4</span>
+                  <span class="section-summary">2 complete · 1 active · 1 queued</span>
+                </span>
+                <span class="section-meta"><span>50%</span><span class="chevron">⌄</span></span>
+              </button>
+              <div class="section-body">
+                <div class="todo-row complete"><i class="todo-state"></i><span>Lock the conversation hierarchy</span><span class="row-status">done</span></div>
+                <div class="todo-row complete"><i class="todo-state"></i><span>Match Hermes Agent composer</span><span class="row-status">done</span></div>
+                <div class="todo-row current"><i class="todo-state"></i><span>Review Subagent presentation</span><span class="row-status">active</span></div>
+                <div class="todo-row"><i class="todo-state"></i><span>Prepare Android acceptance</span><span class="row-status">queued</span></div>
+              </div>
+            </section>
+
+            <section class="section running agent-section">
+              <button class="section-head" aria-expanded="true">
+                <span>
+                  <span class="section-label">SUBAGENTS · 2</span>
+                  <span class="section-summary">Independent work, parent keeps authority</span>
+                </span>
+                <span class="section-meta"><span>1 running</span><span class="chevron">⌄</span></span>
+              </button>
+              <div class="section-body">
+                <div class="agent-row active">
+                  <span class="agent-index">01</span>
+                  <span><span class="agent-name">Composer review</span><span class="agent-goal">Check hierarchy, actions and one-handed use</span></span>
+                  <span class="agent-status">RUNNING</span>
+                </div>
+                <div class="agent-row waiting">
+                  <span class="agent-index">02</span>
+                  <span><span class="agent-name">Acceptance review</span><span class="agent-goal">Verify Todo/Subagent semantics and density</span></span>
+                  <span class="agent-status">QUEUED</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="response">
+            <div class="response-label">RESPONSE · STREAMING</div>
+            <p>输入框与 Hermes Agent 保持同一结构：正文输入和操作工具共用一个容器；运行中可明确选择 Guide 或 Queue。</p>
+          </section>
+        </div>
+
+        <footer class="composer-dock">
+          <section class="long-task-dock" aria-label="Long-running work">
+            <button class="long-task-head" aria-expanded="true">
+              <span>
+                <span class="long-task-title">LONG-RUNNING · 2</span>
+                <span class="long-task-summary">Todo and Subagent stay visible while Hermes works</span>
+              </span>
+              <span class="long-task-chevron">⌄</span>
+            </button>
+            <div class="long-task-list">
+              <button class="long-task-row todo" data-focus="todo">
+                <i class="long-task-dot"></i>
+                <span><span class="long-task-kind">TODO · 2/4</span><span class="long-task-current">Review Subagent presentation</span></span>
+                <span class="long-task-state">ACTIVE</span>
+              </button>
+              <button class="long-task-row subagent" data-focus="subagents">
+                <i class="long-task-dot"></i>
+                <span><span class="long-task-kind">SUBAGENT · 1/2</span><span class="long-task-current">Composer review</span></span>
+                <span class="long-task-state">RUNNING</span>
+              </button>
+            </div>
+          </section>
+          <div class="agent-input">
+            <div class="composer-context">GUIDE CURRENT RUN</div>
+            <textarea aria-label="Message Hermes" placeholder="Message Hermes…"></textarea>
+            <div class="input-toolbar">
+              <button class="input-tool attach" aria-label="Add attachment"><span class="plus">＋</span></button>
+              <button class="input-tool guide" data-mode="guide">Guide</button>
+              <button class="input-tool mode selected" data-mode="queue">Queue</button>
+              <span class="toolbar-spacer"></span>
+              <button class="input-tool voice" aria-label="Voice input">Voice</button>
+              <button class="input-tool stop" aria-label="Stop current run"><i></i></button>
+              <button class="send" aria-label="Queue message" disabled>↑</button>
+            </div>
+          </div>
+          <div class="queue-label">Next message: <strong>queue after the active turn</strong></div>
+        </footer>
+
+        <div class="toast" role="status">Queued behind the active turn</div>
+      </section>
+
+      <aside class="notes">
+        <section class="note-block">
+          <div class="note-kicker">COMPOSITION</div>
+          <h2>一条会话主线，不做第二个仪表盘</h2>
+          <p>Todo 和 Subagent 都是当前 turn 内的过程段，继续使用 Quiet Ledger rail；不会变成顶部统计卡、侧栏或聊天气泡。</p>
+        </section>
+        <section class="note-block">
+          <div class="note-kicker">HERMES AGENT COMPOSER</div>
+          <h2>输入和动作共用一个容器</h2>
+          <p>多行正文位于上层；附件、Guide/Queue、语音、Stop、发送位于同一工具行。运行中明确下一条输入的交付方式。</p>
+          <dl class="spec">
+            <dt>Idle</dt><dd>普通 Send，不显示 Stop 或 Guide。</dd>
+            <dt>Running</dt><dd>Queue 为默认安全动作；Stop 保持独立。</dd>
+            <dt>Guide</dt><dd>强调当前 turn，但仍使用同一个输入框。</dd>
+          </dl>
+        </section>
+        <section class="note-block">
+          <div class="note-kicker">SECTION BEHAVIOR</div>
+          <h2>Todo 与 Subagent 可独立展开</h2>
+          <ul>
+            <li>稳定位置，不因完成状态重新分组。</li>
+            <li>Subagent 显示 goal 和 lifecycle，不伪装成独立对话参与者。</li>
+            <li>运行中的长任务持续固定在输入框上方；点击条目回到会话里的对应过程段。</li>
+            <li>Parent Hermes 始终是唯一响应与控制边界。</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<script>
+  const phone = document.querySelector('.phone');
+  const textarea = document.querySelector('textarea');
+  const send = document.querySelector('.send');
+  const toast = document.querySelector('.toast');
+  const nowCopy = document.querySelector('.now-copy');
+  const nowElapsed = document.querySelector('.elapsed');
+  const agentStatus = document.querySelector('.agent-row.active .agent-status');
+  const responseLabel = document.querySelector('.response-label');
+  const queueLabel = document.querySelector('.queue-label');
+  const longTaskDock = document.querySelector('.long-task-dock');
+  const longTaskHead = document.querySelector('.long-task-head');
+
+  function setView(view) {
+    phone.classList.remove('running', 'idle', 'guide-mode');
+    phone.classList.add(view === 'idle' ? 'idle' : 'running');
+    document.querySelectorAll('.switcher button').forEach(button => {
+      button.classList.toggle('active', button.dataset.view === view);
+    });
+
+    const todo = document.querySelector('.todo-section');
+    const agents = document.querySelector('.agent-section');
+    todo.classList.toggle('collapsed', view === 'subagents');
+    agents.classList.toggle('collapsed', view === 'todo');
+    todo.querySelector('.section-head').setAttribute('aria-expanded', String(view !== 'subagents'));
+    agents.querySelector('.section-head').setAttribute('aria-expanded', String(view !== 'todo'));
+    document.querySelectorAll('.long-task-row').forEach(row => {
+      row.classList.toggle('selected', row.dataset.focus === view);
+    });
+
+    if (view === 'idle') {
+      nowCopy.textContent = 'Turn complete';
+      nowElapsed.textContent = 'DONE';
+      agentStatus.textContent = 'COMPLETE';
+      responseLabel.textContent = 'RESPONSE · COMPLETE';
+      queueLabel.textContent = '';
+    } else {
+      nowCopy.textContent = 'Subagent 1/2 · reviewing composer hierarchy';
+      nowElapsed.textContent = '00:17';
+      agentStatus.textContent = 'RUNNING';
+      responseLabel.textContent = 'RESPONSE · STREAMING';
+      queueLabel.innerHTML = 'Next message: <strong>queue after the active turn</strong>';
+    }
+  }
+
+  document.querySelectorAll('.switcher button').forEach(button => {
+    button.addEventListener('click', () => setView(button.dataset.view));
+  });
+
+  document.querySelectorAll('.section-head').forEach(button => {
+    button.addEventListener('click', () => {
+      const section = button.closest('.section');
+      section.classList.toggle('collapsed');
+      button.setAttribute('aria-expanded', String(!section.classList.contains('collapsed')));
+    });
+  });
+
+  longTaskHead.addEventListener('click', () => {
+    longTaskDock.classList.toggle('collapsed');
+    longTaskHead.setAttribute('aria-expanded', String(!longTaskDock.classList.contains('collapsed')));
+  });
+
+  document.querySelectorAll('.long-task-row').forEach(button => {
+    button.addEventListener('click', () => setView(button.dataset.focus));
+  });
+
+  textarea.addEventListener('input', () => {
+    send.disabled = textarea.value.trim().length === 0;
+  });
+
+  document.querySelectorAll('[data-mode]').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-mode]').forEach(item => item.classList.remove('selected'));
+      button.classList.add('selected');
+      const guide = button.dataset.mode === 'guide';
+      phone.classList.toggle('guide-mode', guide);
+      textarea.placeholder = guide ? 'Guide the current run…' : 'Message Hermes…';
+      send.setAttribute('aria-label', guide ? 'Guide current run' : 'Queue message');
+      queueLabel.innerHTML = guide
+        ? 'Next message: <strong>guide the active turn</strong>'
+        : 'Next message: <strong>queue after the active turn</strong>';
+      textarea.focus();
+    });
+  });
+
+  document.querySelector('.voice').addEventListener('click', event => {
+    event.currentTarget.classList.toggle('listening');
+    event.currentTarget.textContent = event.currentTarget.classList.contains('listening') ? 'Listening' : 'Voice';
+  });
+
+  document.querySelector('.stop').addEventListener('click', () => {
+    setView('idle');
+    toast.textContent = 'Current run stopped';
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1300);
+  });
+
+  send.addEventListener('click', () => {
+    if (send.disabled) return;
+    const isGuide = phone.classList.contains('guide-mode');
+    toast.textContent = isGuide ? 'Guidance sent to the active turn' : 'Queued behind the active turn';
+    toast.classList.add('show');
+    textarea.value = '';
+    send.disabled = true;
+    setTimeout(() => toast.classList.remove('show'), 1400);
+  });
+</script>
+</body>
+</html>

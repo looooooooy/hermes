@@ -1,0 +1,9 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3, "active_runtime_generation": "runtime-new", "retired_runtime_generations": ["runtime-old"], "catalog_revision": 2, "catalog_session_keys": ["new-root"]},
+  "operations": [
+    {"op": "snapshot", "writer_id": "connector-a", "writer_fence": 3, "pages": [{"profile": "default", "runtime_generation": "runtime-old", "snapshot_id": "11111111-1111-4111-8111-111111111111", "catalog_revision": 9, "page_index": 0, "is_last": true, "sessions": [{"session_key": "old-root", "authority_revision": 9}]}]},
+    {"op": "assert_state", "equals": {"active_runtime_generation": "runtime-new", "catalog_revision": 2, "catalog_session_keys": ["new-root"]}}
+  ],
+  "expected_errors": ["late_old_generation"]
+}

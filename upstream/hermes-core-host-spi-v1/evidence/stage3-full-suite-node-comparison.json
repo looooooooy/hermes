@@ -1,0 +1,357 @@
+{
+  "schema_version": 1,
+  "frozen_upstream_commit": "14db1a99e21e5523ee61f10f5c3300a5087e8449",
+  "stage3_patch_sha256": "ee47c21433164e7cfb3ab06a5a25d9308200c7e310d32ce99065b433d6eeb6a1",
+  "interpreter": "/Users/apple/hermesmobile/.tmp/host-spi-baseline-verify-qL7Goz/source/.venv/bin/python",
+  "current_environment": {
+    "interpreter_package_set": {
+      "package_count": 134,
+      "pip_list_json_sha256": "379724d739e06f1e2be5debf067d8c9578b4eb309b1fd69f9c7e65bfa0ad455a"
+    },
+    "baseline": {
+      "source": "/Users/apple/hermesmobile/.tmp/host-spi-r21-full-baseline/source",
+      "files": 2469,
+      "passed": 22693,
+      "final_failed": 80,
+      "observed_failed_nodes_including_retry_attempts": 81,
+      "final_failure_files": 36,
+      "duration_seconds": 953.1,
+      "workers": 4,
+      "log": "/Users/apple/hermesmobile/.tmp/host-spi-r21-full-baseline.log",
+      "log_sha256": "9ac10b1fb1911f724588b73f97b8a683e00a2a749c31ab22cbbb2c5c1624d15d",
+      "flaky_retry_passes": [
+        "tests/tools/test_base_environment.py::TestAtomicSnapshotConcurrencyBehavioral::test_concurrent_writes_never_tear_the_snapshot"
+      ]
+    },
+    "candidate": {
+      "source": "/Users/apple/hermesmobile/.tmp/host-spi-r22-work/source",
+      "files": 2469,
+      "added_stage3_test_files_excluded": 5,
+      "new_tests_in_existing_files": 28,
+      "passed": 22724,
+      "final_failed": 80,
+      "observed_failed_nodes_including_retry_attempts": 80,
+      "final_failure_files": 36,
+      "duration_seconds": 1729.9,
+      "workers": 4,
+      "log": "/Users/apple/hermesmobile/.tmp/host-spi-r22-full-candidate.log",
+      "log_sha256": "86b970f98d2888b88b8608214df1c96defcb47b0bed7fb7e0e6377aa7e46dc72",
+      "flaky_retry_passes": []
+    },
+    "comparison": {
+      "final_node_sets_equal": true,
+      "baseline_final_node_set_sha256": "718eb4aae321c14060da2fdc60ae8d07c6179db2bc40464d746a9b8155d84d34",
+      "candidate_final_node_set_sha256": "718eb4aae321c14060da2fdc60ae8d07c6179db2bc40464d746a9b8155d84d34",
+      "missing_from_candidate": [],
+      "extra_in_candidate": [],
+      "patch_only_failures": [],
+      "final_count_difference": "none; both runs ended with 80 failures",
+      "conclusion": "fresh baseline and candidate final failure-node sets are exactly equal; patch-only failures are zero"
+    }
+  },
+  "historical_reference": {
+    "note": "The earlier 79-node baseline used the same interpreter path before the shared venv lazily gained numpy; it is retained only as history, not the final same-package-set gate.",
+    "files": 2469,
+    "passed": 22629,
+    "final_failed": 79,
+    "failure_node_sha256": "64df12c9607945dca8e82e9860d2fdec51a4532245f134db61aa48a9322b7728",
+    "log_sha256": "57418198cec661319d3cdbcbc389eca6044a6d3e05b3565e70646c9cf72afec1"
+  },
+  "isolated_extra_node_diagnostics": {
+    "source_hashes": {
+      "atomic_snapshot_test": "55757002d601052988fc5c9006de9ff30fef1eccae388cdbca0bbc34795728c2",
+      "voice_mode_test": "3b93d8a00396031e72c3f66c9df697e729c55be93c8870211edbce10e1b03ef0"
+    },
+    "conclusions": {
+      "atomic_snapshot": "baseline 4 fail 1 pass; candidate 3 fail 2 pass; concurrent flake on byte-identical source",
+      "voice_mode": "baseline 5 fail; candidate 5 fail; byte-identical source; historical baseline skipped numpy-dependent cases before shared venv drift"
+    },
+    "runs": [
+      {
+        "source": "baseline",
+        "node": "base",
+        "attempt": 1,
+        "exit_code": 1,
+        "duration_seconds": 4.49,
+        "log_sha256": "8b98024c68c648959a74905d35a76616714569ccab86d6c4bad45670b06a2c2a",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-base-1.log"
+      },
+      {
+        "source": "baseline",
+        "node": "base",
+        "attempt": 2,
+        "exit_code": 1,
+        "duration_seconds": 4.76,
+        "log_sha256": "761ea1b592316ece893cfdfe8cf482c15ac3a74f5aace31734380eb43effbc4f",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-base-2.log"
+      },
+      {
+        "source": "baseline",
+        "node": "base",
+        "attempt": 3,
+        "exit_code": 0,
+        "duration_seconds": 4.21,
+        "log_sha256": "6fae9338bb6fd97caba00cfa347c412d014ea0186fc729c9f9e33027960f567a",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-base-3.log"
+      },
+      {
+        "source": "baseline",
+        "node": "base",
+        "attempt": 4,
+        "exit_code": 1,
+        "duration_seconds": 5.00,
+        "log_sha256": "260d46e9dc7d356ba26fdef9d4296d97f89c149e23482eb6c29ae35fb3e6e83f",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-base-4.log"
+      },
+      {
+        "source": "baseline",
+        "node": "base",
+        "attempt": 5,
+        "exit_code": 1,
+        "duration_seconds": 4.47,
+        "log_sha256": "e9a64d0a1343e91e051ca66e03b91ea510cee520abc6eb4a4fd63076ca139727",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-base-5.log"
+      },
+      {
+        "source": "baseline",
+        "node": "voice",
+        "attempt": 1,
+        "exit_code": 1,
+        "duration_seconds": 1.76,
+        "log_sha256": "e05859989922add41a51934a3f02378184ef66d3637485112ef54efd6696e7c4",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-voice-1.log"
+      },
+      {
+        "source": "baseline",
+        "node": "voice",
+        "attempt": 2,
+        "exit_code": 1,
+        "duration_seconds": 1.35,
+        "log_sha256": "5fabe636ba0d0afd59dccd768e328120c42468c609a2e184baede99b2e64a805",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-voice-2.log"
+      },
+      {
+        "source": "baseline",
+        "node": "voice",
+        "attempt": 3,
+        "exit_code": 1,
+        "duration_seconds": 1.33,
+        "log_sha256": "f7baca399b2792a59c71796cd4b5a0b76844ad224d23bbe2764da5919d4142ba",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-voice-3.log"
+      },
+      {
+        "source": "baseline",
+        "node": "voice",
+        "attempt": 4,
+        "exit_code": 1,
+        "duration_seconds": 1.24,
+        "log_sha256": "c964189f30a1b474f7ccdce4775dd235fbadc0c4b766caedf5902b20dae71b65",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-voice-4.log"
+      },
+      {
+        "source": "baseline",
+        "node": "voice",
+        "attempt": 5,
+        "exit_code": 1,
+        "duration_seconds": 1.27,
+        "log_sha256": "6e72931dec3d1d37812ab7a0c8fc7ea2cc4be6048cc2361c1a3449aa51640331",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/baseline-voice-5.log"
+      },
+      {
+        "source": "candidate",
+        "node": "base",
+        "attempt": 1,
+        "exit_code": 0,
+        "duration_seconds": 4.30,
+        "log_sha256": "77f7bab6b2cfa87727e6a3a1cb4e4849e86871bfbe7c0d6657abf12e6eee72f3",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-base-1.log"
+      },
+      {
+        "source": "candidate",
+        "node": "base",
+        "attempt": 2,
+        "exit_code": 0,
+        "duration_seconds": 4.68,
+        "log_sha256": "17b8e6b00696fcc5c3be49824cff4bf9b2e41f8b55a6728679dec56495f77478",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-base-2.log"
+      },
+      {
+        "source": "candidate",
+        "node": "base",
+        "attempt": 3,
+        "exit_code": 1,
+        "duration_seconds": 4.13,
+        "log_sha256": "a304d486f7b31ca5fc0e4ab5d809c6e5143c2527c3fb6cb94fdff610832b4cad",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-base-3.log"
+      },
+      {
+        "source": "candidate",
+        "node": "base",
+        "attempt": 4,
+        "exit_code": 1,
+        "duration_seconds": 4.10,
+        "log_sha256": "9dd19a6ed9d4ec7e0e72670e182e2c904604e465c58b180dc0c53634d7282334",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-base-4.log"
+      },
+      {
+        "source": "candidate",
+        "node": "base",
+        "attempt": 5,
+        "exit_code": 1,
+        "duration_seconds": 4.28,
+        "log_sha256": "8b5a3f2aeba2e71c17532a18290d1f6e4bc86bd58988fa8f59a9ae8d0e8e83be",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-base-5.log"
+      },
+      {
+        "source": "candidate",
+        "node": "voice",
+        "attempt": 1,
+        "exit_code": 1,
+        "duration_seconds": 1.34,
+        "log_sha256": "c18f1e8d7e8f2687e48dfba7b225e772324a52c348845f91d543a1eb25abc493",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-voice-1.log"
+      },
+      {
+        "source": "candidate",
+        "node": "voice",
+        "attempt": 2,
+        "exit_code": 1,
+        "duration_seconds": 1.28,
+        "log_sha256": "ce9d6d76eb56eb802067d50849d40d6c00f24dbd4f3f1f8a68461932b25bc640",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-voice-2.log"
+      },
+      {
+        "source": "candidate",
+        "node": "voice",
+        "attempt": 3,
+        "exit_code": 1,
+        "duration_seconds": 0.74,
+        "log_sha256": "2f8096bec18b6f303b9b0a29c9d98f5c5b7e1cfb23eed6081129736e60ff818d",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-voice-3.log"
+      },
+      {
+        "source": "candidate",
+        "node": "voice",
+        "attempt": 4,
+        "exit_code": 1,
+        "duration_seconds": 1.28,
+        "log_sha256": "6317d43956b5c61763e80b1f3b87f348aae791636d4b76d3a5afd2cfb54333de",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-voice-4.log"
+      },
+      {
+        "source": "candidate",
+        "node": "voice",
+        "attempt": 5,
+        "exit_code": 1,
+        "duration_seconds": 1.33,
+        "log_sha256": "3e2fa928404387b4ade8a7a5fb275c576bd6fe5dec9cbe22b74e846d0c2574aa",
+        "log_path": "/Users/apple/hermesmobile/.tmp/host-spi-r18-extra-node-diagnostics/candidate-voice-5.log"
+      }
+    ]
+  },
+  "invalidated_runs": [
+    {
+      "log": "/Users/apple/hermesmobile/.tmp/host-spi-candidate-shared-r18/full-candidate-shared.log",
+      "reason": "A concurrent wheel build created ignored build/lib content; config-read guard detected it at 42.8 percent. The run was stopped and excluded."
+    },
+    {
+      "log": "/Users/apple/hermesmobile/.tmp/r19-full-run/full-candidate-r19.log",
+      "log_sha256": "c1de6fa0854096c4a5ef913c03b8cf34704e2634aacc938441d8998e09e9417a",
+      "reason": "Stopped at 11.8 percent after the same-ID concurrency audit found a reservation flaw; the patch was superseded and the run is excluded."
+    },
+    {
+      "log": "/Users/apple/hermesmobile/.tmp/r19-final-full-run/full-candidate-r19-final.log",
+      "log_sha256": "83dd0f153f3b728938e3fc198f12f5edd489e33c6ce1bbad1ce63207b4636163",
+      "reason": "Stopped at 46.0 percent after the TUI queue identity audit found an ACK-ID preservation flaw; the patch was superseded and the run is excluded."
+    },
+    {
+      "log": "/Users/apple/hermesmobile/.tmp/r19-final3-full-run/full-candidate-r19-final3.log",
+      "log_sha256": "2901364df753247a61f500647c4b8092bfb08aed15c786710857074bc5662368",
+      "exit_code": 130,
+      "reason": "Stopped at 53.8 percent because the replay source had no real .git metadata, invalidating update-path results; its relay-double finding was fixed before the definitive real-Git run."
+    }
+  ],
+  "candidate_observed_nodes_derivation": "fresh r22 final retry output contains 80 nodes and no retry-pass node; exact final set equals baseline_observed_failed_node_ids",
+  "baseline_observed_failed_node_ids": [
+    "tests/agent/test_auxiliary_named_custom_providers.py::TestProvidersDictApiModeAnthropicMessages::test_resolve_provider_client_returns_anthropic_client",
+    "tests/agent/test_auxiliary_transport_autodetect.py::test_resolve_provider_client_kimi_coding_wraps_anthropic",
+    "tests/agent/test_nous_portal_anthropic_wire.py::TestClientShape::test_portal_bearer_does_not_also_send_env_anthropic_api_key",
+    "tests/agent/test_nous_portal_anthropic_wire.py::TestClientShape::test_portal_jwt_authenticates_with_bearer_not_x_api_key",
+    "tests/agent/test_set_runtime_main_custom_provider.py::TestResolveAutoCustomEndToEnd::test_named_custom_anthropic_messages_keeps_full_name_and_url",
+    "tests/agent/test_vision_routing_31179.py::TestTextOnlyMainSkippedForVision::test_vision_capable_main_used",
+    "tests/gateway/test_media_download_retry.py::TestSlackDownloadSlackFile::test_rejects_html_response",
+    "tests/gateway/test_media_download_retry.py::TestSlackDownloadSlackFile::test_success_on_first_attempt",
+    "tests/gateway/test_media_download_retry.py::TestSlackDownloadSlackFileBytes::test_success_returns_bytes",
+    "tests/gateway/test_shutdown_forensics.py::TestSpawnAsyncDiagnostic::test_spawns_subprocess_and_writes_output",
+    "tests/gateway/test_systemd_notify.py::test_notify_supports_systemd_abstract_socket",
+    "tests/hermes_cli/test_early_recovery.py::test_early_recovery_module_is_stdlib_only",
+    "tests/hermes_cli/test_gateway_service.py::TestGatewaySystemServiceRouting::test_systemd_restart_gracefully_restarts_running_service_and_waits",
+    "tests/hermes_cli/test_service_manager.py::test_seed_supervise_skeleton_creates_expected_layout",
+    "tests/hermes_cli/test_update_eol_churn.py::test_churn_across_more_files_than_fit_in_one_argv",
+    "tests/hermes_cli/test_update_eol_churn.py::test_churn_invisible_under_autocrlf_true_is_still_found",
+    "tests/hermes_cli/test_update_eol_churn.py::test_churn_is_cleared_and_the_pin_is_persisted",
+    "tests/hermes_cli/test_update_eol_churn.py::test_pin_is_withheld_when_the_churn_cannot_be_cleared",
+    "tests/hermes_cli/test_update_eol_churn.py::test_real_edits_survive_even_when_line_endings_also_flipped",
+    "tests/plugins/memory/test_hindsight_provider.py::TestConfig::test_get_client_passes_idle_timeout_to_hindsight_embedded",
+    "tests/plugins/video_gen/test_fal_plugin.py::TestFamilyRouting::test_default_family_text_routing",
+    "tests/plugins/video_gen/test_fal_plugin.py::TestFamilyRouting::test_image_to_video_routes_to_image_endpoint",
+    "tests/plugins/video_gen/test_fal_plugin.py::TestFamilyRouting::test_premium_seedance_routing",
+    "tests/plugins/video_gen/test_fal_plugin.py::TestFamilyRouting::test_text_to_video_routes_to_text_endpoint",
+    "tests/plugins/video_gen/test_fal_plugin.py::TestFamilyRouting::test_unknown_family_falls_back_to_default",
+    "tests/run_agent/test_nous_fallback_unavailable.py::TestNousFallbackLocalAvailability::test_present_nous_token_allows_activation",
+    "tests/run_agent/test_run_agent.py::TestAnthropicInterruptHandler::test_interruptible_anthropic_interrupt_never_closes_shared_client",
+    "tests/run_agent/test_streaming.py::TestAnthropicStreamCallbacks::test_anthropic_eventless_sdk_assertion_normalized_to_empty_stream",
+    "tests/run_agent/test_streaming.py::TestAnthropicStreamCallbacks::test_anthropic_stream_parser_valueerror_retries_before_delivery",
+    "tests/run_agent/test_streaming.py::TestAnthropicStreamCallbacks::test_generic_anthropic_valueerror_still_propagates_without_stream_retry",
+    "tests/run_agent/test_switch_model_reasoning_override.py::TestSwitchModelReasoningOverride::test_primary_runtime_includes_reasoning_config",
+    "tests/run_agent/test_switch_model_reasoning_override.py::TestSwitchModelReasoningOverride::test_restore_primary_runtime_restores_reasoning",
+    "tests/test_hermes_state_readonly_preflight.py::TestRefusalOutsideScope::test_wal_error_warns_against_deletion",
+    "tests/test_hermes_state_readonly_preflight.py::TestRepairScope::test_repairs_readonly_sidecars",
+    "tests/test_model_tools_async_bridge.py::TestVisionDispatchLoopSafety::test_two_consecutive_vision_dispatches",
+    "tests/test_model_tools_async_bridge.py::TestVisionDispatchLoopSafety::test_vision_dispatch_keeps_loop_alive",
+    "tests/test_state_db_malformed_repair.py::test_repair_rebuilds_stale_btree_indexes",
+    "tests/tools/test_approval.py::TestDetectDangerousRm::test_nonrecursive_verification_artifact_cleanup_is_not_dangerous",
+    "tests/tools/test_browser_hybrid_routing.py::TestNavigationSessionKey::test_public_url_uses_bare_task_id",
+    "tests/tools/test_computer_use.py::TestCaptureAppFilterNoMatch::test_linux_default_capture_skips_gnome_shell_helper",
+    "tests/tools/test_daytona_environment.py::TestCleanup::test_cleanup_swallows_errors",
+    "tests/tools/test_daytona_environment.py::TestCleanup::test_persistent_cleanup_stops_sandbox",
+    "tests/tools/test_daytona_environment.py::TestCwdResolution::test_default_cwd_resolves_home",
+    "tests/tools/test_daytona_environment.py::TestCwdResolution::test_empty_home_keeps_default_cwd",
+    "tests/tools/test_daytona_environment.py::TestEnsureSandboxReady::test_no_restart_when_running",
+    "tests/tools/test_daytona_environment.py::TestEnsureSandboxReady::test_restarts_stopped_sandbox",
+    "tests/tools/test_daytona_environment.py::TestExecute::test_basic_command",
+    "tests/tools/test_daytona_environment.py::TestExecute::test_daytona_error_triggers_retry",
+    "tests/tools/test_daytona_environment.py::TestInterrupt::test_interrupt_stops_sandbox_and_returns_130",
+    "tests/tools/test_daytona_environment.py::TestPersistence::test_non_persistent_skips_lookup",
+    "tests/tools/test_daytona_environment.py::TestPersistence::test_persistent_resumes_via_get",
+    "tests/tools/test_daytona_environment.py::TestResourceConversion::test_memory_converted_to_gib",
+    "tests/tools/test_daytona_environment.py::TestResourceConversion::test_small_values_clamped_to_1",
+    "tests/tools/test_daytona_environment.py::TestRetryExhausted::test_both_attempts_fail",
+    "tests/tools/test_daytona_environment.py::TestSyncSafety::test_single_upload_quotes_parent_path",
+    "tests/tools/test_execution_flag_detection.py::test_real_binaries_execute_leading_dash_program_payload[man-args4-None-True]",
+    "tests/tools/test_execution_flag_detection.py::test_real_binaries_execute_leading_dash_program_payload[man-args5-None-True]",
+    "tests/tools/test_execution_flag_detection.py::test_real_binaries_execute_leading_dash_program_payload[sort-args2-{bulk}-False]",
+    "tests/tools/test_file_tools.py::TestPatchHandler::test_replace_mode_calls_patch_replace",
+    "tests/tools/test_file_tools.py::TestWriteFileHandler::test_writes_content",
+    "tests/tools/test_image_generation.py::TestManagedGatewayErrorTranslation::test_4xx_translates_to_value_error_with_remediation",
+    "tests/tools/test_image_generation.py::TestManagedGatewayErrorTranslation::test_non_http_exception_from_managed_bubbles_up",
+    "tests/tools/test_managed_media_gateways.py::test_managed_fal_submit_uses_gateway_origin_and_nous_token",
+    "tests/tools/test_transcription_tools.py::TestTranscribeLocalExtended::test_config_device_and_compute_type_passed_to_whisper",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[happy-horse]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[kling-v3-4k]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[ltx-2.3]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[pixverse-v6]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[seedance-2.0]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_fal_text_only_routes_to_text_endpoint[veo3.1]",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_tool_model_arg_overrides_config",
+    "tests/tools/test_video_generation_tool_surface_matrix.py::test_tool_model_arg_with_image_url_routes_to_override_image_endpoint",
+    "tests/tools/test_voice_mode.py::TestPlayBeep::test_beep_calls_sounddevice_play",
+    "tests/tools/test_voice_mode.py::TestWSL2PowerShellFallback::test_powershell_pipeline_preserves_real_exit_status",
+    "tests/tools/test_voice_mode.py::TestWSL2PowerShellFallback::test_wsl2_unique_temp_filename",
+    "tests/tools/test_wake_word.py::test_openwakeword_ensures_base_models_for_custom_path",
+    "tests/tools/test_web_providers.py::TestDispatchersTriggerPluginDiscovery::test_web_extract_tool_runs_discovery_before_registry_lookup",
+    "tests/tools/test_web_tools_config.py::TestParallelClientConfig::test_creates_client_with_key",
+    "tests/tools/test_web_tools_config.py::TestParallelClientConfig::test_singleton_returns_same_instance",
+    "tests/tools/test_web_tools_tavily.py::TestWebExtractTavily::test_extract_dispatches_to_tavily"
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/local/gateway-error.schema.json",
+  "title": "Hermes Local Gateway Error Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "error"
+  ],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "reason"
+      ],
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "code": {
+              "const": 4300
+            },
+            "reason": {
+              "const": "contract_unsupported"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4301
+            },
+            "reason": {
+              "const": "invalid_envelope"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4302
+            },
+            "reason": {
+              "const": "frame_too_large"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4303
+            },
+            "reason": {
+              "const": "invalid_utf8"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4304
+            },
+            "reason": {
+              "const": "capability_not_available"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4305
+            },
+            "reason": {
+              "const": "overloaded"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4306
+            },
+            "reason": {
+              "const": "deadline_exceeded_before_effect"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4307
+            },
+            "reason": {
+              "const": "effect_unknown"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4308
+            },
+            "reason": {
+              "const": "idempotency_conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": 4309
+            },
+            "reason": {
+              "const": "authorization_denied"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

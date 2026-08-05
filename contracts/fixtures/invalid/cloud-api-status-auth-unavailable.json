@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "gateway_running": true,
+  "gateway_state": "ready",
+  "auth_required": true,
+  "auth_providers": [],
+  "auth_flows": [],
+  "overall": "healthy"
+}

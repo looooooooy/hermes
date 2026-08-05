@@ -1,0 +1,36 @@
+[Unit]
+Description=Hermes Cloud explicit SQLite schema creation
+
+[Service]
+Type=oneshot
+User=hermes-cloud-migrate
+Group=hermes-cloud
+SupplementaryGroups=hermes-cloud
+UMask=0007
+EnvironmentFile=/etc/hermes-cloud/sqlite/test-server.env
+Environment=HERMES_MIGRATION_DSN_FILE=/etc/hermes-cloud/sqlite/secrets/migration_database_dsn
+Environment=HERMES_OBSERVER_KEYRING_FILE=/etc/hermes-cloud/sqlite/secrets/observer_keyring.json
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/sqlite/scripts/preflight.sh --sqlite-migration
+ExecStart=/usr/bin/env ${HERMES_VENV}/bin/python ${HERMES_CURRENT}/deploy/test_server/scripts/migrate_sqlite.py --apply
+RemainAfterExit=no
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+LimitNOFILE=4096
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+StateDirectory=hermes-cloud-sqlite
+StateDirectoryMode=0770
+RuntimeDirectory=hermes-cloud-sqlite-migrate

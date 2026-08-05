@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/command-result.schema.json",
+  "title": "Hermes Command Result Payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "command_id",
+    "connector_instance_id",
+    "client_instance_id",
+    "session_key",
+    "profile",
+    "client_request_id",
+    "method",
+    "state",
+    "completed_at",
+    "revision"
+  ],
+  "properties": {
+    "command_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "connector_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "client_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "session_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "client_request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "method": {
+      "enum": [
+        "prompt.submit",
+        "session.interrupt"
+      ]
+    },
+    "state": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    },
+    "completed_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "result": {
+      "type": "object",
+      "maxProperties": 32
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "required": [
+          "result"
+        ],
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "error"
+        ],
+        "not": {
+          "required": [
+            "result"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "canonical_uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "utc_instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "control_role_required",
+            "control_contract_unsupported",
+            "live_runtime_unavailable",
+            "controller_conflict",
+            "lease_required",
+            "lease_expired",
+            "lease_mismatch",
+            "request_id_payload_conflict",
+            "pending_request_conflict",
+            "method_not_allowed",
+            "command_unknown",
+            "revision_conflict",
+            "session_binding_mismatch",
+            "invalid_pending_response",
+            "owner_adapter_unavailable",
+            "relay_overloaded",
+            "internal_temporary"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

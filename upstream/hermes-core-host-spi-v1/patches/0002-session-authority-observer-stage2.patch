@@ -1,0 +1,3868 @@
+diff --git a/hermes_cli/extension_runtime.py b/hermes_cli/extension_runtime.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..907d40519085d24990e1121ac50df792cf52dcdb
+--- /dev/null
++++ b/hermes_cli/extension_runtime.py
+@@ -0,0 +1,1722 @@
++"""Internal Stage 2 runtime for the public Gateway Extension Host SPI v1.
++
++This module deliberately stops before any CLI, TUI, Desktop, Gateway, ACP, or
++worker composition.  It provides the protocol-neutral session authority and
++observer mechanics needed by a future composition root without importing
++private Agent or transport implementations.
++"""
++
++from __future__ import annotations
++
++import copy
++import json
++import math
++import threading
++import time
++import unicodedata
++from collections import deque
++from collections.abc import Callable, Mapping
++from dataclasses import dataclass, field
++from enum import Enum
++from types import MappingProxyType
++from typing import Any, Literal
++
++from hermes_cli.extension_host_v1 import (
++    ControlScope,
++    EventSink,
++    HostSpiCapabilityError,
++    HostSpiError,
++    HostSpiRegistrationError,
++    HostSpiUnavailableError,
++    ObserverEvent,
++    ObserverRequest,
++    OwnerActionRequest,
++    Registration,
++    RuntimeDescriptor,
++    SafeAuditEvent,
++)
++
++MAX_OBSERVER_QUEUE_FRAMES = 32
++MAX_OBSERVER_FRAME_BYTES = 256 * 1024
++MAX_SNAPSHOT_EVENTS = 32
++MAX_OBSERVERS_TOTAL = 64
++MAX_OBSERVERS_PER_SCOPE = 8
++MAX_BLOCKED_OBSERVERS = 4
++MAX_OBSERVER_FAILURE_HISTORY = 128
++
++DISPLAY_SAFE_EVENT_TYPES_V1 = frozenset(
++    {
++        "assistant.delta",
++        "assistant.message",
++        "session.status",
++        "tool.status",
++        "user.message",
++    }
++)
++
++_EVENT_REQUIRED_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
++    {
++        "assistant.delta": frozenset({"text"}),
++        "assistant.message": frozenset({"text"}),
++        "session.status": frozenset({"status"}),
++        "tool.status": frozenset({"tool_name", "status"}),
++        "user.message": frozenset({"text"}),
++    }
++)
++_EVENT_OPTIONAL_FIELDS: Mapping[str, frozenset[str]] = MappingProxyType(
++    {
++        "assistant.delta": frozenset(),
++        "assistant.message": frozenset(),
++        "session.status": frozenset({"display"}),
++        "tool.status": frozenset({"display"}),
++        "user.message": frozenset(),
++    }
++)
++_TOOL_STATUSES = frozenset({"queued", "running", "succeeded", "failed"})
++_SESSION_STATUSES = frozenset(
++    {"thinking", "waiting", "completed", "interrupted", "failed"}
++)
++
++SAFE_AUDIT_EVENT_NAMES_V1 = frozenset(
++    {
++        "authority.lifecycle",
++        "observer.lifecycle",
++        "runtime.lifecycle",
++    }
++)
++_AUDIT_ALLOWED_ATTRIBUTES: Mapping[str, frozenset[str]] = MappingProxyType(
++    {
++        "authority.lifecycle": frozenset({"action", "revision", "state"}),
++        "observer.lifecycle": frozenset(
++            {"action", "failure_category", "state", "subscription_id"}
++        ),
++        "runtime.lifecycle": frozenset({"action", "state"}),
++    }
++)
++_AUDIT_SENSITIVE_KEY_FRAGMENTS = frozenset(
++    {
++        "approval",
++        "argument",
++        "credential",
++        "password",
++        "payload",
++        "reasoning",
++        "secret",
++        "token",
++        "tooloutput",
++    }
++)
++_AUDIT_ALLOWED_VALUES: Mapping[str, frozenset[str]] = MappingProxyType(
++    {
++        "action": frozenset(
++            {"bound", "closed", "closing", "expired", "failed", "renewed", "started"}
++        ),
++        "failure_category": frozenset(
++            {
++                "cleanup_failed",
++                "clock_failed",
++                "delivery_blocked",
++                "none",
++                "sink_delivery_failed",
++                "worker_start_failed",
++            }
++        ),
++        "state": frozenset(
++            {"active", "closed", "closing", "prepared", "ready", "unavailable"}
++        ),
++    }
++)
++
++
++class ObserverStateError(HostSpiError):
++    def __init__(self) -> None:
++        super().__init__("observer lifecycle state is unavailable")
++
++
++class ObserverSequenceError(HostSpiError):
++    def __init__(self) -> None:
++        super().__init__("observer event sequence is not contiguous")
++
++
++class ObserverFrameError(HostSpiError):
++    def __init__(self) -> None:
++        super().__init__("observer event frame exceeds the safe limit")
++
++
++class ObserverDeliveryBlockedError(HostSpiError):
++    def __init__(self) -> None:
++        super().__init__("observer delivery did not stop before the close deadline")
++
++
++class ObserverClockError(HostSpiUnavailableError):
++    def __init__(self) -> None:
++        HostSpiError.__init__(self, "observer runtime clock is unavailable")
++
++
++def _finite_number(
++    value: object,
++    field_name: str,
++    *,
++    positive: bool = False,
++) -> float:
++    if (
++        isinstance(value, bool)
++        or not isinstance(value, (int, float))
++        or not math.isfinite(value)
++    ):
++        raise ValueError(f"{field_name} must be finite numeric")
++    normalized = float(value)
++    if positive and normalized <= 0:
++        raise ValueError(f"{field_name} must be positive")
++    return normalized
++
++
++class _MonotonicGuard:
++    def __init__(self, source: Callable[[], float]) -> None:
++        if not callable(source):
++            raise ValueError("monotonic clock must be callable")
++        self._source = source
++        self._lock = threading.Lock()
++        self._last: float | None = None
++
++    def read(self) -> float:
++        with self._lock:
++            clock_failed = False
++            try:
++                observed = _finite_number(self._source(), "monotonic clock")
++            except BaseException:
++                clock_failed = True
++                observed = 0.0
++            if clock_failed:
++                raise ObserverClockError()
++            if self._last is not None and observed < self._last:
++                raise ObserverClockError()
++            self._last = observed
++            return observed
++
++
++def _canonical_text(value: object, field_name: str, *, max_length: int = 256) -> str:
++    if (
++        not isinstance(value, str)
++        or not value
++        or value != value.strip()
++        or len(value) > max_length
++        or any(
++            unicodedata.category(character) in {"Cc", "Cs"}
++            for character in value
++        )
++    ):
++        raise ValueError(f"{field_name} must be canonical text")
++    return value
++
++
++def _frozen_payload(value: object) -> Mapping[str, str]:
++    if not isinstance(value, Mapping):
++        raise TypeError("display-safe payload must be an object")
++    copied = copy.deepcopy(dict(value))
++    if any(
++        not isinstance(key, str)
++        or not key
++        or key != key.strip()
++        or any(
++            unicodedata.category(character) in {"Cc", "Cs"}
++            for character in key
++        )
++        for key in copied
++    ):
++        raise ValueError("display-safe payload keys must be canonical text")
++    if any(not isinstance(item, str) for item in copied.values()):
++        raise ValueError("display-safe payload values must be text")
++    for key, item in copied.items():
++        _canonical_text(item, f"payload.{key}", max_length=128 * 1024)
++    return MappingProxyType(copied)
++
++
++def _contains_sensitive_audit_key(value: object) -> bool:
++    if isinstance(value, Mapping):
++        for key, item in value.items():
++            normalized = "".join(
++                character.lower()
++                for character in str(key)
++                if character.isalnum()
++            )
++            if any(
++                fragment in normalized
++                for fragment in _AUDIT_SENSITIVE_KEY_FRAGMENTS
++            ):
++                return True
++            if _contains_sensitive_audit_key(item):
++                return True
++    elif isinstance(value, (list, tuple)):
++        return any(_contains_sensitive_audit_key(item) for item in value)
++    return False
++
++
++def _validate_safe_audit_event(event: SafeAuditEvent) -> None:
++    if event.name not in SAFE_AUDIT_EVENT_NAMES_V1:
++        raise HostSpiRegistrationError("safe audit event is unavailable")
++    attributes = event.attributes
++    if _contains_sensitive_audit_key(attributes):
++        raise HostSpiRegistrationError("safe audit event is unavailable")
++    if set(attributes) - _AUDIT_ALLOWED_ATTRIBUTES[event.name]:
++        raise HostSpiRegistrationError("safe audit event is unavailable")
++    for key, value in attributes.items():
++        if key in {"revision", "subscription_id"}:
++            if type(value) is not int or value < 0:
++                raise HostSpiRegistrationError("safe audit event is unavailable")
++        else:
++            try:
++                normalized = _canonical_text(value, f"audit.{key}")
++            except (TypeError, ValueError):
++                raise HostSpiRegistrationError(
++                    "safe audit event is unavailable"
++                ) from None
++            allowed_values = _AUDIT_ALLOWED_VALUES.get(key)
++            if allowed_values is not None and normalized not in allowed_values:
++                raise HostSpiRegistrationError("safe audit event is unavailable")
++
++
++@dataclass(frozen=True, repr=False)
++class DisplaySafeEventV1:
++    event_type: str
++    payload: Mapping[str, str]
++
++    def __post_init__(self) -> None:
++        event_type = _canonical_text(self.event_type, "event_type")
++        if event_type not in DISPLAY_SAFE_EVENT_TYPES_V1:
++            raise ValueError("event_type is not display-safe v1")
++        payload = _frozen_payload(self.payload)
++        fields = frozenset(payload)
++        required = _EVENT_REQUIRED_FIELDS[event_type]
++        allowed = required | _EVENT_OPTIONAL_FIELDS[event_type]
++        if not required.issubset(fields) or not fields.issubset(allowed):
++            raise ValueError("display-safe payload schema mismatch")
++        if event_type == "tool.status" and payload["status"] not in _TOOL_STATUSES:
++            raise ValueError("tool status is unavailable")
++        if (
++            event_type == "session.status"
++            and payload["status"] not in _SESSION_STATUSES
++        ):
++            raise ValueError("session status is unavailable")
++        object.__setattr__(self, "payload", payload)
++
++    def __repr__(self) -> str:
++        return (
++            "DisplaySafeEventV1("
++            f"event_type={self.event_type!r}, payload=[REDACTED])"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class ObserverSnapshotV1:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    watermark: int
++    events: tuple[ObserverEvent, ...] = field(default_factory=tuple)
++
++    def __post_init__(self) -> None:
++        _canonical_text(self.profile, "profile")
++        _canonical_text(self.durable_session_key, "durable_session_key")
++        _canonical_text(self.runtime_generation, "runtime_generation")
++        if type(self.watermark) is not int or self.watermark < 0:
++            raise ValueError("watermark must be a non-negative integer")
++        events = tuple(self.events)
++        if len(events) > MAX_SNAPSHOT_EVENTS:
++            raise ValueError("snapshot contains too many events")
++        if any(
++            event.profile != self.profile
++            or event.durable_session_key != self.durable_session_key
++            or event.runtime_generation != self.runtime_generation
++            for event in events
++        ):
++            raise ValueError("snapshot event identity mismatch")
++        object.__setattr__(self, "events", events)
++
++    def __repr__(self) -> str:
++        return (
++            "ObserverSnapshotV1("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, "
++            f"watermark={self.watermark!r}, events=[REDACTED])"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class SessionAuthorityBinding:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    controller_id: str
++    lease_deadline_monotonic: float
++    revision: int
++
++    def __repr__(self) -> str:
++        return (
++            "SessionAuthorityBinding("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, "
++            "controller_id=[REDACTED], "
++            f"lease_deadline_monotonic={self.lease_deadline_monotonic!r}, "
++            f"revision={self.revision!r})"
++        )
++
++
++@dataclass
++class _SessionRecord:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    controller_id: str | None = None
++    lease_deadline_monotonic: float = 0.0
++    revision: int = 0
++    token: object | None = None
++    lease_registration: Registration | None = None
++    sequence: int = 0
++    snapshot_events: deque[ObserverEvent] = field(
++        default_factory=lambda: deque(maxlen=MAX_SNAPSHOT_EVENTS)
++    )
++
++
++class _SessionAuthorityRegistration:
++    def __init__(
++        self,
++        registry: "SessionAuthorityRegistry",
++        identity: tuple[str, str],
++        token: object,
++    ) -> None:
++        self._registry = registry
++        self._identity = identity
++        self._token = token
++        self._lock = threading.Lock()
++        self._closed = False
++
++    def close(self) -> None:
++        with self._lock:
++            if self._closed:
++                return
++            self._registry._close_binding(self._identity, self._token)
++            self._closed = True
++
++
++class SessionAuthorityRegistry:
++    """Linearizable authority bindings sharing the observer runtime lock."""
++
++    def __init__(
++        self,
++        lock: threading.RLock | None = None,
++        *,
++        runtime_generation: str,
++        clock: _MonotonicGuard,
++        deadline_scheduler: Any,
++    ) -> None:
++        self._lock = lock or threading.RLock()
++        self._records: dict[tuple[str, str], _SessionRecord] = {}
++        self._runtime_generation = _canonical_text(
++            runtime_generation, "runtime_generation"
++        )
++        self._clock = clock
++        self._deadline_scheduler = deadline_scheduler
++        self._closed = False
++        self._revocation_listener: Callable[[SessionAuthorityBinding], None] | None = (
++            None
++        )
++
++    def set_revocation_listener(
++        self,
++        listener: Callable[[SessionAuthorityBinding], None],
++    ) -> None:
++        with self._lock:
++            if self._revocation_listener is not None:
++                raise RuntimeError("authority revocation listener already configured")
++            self._revocation_listener = listener
++
++    @property
++    def runtime_generation(self) -> str:
++        with self._lock:
++            return self._runtime_generation
++
++    def bind(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++        controller_id: str,
++        expected_revision: int,
++        lease_deadline_monotonic: float,
++    ) -> Registration:
++        profile = _canonical_text(profile, "profile")
++        durable_session_key = _canonical_text(
++            durable_session_key, "durable_session_key"
++        )
++        runtime_generation = _canonical_text(
++            runtime_generation, "runtime_generation"
++        )
++        controller_id = _canonical_text(controller_id, "controller_id")
++        if type(expected_revision) is not int or expected_revision < 0:
++            raise ValueError("expected_revision must be a non-negative integer")
++        lease_deadline_monotonic = _finite_number(
++            lease_deadline_monotonic,
++            "lease deadline",
++            positive=True,
++        )
++        identity = (profile, durable_session_key)
++        token = object()
++        revoked: list[SessionAuthorityBinding] = []
++        registrations_to_close: list[Registration] = []
++        with self._lock:
++            if self._closed:
++                raise HostSpiUnavailableError()
++            now = self._clock.read()
++            if lease_deadline_monotonic <= now:
++                raise HostSpiUnavailableError()
++            record = self._records.get(identity)
++            current_revision = record.revision if record is not None else 0
++            if current_revision != expected_revision:
++                raise HostSpiUnavailableError()
++            lease_is_live = (
++                record is not None
++                and record.token is not None
++                and record.lease_deadline_monotonic > now
++            )
++            if (
++                lease_is_live
++                and record is not None
++                and record.controller_id != controller_id
++            ):
++                raise HostSpiUnavailableError()
++
++            revision = current_revision + 1
++            lease_duration = _finite_number(
++                lease_deadline_monotonic - now,
++                "lease duration",
++                positive=True,
++            )
++            callback_state = {"armed": False, "fired": False}
++            callback_lock = threading.Lock()
++
++            def expire_candidate() -> None:
++                with callback_lock:
++                    if not callback_state["armed"]:
++                        callback_state["fired"] = True
++                        return
++                self._expire_binding(identity, token, revision)
++
++            schedule_failed = False
++            try:
++                lease_registration = self._deadline_scheduler.schedule(
++                    lease_duration,
++                    expire_candidate,
++                )
++            except BaseException:
++                schedule_failed = True
++                lease_registration = None
++            if schedule_failed or lease_registration is None:
++                if lease_registration is not None:
++                    try:
++                        lease_registration.close()
++                    except BaseException:
++                        pass
++                raise HostSpiUnavailableError()
++
++            with callback_lock:
++                early_fire = callback_state["fired"]
++                if not early_fire:
++                    generation_rollover = (
++                        runtime_generation != self._runtime_generation
++                    )
++                    if generation_rollover:
++                        for other in self._records.values():
++                            if other.token is None:
++                                continue
++                            revoked.append(self._binding_for_record(other))
++                            if other.lease_registration is not None:
++                                registrations_to_close.append(
++                                    other.lease_registration
++                                )
++                            other.lease_registration = None
++                            other.token = None
++                            other.controller_id = None
++                            other.lease_deadline_monotonic = 0.0
++                            if other is not record:
++                                other.revision += 1
++                        self._runtime_generation = runtime_generation
++                    elif record is not None and record.token is not None:
++                        revoked.append(self._binding_for_record(record))
++                        if record.lease_registration is not None:
++                            registrations_to_close.append(
++                                record.lease_registration
++                            )
++
++                    if record is None:
++                        record = _SessionRecord(
++                            profile=profile,
++                            durable_session_key=durable_session_key,
++                            runtime_generation=runtime_generation,
++                        )
++                        self._records[identity] = record
++                    elif record.runtime_generation != runtime_generation:
++                        record.snapshot_events.clear()
++                    record.runtime_generation = runtime_generation
++                    record.controller_id = controller_id
++                    record.lease_deadline_monotonic = lease_deadline_monotonic
++                    record.revision = revision
++                    record.token = token
++                    record.lease_registration = lease_registration
++                    callback_state["armed"] = True
++            if early_fire:
++                try:
++                    lease_registration.close()
++                except BaseException:
++                    pass
++                raise HostSpiUnavailableError()
++        for registration in registrations_to_close:
++            try:
++                registration.close()
++            except BaseException:
++                continue
++        for binding in revoked:
++            self._notify_revoked(binding)
++        return _SessionAuthorityRegistration(self, identity, token)
++
++    def resolve(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++    ) -> SessionAuthorityBinding:
++        with self._lock:
++            record = self._resolve_locked(
++                profile,
++                durable_session_key,
++                runtime_generation,
++            )
++            return SessionAuthorityBinding(
++                record.profile,
++                record.durable_session_key,
++                record.runtime_generation,
++                record.controller_id,
++                record.lease_deadline_monotonic,
++                record.revision,
++            )
++
++    def current_sequence(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++    ) -> int:
++        with self._lock:
++            return self._resolve_locked(
++                profile,
++                durable_session_key,
++                runtime_generation,
++            ).sequence
++
++    def _resolve_locked(
++        self,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++    ) -> _SessionRecord:
++        if self._closed:
++            raise HostSpiUnavailableError()
++        record = self._records.get((profile, durable_session_key))
++        if (
++            record is None
++            or record.token is None
++            or record.runtime_generation != runtime_generation
++            or record.runtime_generation != self._runtime_generation
++            or record.lease_deadline_monotonic <= self._clock.read()
++        ):
++            raise HostSpiUnavailableError()
++        return record
++
++    def _is_current_locked(
++        self,
++        request: ObserverRequest,
++        authority_revision: int,
++    ) -> bool:
++        if self._closed:
++            return False
++        record = self._records.get(
++            (request.profile, request.durable_session_key)
++        )
++        return (
++            record is not None
++            and record.token is not None
++            and record.runtime_generation == request.runtime_generation
++            and record.runtime_generation == self._runtime_generation
++            and record.lease_deadline_monotonic > self._clock.read()
++            and record.revision == authority_revision
++        )
++
++    def _close_binding(self, identity: tuple[str, str], token: object) -> None:
++        revoked: SessionAuthorityBinding | None = None
++        with self._lock:
++            current = self._records.get(identity)
++            if current is None or current.token is not token:
++                return
++            revoked = self._binding_for_record(current)
++            if current.lease_registration is not None:
++                current.lease_registration.close()
++                current.lease_registration = None
++            current.token = None
++            current.controller_id = None
++            current.lease_deadline_monotonic = 0.0
++        self._notify_revoked(revoked)
++
++    def close_all(self) -> None:
++        with self._lock:
++            if self._closed:
++                return
++            self._closed = True
++            revoked = [
++                self._binding_for_record(record)
++                for record in self._records.values()
++                if record.token is not None
++            ]
++            for record in self._records.values():
++                if record.lease_registration is not None:
++                    record.lease_registration.close()
++                    record.lease_registration = None
++            self._records.clear()
++        for binding in revoked:
++            self._notify_revoked(binding)
++
++    def _notify_revoked(self, binding: SessionAuthorityBinding) -> None:
++        listener = self._revocation_listener
++        if listener is not None:
++            listener(binding)
++
++    def _expire_binding(
++        self,
++        identity: tuple[str, str],
++        token: object,
++        revision: int,
++    ) -> None:
++        revoked: SessionAuthorityBinding | None = None
++        with self._lock:
++            record = self._records.get(identity)
++            if (
++                record is None
++                or record.token is not token
++                or record.revision != revision
++            ):
++                return
++            revoked = self._binding_for_record(record)
++            record.token = None
++            record.controller_id = None
++            record.lease_deadline_monotonic = 0.0
++            record.lease_registration = None
++        try:
++            self._notify_revoked(revoked)
++        except BaseException:
++            return
++
++    @staticmethod
++    def _binding_for_record(record: _SessionRecord) -> SessionAuthorityBinding:
++        if record.controller_id is None:
++            raise HostSpiUnavailableError()
++        return SessionAuthorityBinding(
++            record.profile,
++            record.durable_session_key,
++            record.runtime_generation,
++            record.controller_id,
++            record.lease_deadline_monotonic,
++            record.revision,
++        )
++
++
++class _CleanupState(str, Enum):
++    OPEN = "open"
++    CLOSING = "closing"
++    CLOSED = "closed"
++
++
++class _RetryableCleanup:
++    def __init__(self, registration: Registration) -> None:
++        self._registration = registration
++        self._condition = threading.Condition(threading.RLock())
++        self._state = _CleanupState.OPEN
++        self._closing_thread: int | None = None
++
++    @property
++    def closed(self) -> bool:
++        with self._condition:
++            return self._state is _CleanupState.CLOSED
++
++    def close(self) -> None:
++        current_thread = threading.get_ident()
++        with self._condition:
++            while self._state is _CleanupState.CLOSING:
++                if self._closing_thread == current_thread:
++                    raise HostSpiRegistrationError(
++                        "observer cleanup lifecycle re-entry is unavailable"
++                    )
++                self._condition.wait()
++            if self._state is _CleanupState.CLOSED:
++                return
++            self._state = _CleanupState.CLOSING
++            self._closing_thread = current_thread
++        try:
++            self._registration.close()
++        except BaseException:
++            with self._condition:
++                self._state = _CleanupState.OPEN
++                self._closing_thread = None
++                self._condition.notify_all()
++            raise
++        with self._condition:
++            self._state = _CleanupState.CLOSED
++            self._closing_thread = None
++            self._condition.notify_all()
++
++
++class _NoopRegistration:
++    def close(self) -> None:
++        return
++
++
++class _TimerRegistration:
++    def __init__(self, timer: threading.Timer) -> None:
++        self._timer = timer
++
++    def close(self) -> None:
++        self._timer.cancel()
++
++
++class _TimerDeadlineScheduler:
++    def schedule(
++        self,
++        delay_seconds: float,
++        callback: Callable[[], None],
++    ) -> Registration:
++        delay_seconds = _finite_number(
++            delay_seconds,
++            "deadline delay",
++            positive=True,
++        )
++        timer: threading.Timer | None = None
++        start_failed = False
++        try:
++            timer = threading.Timer(delay_seconds, callback)
++            timer.daemon = True
++            timer.start()
++        except BaseException:
++            start_failed = True
++        if start_failed:
++            if timer is not None:
++                try:
++                    timer.cancel()
++                except BaseException:
++                    pass
++            raise HostSpiUnavailableError()
++        if timer is None:
++            raise HostSpiUnavailableError()
++        return _TimerRegistration(timer)
++
++
++class _ObserverState(str, Enum):
++    PREPARED = "prepared"
++    ACTIVE = "active"
++    CLOSING = "closing"
++    CLOSED = "closed"
++
++
++@dataclass
++class _Subscription:
++    identifier: int
++    request: ObserverRequest
++    authority_revision: int
++    sink: EventSink
++    snapshot: ObserverSnapshotV1
++    activation_deadline_monotonic: float
++    cleanup: _RetryableCleanup
++    state: _ObserverState = _ObserverState.PREPARED
++    queue: deque[ObserverEvent] = field(default_factory=deque)
++    deadline_registration: Registration | None = None
++    worker: threading.Thread | None = None
++    cleanup_scheduled: bool = False
++    finish_lock: threading.Lock = field(default_factory=threading.Lock)
++
++
++@dataclass(frozen=True)
++class ObserverCloseFailure:
++    error_type: str
++
++
++@dataclass(frozen=True)
++class ObserverFailureStatus:
++    subscription_id: int
++    category: str
++    lifecycle_state: str
++
++
++class _PreparedObserver:
++    def __init__(self, broker: "ObserverBroker", subscription: _Subscription) -> None:
++        self._broker = broker
++        self._identifier = subscription.identifier
++        self.snapshot = subscription.snapshot
++        self.activation_deadline_monotonic = (
++            subscription.activation_deadline_monotonic
++        )
++
++    def activate(self) -> Registration:
++        return self._broker.activate(self._identifier)
++
++    def close(self) -> None:
++        self._broker.close_subscription(self._identifier, prepared_only=True)
++
++
++class _ActiveObserverRegistration:
++    def __init__(self, broker: "ObserverBroker", identifier: int) -> None:
++        self._broker = broker
++        self._identifier = identifier
++
++    def close(self) -> None:
++        self._broker.close_subscription(self._identifier)
++
++
++class ObserverBroker:
++    def __init__(
++        self,
++        sessions: SessionAuthorityRegistry,
++        lock: threading.RLock,
++        *,
++        activation_timeout_seconds: float,
++        deadline_scheduler: Any,
++        cleanup_factory: Callable[[ObserverRequest], Registration],
++        close_timeout_seconds: float,
++        clock: _MonotonicGuard,
++    ) -> None:
++        activation_timeout_seconds = _finite_number(
++            activation_timeout_seconds,
++            "activation timeout",
++            positive=True,
++        )
++        close_timeout_seconds = _finite_number(
++            close_timeout_seconds,
++            "observer close timeout",
++            positive=True,
++        )
++        self._sessions = sessions
++        self._condition = threading.Condition(lock)
++        self._activation_timeout_seconds = activation_timeout_seconds
++        self._deadline_scheduler = deadline_scheduler
++        self._cleanup_factory = cleanup_factory
++        self._close_timeout_seconds = close_timeout_seconds
++        self._clock = clock
++        self._subscriptions: dict[int, _Subscription] = {}
++        self._order: list[int] = []
++        self._next_identifier = 1
++        self._accepting = True
++        self._failure_statuses: deque[ObserverFailureStatus] = deque(
++            maxlen=MAX_OBSERVER_FAILURE_HISTORY
++        )
++        self._failure_counters: dict[str, int] = {}
++
++    @property
++    def prepared_count(self) -> int:
++        with self._condition:
++            return sum(
++                subscription.state is _ObserverState.PREPARED
++                for subscription in self._subscriptions.values()
++            )
++
++    @property
++    def active_count(self) -> int:
++        with self._condition:
++            return sum(
++                subscription.state is _ObserverState.ACTIVE
++                for subscription in self._subscriptions.values()
++            )
++
++    @property
++    def pending_cleanup_count(self) -> int:
++        with self._condition:
++            return sum(
++                subscription.state is _ObserverState.CLOSING
++                for subscription in self._subscriptions.values()
++            )
++
++    @property
++    def blocked_delivery_count(self) -> int:
++        with self._condition:
++            return sum(
++                subscription.state is _ObserverState.CLOSING
++                and subscription.worker is not None
++                and subscription.worker.is_alive()
++                for subscription in self._subscriptions.values()
++            )
++
++    @property
++    def failure_statuses(self) -> tuple[ObserverFailureStatus, ...]:
++        with self._condition:
++            return tuple(self._failure_statuses)
++
++    @property
++    def failure_counters(self) -> Mapping[str, int]:
++        with self._condition:
++            return MappingProxyType(dict(self._failure_counters))
++
++    def wait_for_pending_cleanup(self, *, minimum: int, timeout: float) -> bool:
++        if type(minimum) is not int or minimum < 0:
++            raise ValueError("minimum must be a non-negative integer")
++        timeout = _finite_number(timeout, "wait timeout", positive=True)
++        with self._condition:
++            return self._condition.wait_for(
++                lambda: sum(
++                    subscription.state is _ObserverState.CLOSING
++                    for subscription in self._subscriptions.values()
++                )
++                >= minimum,
++                timeout=timeout,
++            )
++
++    def prepare_observer(
++        self,
++        request: ObserverRequest,
++        sink: EventSink,
++    ) -> _PreparedObserver:
++        if not callable(sink):
++            raise HostSpiRegistrationError("observer sink must be callable")
++        cleanup_registration = self._cleanup_factory(request)
++        if not callable(getattr(cleanup_registration, "close", None)):
++            raise HostSpiRegistrationError(
++                "observer cleanup factory must return a Registration"
++            )
++        cleanup = _RetryableCleanup(cleanup_registration)
++        subscription: _Subscription | None = None
++        try:
++            with self._condition:
++                if not self._accepting:
++                    raise HostSpiUnavailableError()
++                closing_count = sum(
++                    item.state is _ObserverState.CLOSING
++                    for item in self._subscriptions.values()
++                )
++                if (
++                    len(self._subscriptions) >= MAX_OBSERVERS_TOTAL
++                    or closing_count >= MAX_BLOCKED_OBSERVERS
++                ):
++                    raise HostSpiUnavailableError()
++                record = self._sessions._resolve_locked(
++                    request.profile,
++                    request.durable_session_key,
++                    request.runtime_generation,
++                )
++                scope_count = sum(
++                    self._matches(
++                        item.request,
++                        request.profile,
++                        request.durable_session_key,
++                        request.runtime_generation,
++                    )
++                    for item in self._subscriptions.values()
++                )
++                if scope_count >= MAX_OBSERVERS_PER_SCOPE:
++                    raise HostSpiUnavailableError()
++                snapshot = ObserverSnapshotV1(
++                    profile=record.profile,
++                    durable_session_key=record.durable_session_key,
++                    runtime_generation=record.runtime_generation,
++                    watermark=record.sequence,
++                    events=tuple(record.snapshot_events),
++                )
++                identifier = self._next_identifier
++                self._next_identifier += 1
++                try:
++                    deadline = _finite_number(
++                        self._clock.read() + self._activation_timeout_seconds,
++                        "activation deadline",
++                    )
++                except (ObserverClockError, ValueError):
++                    raise HostSpiUnavailableError() from None
++                subscription = _Subscription(
++                    identifier=identifier,
++                    request=request,
++                    authority_revision=record.revision,
++                    sink=sink,
++                    snapshot=snapshot,
++                    activation_deadline_monotonic=deadline,
++                    cleanup=cleanup,
++                )
++                self._subscriptions[identifier] = subscription
++                self._order.append(identifier)
++            deadline_registration = self._deadline_scheduler.schedule(
++                self._activation_timeout_seconds,
++                lambda: self._expire(identifier),
++            )
++            with self._condition:
++                subscription.deadline_registration = deadline_registration
++                if subscription.state is not _ObserverState.PREPARED:
++                    deadline_registration.close()
++                    expired_before_return = True
++                else:
++                    expired_before_return = False
++            if expired_before_return:
++                raise ObserverStateError()
++            return _PreparedObserver(self, subscription)
++        except BaseException:
++            if subscription is not None:
++                self._transition_to_closing(subscription)
++                self._finish_close(subscription)
++            else:
++                cleanup.close()
++            raise
++
++    def activate(self, identifier: int) -> Registration:
++        subscription: _Subscription | None
++        worker_start_failed = False
++        with self._condition:
++            subscription = self._subscriptions.get(identifier)
++            if (
++                subscription is None
++                or subscription.state is not _ObserverState.PREPARED
++            ):
++                raise ObserverStateError()
++            try:
++                expired = (
++                    self._clock.read()
++                    >= subscription.activation_deadline_monotonic
++                    or not self._sessions._is_current_locked(
++                        subscription.request,
++                        subscription.authority_revision,
++                    )
++                )
++            except ObserverClockError:
++                expired = True
++            if expired:
++                self._transition_to_closing_locked(subscription)
++                rejected = True
++            else:
++                subscription.state = _ObserverState.ACTIVE
++                if subscription.deadline_registration is not None:
++                    subscription.deadline_registration.close()
++                    subscription.deadline_registration = None
++                worker = threading.Thread(
++                    target=self._worker,
++                    args=(subscription,),
++                    name=f"hermes-observer-{identifier}",
++                    daemon=True,
++                )
++                subscription.worker = worker
++                rejected = False
++                try:
++                    worker.start()
++                except BaseException:
++                    worker_start_failed = True
++                    self._transition_to_closing_locked(subscription)
++                    self._record_failure_locked(
++                        subscription,
++                        "worker_start_failed",
++                    )
++        if rejected:
++            self._finish_close(subscription)
++            raise ObserverStateError()
++        if worker_start_failed:
++            try:
++                self._finish_close(subscription)
++            except BaseException:
++                pass
++            raise HostSpiRegistrationError("observer worker start failed")
++        return _ActiveObserverRegistration(self, identifier)
++
++    def close_subscription(
++        self,
++        identifier: int,
++        *,
++        prepared_only: bool = False,
++    ) -> None:
++        with self._condition:
++            subscription = self._subscriptions.get(identifier)
++            if subscription is None or subscription.state is _ObserverState.CLOSED:
++                return
++            if prepared_only and subscription.state is _ObserverState.ACTIVE:
++                return
++            self._transition_to_closing_locked(subscription)
++        self._finish_close(subscription)
++
++    def publish(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++        sequence: int,
++        display_event: DisplaySafeEventV1,
++    ) -> ObserverEvent:
++        retire: list[_Subscription] = []
++        with self._condition:
++            record = self._sessions._resolve_locked(
++                profile,
++                durable_session_key,
++                runtime_generation,
++            )
++            if type(sequence) is not int or sequence != record.sequence + 1:
++                retire = self._retire_scope_locked(
++                    profile,
++                    durable_session_key,
++                    runtime_generation,
++                    record.revision,
++                )
++                sequence_error = True
++            else:
++                sequence_error = False
++                event = ObserverEvent(
++                    profile=profile,
++                    durable_session_key=durable_session_key,
++                    runtime_generation=runtime_generation,
++                    sequence=sequence,
++                    event_type=display_event.event_type,
++                    payload=display_event.payload,
++                )
++                if self._event_size(event) > MAX_OBSERVER_FRAME_BYTES:
++                    retire = self._retire_scope_locked(
++                        profile,
++                        durable_session_key,
++                        runtime_generation,
++                        record.revision,
++                    )
++                    frame_error = True
++                else:
++                    frame_error = False
++                    record.sequence = sequence
++                    record.snapshot_events.append(event)
++                    for subscription in list(self._subscriptions.values()):
++                        if (
++                            subscription.state
++                            not in {_ObserverState.PREPARED, _ObserverState.ACTIVE}
++                            or subscription.authority_revision != record.revision
++                            or not self._matches(
++                                subscription.request,
++                                profile,
++                                durable_session_key,
++                                runtime_generation,
++                            )
++                        ):
++                            continue
++                        if len(subscription.queue) >= MAX_OBSERVER_QUEUE_FRAMES:
++                            self._transition_to_closing_locked(subscription)
++                            retire.append(subscription)
++                            continue
++                        subscription.queue.append(event)
++                    self._condition.notify_all()
++        for subscription in retire:
++            self._schedule_finish_close(subscription)
++        if sequence_error:
++            raise ObserverSequenceError()
++        if frame_error:
++            raise ObserverFrameError()
++        return event
++
++    def reject_unsafe_event(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++    ) -> None:
++        with self._condition:
++            record = self._sessions._resolve_locked(
++                profile,
++                durable_session_key,
++                runtime_generation,
++            )
++            retire = self._retire_scope_locked(
++                profile,
++                durable_session_key,
++                runtime_generation,
++                record.revision,
++            )
++        for subscription in retire:
++            self._schedule_finish_close(subscription)
++
++    def revoke_scope(self, binding: SessionAuthorityBinding) -> None:
++        with self._condition:
++            retire = self._retire_scope_locked(
++                binding.profile,
++                binding.durable_session_key,
++                binding.runtime_generation,
++                binding.revision,
++            )
++        for subscription in retire:
++            try:
++                self._finish_close(subscription)
++            except BaseException:
++                # The retryable cleanup remains registered for close_all().
++                continue
++
++    def close_all(self) -> tuple[ObserverCloseFailure, ...]:
++        failures: list[ObserverCloseFailure] = []
++        absolute_deadline = time.monotonic() + self._close_timeout_seconds
++        with self._condition:
++            self._accepting = False
++            work = [
++                self._subscriptions[identifier]
++                for identifier in reversed(self._order)
++                if identifier in self._subscriptions
++            ]
++            for subscription in work:
++                self._transition_to_closing_locked(subscription)
++        for subscription in work:
++            try:
++                self._finish_close(
++                    subscription,
++                    absolute_deadline=absolute_deadline,
++                )
++            except BaseException as error:
++                failures.append(ObserverCloseFailure(type(error).__name__))
++        return tuple(failures)
++
++    def _expire(self, identifier: int) -> None:
++        with self._condition:
++            subscription = self._subscriptions.get(identifier)
++            if (
++                subscription is None
++                or subscription.state is not _ObserverState.PREPARED
++            ):
++                return
++            self._transition_to_closing_locked(subscription)
++        try:
++            self._finish_close(subscription)
++        except BaseException:
++            return
++
++    def _worker(self, subscription: _Subscription) -> None:
++        while True:
++            with self._condition:
++                while (
++                    subscription.state is _ObserverState.ACTIVE
++                    and not subscription.queue
++                ):
++                    self._condition.wait()
++                if subscription.state is not _ObserverState.ACTIVE:
++                    self._condition.notify_all()
++                    return
++                try:
++                    is_current = self._sessions._is_current_locked(
++                        subscription.request,
++                        subscription.authority_revision,
++                    )
++                except ObserverClockError:
++                    self._transition_to_closing_locked(subscription)
++                    self._record_failure_locked(
++                        subscription,
++                        "clock_failed",
++                    )
++                    stale = True
++                else:
++                    if not is_current:
++                        self._transition_to_closing_locked(subscription)
++                        stale = True
++                    else:
++                        stale = False
++                        event = subscription.queue.popleft()
++            if stale:
++                self._schedule_finish_close(subscription)
++                return
++            try:
++                subscription.sink(event)
++            except BaseException:
++                with self._condition:
++                    self._transition_to_closing_locked(subscription)
++                    self._record_failure_locked(
++                        subscription,
++                        "sink_delivery_failed",
++                    )
++                self._schedule_finish_close(subscription)
++                return
++
++    def _transition_to_closing(self, subscription: _Subscription) -> None:
++        with self._condition:
++            self._transition_to_closing_locked(subscription)
++
++    def _transition_to_closing_locked(self, subscription: _Subscription) -> None:
++        if subscription.state in {_ObserverState.CLOSING, _ObserverState.CLOSED}:
++            return
++        subscription.state = _ObserverState.CLOSING
++        subscription.queue.clear()
++        if subscription.deadline_registration is not None:
++            subscription.deadline_registration.close()
++            subscription.deadline_registration = None
++        self._condition.notify_all()
++
++    def _finish_close(
++        self,
++        subscription: _Subscription,
++        *,
++        absolute_deadline: float | None = None,
++    ) -> None:
++        if absolute_deadline is None:
++            absolute_deadline = time.monotonic() + self._close_timeout_seconds
++        with subscription.finish_lock:
++            worker = subscription.worker
++            if (
++                worker is not None
++                and worker.is_alive()
++                and worker.ident != threading.get_ident()
++            ):
++                remaining = max(0.0, absolute_deadline - time.monotonic())
++                worker.join(timeout=remaining)
++                if worker.is_alive():
++                    with self._condition:
++                        subscription.state = _ObserverState.CLOSING
++                        subscription.cleanup_scheduled = False
++                        self._record_failure_locked(
++                            subscription,
++                            "delivery_blocked",
++                        )
++                    raise ObserverDeliveryBlockedError()
++            cleanup_error: BaseException | None = None
++            try:
++                subscription.cleanup.close()
++            except BaseException as error:
++                cleanup_error = error
++                with self._condition:
++                    subscription.state = _ObserverState.CLOSING
++                    subscription.cleanup_scheduled = False
++                    self._record_failure_locked(
++                        subscription,
++                        "cleanup_failed",
++                    )
++            if cleanup_error is not None:
++                if isinstance(cleanup_error, Exception):
++                    raise HostSpiRegistrationError("observer cleanup failed")
++                raise cleanup_error
++            with self._condition:
++                subscription.state = _ObserverState.CLOSED
++                subscription.cleanup_scheduled = False
++                self._subscriptions.pop(subscription.identifier, None)
++                if subscription.identifier in self._order:
++                    self._order.remove(subscription.identifier)
++                self._condition.notify_all()
++
++    def _schedule_finish_close(self, subscription: _Subscription) -> None:
++        with self._condition:
++            if subscription.cleanup_scheduled:
++                return
++            subscription.cleanup_scheduled = True
++
++        def finish() -> None:
++            try:
++                self._finish_close(subscription)
++            except BaseException:
++                return
++
++        thread = threading.Thread(
++            target=finish,
++            name=f"hermes-observer-cleanup-{subscription.identifier}",
++            daemon=True,
++        )
++        try:
++            thread.start()
++        except BaseException:
++            with self._condition:
++                subscription.cleanup_scheduled = False
++                self._record_failure_locked(
++                    subscription,
++                    "cleanup_worker_start_failed",
++                )
++            try:
++                self._finish_close(subscription)
++            except BaseException:
++                return
++
++    def _retire_scope_locked(
++        self,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++        authority_revision: int,
++    ) -> list[_Subscription]:
++        retire: list[_Subscription] = []
++        for subscription in list(self._subscriptions.values()):
++            if (
++                subscription.state
++                in {_ObserverState.PREPARED, _ObserverState.ACTIVE}
++                and subscription.authority_revision == authority_revision
++                and self._matches(
++                    subscription.request,
++                    profile,
++                    durable_session_key,
++                    runtime_generation,
++                )
++            ):
++                self._transition_to_closing_locked(subscription)
++                retire.append(subscription)
++        return retire
++
++    def _record_failure_locked(
++        self,
++        subscription: _Subscription,
++        category: str,
++    ) -> None:
++        self._failure_statuses.append(
++            ObserverFailureStatus(
++                subscription_id=subscription.identifier,
++                category=category,
++                lifecycle_state=subscription.state.value,
++            )
++        )
++        self._failure_counters[category] = (
++            self._failure_counters.get(category, 0) + 1
++        )
++
++    @staticmethod
++    def _matches(
++        request: ObserverRequest,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++    ) -> bool:
++        return (
++            request.profile == profile
++            and request.durable_session_key == durable_session_key
++            and request.runtime_generation == runtime_generation
++        )
++
++    @staticmethod
++    def _event_size(event: ObserverEvent) -> int:
++        encoded = json.dumps(
++            {
++                "profile": event.profile,
++                "durable_session_key": event.durable_session_key,
++                "runtime_generation": event.runtime_generation,
++                "sequence": event.sequence,
++                "event_type": event.event_type,
++                "payload": dict(event.payload),
++            },
++            ensure_ascii=False,
++            sort_keys=True,
++            separators=(",", ":"),
++            allow_nan=False,
++        ).encode("utf-8")
++        return len(encoded)
++
++
++class ExtensionHostFacadeV1:
++    host_api_version: Literal[1] = 1
++
++    def __init__(self, runtime: "ExtensionRuntimeV1") -> None:
++        self._runtime = runtime
++
++    def runtime_descriptor(self) -> RuntimeDescriptor:
++        return self._runtime.runtime_descriptor()
++
++    def prepare_observer(
++        self,
++        request: ObserverRequest,
++        sink: EventSink,
++    ) -> _PreparedObserver:
++        capabilities = self._runtime.capabilities
++        missing = request.required_capabilities - capabilities
++        if missing or request.observer_contract != 1:
++            raise HostSpiCapabilityError(
++                missing or {"session.observe.output-parity.v1"}
++            )
++        descriptor = self.runtime_descriptor()
++        if (
++            request.profile != descriptor.profile
++            or request.runtime_generation != descriptor.runtime_generation
++        ):
++            raise HostSpiUnavailableError()
++        return self._runtime.observers.prepare_observer(request, sink)
++
++    def register_local_endpoint(self, _endpoint: object) -> Registration:
++        raise HostSpiUnavailableError()
++
++    def control_snapshot(self, _scope: ControlScope) -> object:
++        raise HostSpiUnavailableError()
++
++    def invoke_owner_action(self, _request: OwnerActionRequest) -> object:
++        raise HostSpiUnavailableError()
++
++    def add_runtime_listener(self, _listener: object) -> Registration:
++        raise HostSpiUnavailableError()
++
++    def audit(self, event: SafeAuditEvent) -> None:
++        self._runtime.audit(event)
++
++
++class ExtensionRuntimeV1:
++    """Protocol-neutral Stage 2 runtime; not a production composition root."""
++
++    def __init__(
++        self,
++        *,
++        profile: str,
++        runtime_generation: str,
++        host_bundle_id: str,
++        activation_timeout_seconds: float = 3.0,
++        observer_close_timeout_seconds: float = 0.25,
++        deadline_scheduler: Any | None = None,
++        authority_deadline_scheduler: Any | None = None,
++        observer_cleanup_factory: Callable[[ObserverRequest], Registration]
++        | None = None,
++        audit_sink: Callable[[SafeAuditEvent], None] | None = None,
++        monotonic: Callable[[], float] = time.monotonic,
++    ) -> None:
++        self._profile = _canonical_text(profile, "profile")
++        self._runtime_generation = _canonical_text(
++            runtime_generation, "runtime_generation"
++        )
++        self._host_bundle_id = _canonical_text(host_bundle_id, "host_bundle_id")
++        activation_timeout_seconds = _finite_number(
++            activation_timeout_seconds,
++            "activation timeout",
++            positive=True,
++        )
++        observer_close_timeout_seconds = _finite_number(
++            observer_close_timeout_seconds,
++            "observer close timeout",
++            positive=True,
++        )
++        if audit_sink is not None and not callable(audit_sink):
++            raise ValueError("audit sink must be callable")
++        self._lock = threading.RLock()
++        self._clock = _MonotonicGuard(monotonic)
++        self._audit_sink = audit_sink
++        self._accepting = True
++        self.sessions = SessionAuthorityRegistry(
++            self._lock,
++            runtime_generation=self._runtime_generation,
++            clock=self._clock,
++            deadline_scheduler=(
++                authority_deadline_scheduler or _TimerDeadlineScheduler()
++            ),
++        )
++        self.observers = ObserverBroker(
++            self.sessions,
++            self._lock,
++            activation_timeout_seconds=activation_timeout_seconds,
++            deadline_scheduler=deadline_scheduler or _TimerDeadlineScheduler(),
++            cleanup_factory=observer_cleanup_factory or (lambda _request: _NoopRegistration()),
++            close_timeout_seconds=observer_close_timeout_seconds,
++            clock=self._clock,
++        )
++        self.sessions.set_revocation_listener(self.observers.revoke_scope)
++        self.host = ExtensionHostFacadeV1(self)
++
++    @property
++    def capabilities(self) -> frozenset[str]:
++        with self._lock:
++            if not self._accepting:
++                return frozenset()
++            capabilities = {
++                "extension.lifecycle.v1",
++                "runtime.descriptor.v1",
++                "session.observe.v1",
++            }
++            if self._audit_sink is not None:
++                capabilities.add("audit.safe.v1")
++            return frozenset(capabilities)
++
++    def runtime_descriptor(self) -> RuntimeDescriptor:
++        with self._lock:
++            return RuntimeDescriptor(
++                profile=self._profile,
++                runtime_generation=self.sessions.runtime_generation,
++                host_bundle_id=self._host_bundle_id,
++                state="ready" if self._accepting else "unavailable",
++                capabilities={capability: 1 for capability in self.capabilities},
++            )
++
++    def publish_event(
++        self,
++        *,
++        profile: str,
++        durable_session_key: str,
++        runtime_generation: str,
++        sequence: int,
++        event_type: str,
++        payload: Mapping[str, object],
++    ) -> ObserverEvent:
++        with self._lock:
++            if not self._accepting:
++                raise HostSpiUnavailableError()
++        try:
++            display_event = DisplaySafeEventV1(
++                event_type=event_type,
++                payload=payload,  # type: ignore[arg-type]
++            )
++        except (TypeError, ValueError, UnicodeError):
++            self.observers.reject_unsafe_event(
++                profile=profile,
++                durable_session_key=durable_session_key,
++                runtime_generation=runtime_generation,
++            )
++            raise ObserverFrameError() from None
++        return self.observers.publish(
++            profile=profile,
++            durable_session_key=durable_session_key,
++            runtime_generation=runtime_generation,
++            sequence=sequence,
++            display_event=display_event,
++        )
++
++    def audit(self, event: SafeAuditEvent) -> None:
++        if not isinstance(event, SafeAuditEvent):
++            raise HostSpiRegistrationError("safe audit event is unavailable")
++        with self._lock:
++            if not self._accepting:
++                raise HostSpiUnavailableError()
++            if (
++                event.profile != self._profile
++                or event.runtime_generation != self.sessions.runtime_generation
++            ):
++                raise HostSpiUnavailableError()
++        sink = self._audit_sink
++        if sink is None:
++            raise HostSpiUnavailableError()
++        try:
++            _validate_safe_audit_event(event)
++        except HostSpiRegistrationError:
++            raise
++        except BaseException:
++            raise HostSpiRegistrationError(
++                "safe audit event is unavailable"
++            ) from None
++        delivery_failed = False
++        try:
++            sink(event)
++        except BaseException:
++            delivery_failed = True
++        if delivery_failed:
++            raise HostSpiRegistrationError("safe audit sink failed")
++
++    def close(self) -> tuple[ObserverCloseFailure, ...]:
++        with self._lock:
++            self._accepting = False
++        failures = self.observers.close_all()
++        self.sessions.close_all()
++        return failures
++
++
++__all__ = [
++    "DISPLAY_SAFE_EVENT_TYPES_V1",
++    "MAX_BLOCKED_OBSERVERS",
++    "MAX_OBSERVER_FRAME_BYTES",
++    "MAX_OBSERVER_FAILURE_HISTORY",
++    "MAX_OBSERVER_QUEUE_FRAMES",
++    "MAX_OBSERVERS_PER_SCOPE",
++    "MAX_OBSERVERS_TOTAL",
++    "SAFE_AUDIT_EVENT_NAMES_V1",
++    "DisplaySafeEventV1",
++    "ExtensionHostFacadeV1",
++    "ExtensionRuntimeV1",
++    "ObserverCloseFailure",
++    "ObserverClockError",
++    "ObserverDeliveryBlockedError",
++    "ObserverFailureStatus",
++    "ObserverFrameError",
++    "ObserverSequenceError",
++    "ObserverSnapshotV1",
++    "ObserverStateError",
++    "SessionAuthorityBinding",
++    "SessionAuthorityRegistry",
++]
+diff --git a/tests/hermes_cli/test_extension_runtime_stage2.py b/tests/hermes_cli/test_extension_runtime_stage2.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..8f186d71a50c3fd86d79ef6ea1b1ed1681cb187a
+--- /dev/null
++++ b/tests/hermes_cli/test_extension_runtime_stage2.py
+@@ -0,0 +1,2134 @@
++"""Behavior tests for the internal Stage 2 session authority and observer runtime."""
++
++from __future__ import annotations
++
++import json
++import threading
++import time
++from dataclasses import FrozenInstanceError
++from typing import Callable
++
++import pytest
++
++from hermes_cli.extension_host_v1 import (
++    HostSpiCapabilityError,
++    HostSpiRegistrationError,
++    HostSpiUnavailableError,
++    ObserverRequest,
++    OwnerActionRequest,
++    SafeAuditEvent,
++)
++import hermes_cli.extension_runtime as runtime_module
++from hermes_cli.extension_runtime import (
++    DISPLAY_SAFE_EVENT_TYPES_V1,
++    MAX_OBSERVER_FRAME_BYTES,
++    MAX_OBSERVER_QUEUE_FRAMES,
++    DisplaySafeEventV1,
++    ExtensionRuntimeV1,
++    ObserverDeliveryBlockedError,
++    ObserverFrameError,
++    ObserverSequenceError,
++    ObserverStateError,
++)
++
++
++def _wait_until(predicate: Callable[[], bool], *, timeout: float = 3.0) -> None:
++    deadline = time.monotonic() + timeout
++    while time.monotonic() < deadline:
++        if predicate():
++            return
++        time.sleep(0.005)
++    raise AssertionError("condition did not become true before timeout")
++
++
++class _RecordingSink:
++    def __init__(self) -> None:
++        self.events = []
++        self._lock = threading.Lock()
++
++    def __call__(self, event) -> None:
++        with self._lock:
++            self.events.append(event)
++
++    @property
++    def count(self) -> int:
++        with self._lock:
++            return len(self.events)
++
++
++class _BlockingSink(_RecordingSink):
++    def __init__(self) -> None:
++        super().__init__()
++        self.started = threading.Event()
++        self.release = threading.Event()
++
++    def __call__(self, event) -> None:
++        self.started.set()
++        if not self.release.wait(timeout=5):
++            raise RuntimeError("blocking sink timed out")
++        super().__call__(event)
++
++
++class _PermanentBlockingSink:
++    def __init__(self) -> None:
++        self.started = threading.Event()
++        self.release_for_test_cleanup = threading.Event()
++
++    def __call__(self, _event) -> None:
++        self.started.set()
++        self.release_for_test_cleanup.wait()
++
++
++class _BlockingFailingSink(_PermanentBlockingSink):
++    def __call__(self, event) -> None:
++        super().__call__(event)
++        raise RuntimeError("private sink failure")
++
++
++class _FailingSink:
++    def __init__(self) -> None:
++        self.calls = 0
++
++    def __call__(self, _event) -> None:
++        self.calls += 1
++        raise RuntimeError("private sink detail")
++
++
++class _CloseRegistration:
++    def __init__(
++        self,
++        label: str,
++        events: list[str],
++        *,
++        failures: int = 0,
++    ) -> None:
++        self.label = label
++        self.events = events
++        self.failures = failures
++        self.attempts = 0
++
++    def close(self) -> None:
++        self.attempts += 1
++        self.events.append(f"close:{self.label}")
++        if self.failures:
++            self.failures -= 1
++            raise RuntimeError("private close detail")
++
++
++class _ScheduledHandle:
++    def __init__(self) -> None:
++        self.cancelled = False
++
++    def close(self) -> None:
++        self.cancelled = True
++
++
++class _ManualDeadlineScheduler:
++    def __init__(self) -> None:
++        self.callbacks: list[Callable[[], None]] = []
++        self.handles: list[_ScheduledHandle] = []
++
++    def schedule(self, _delay_seconds: float, callback: Callable[[], None]):
++        handle = _ScheduledHandle()
++        self.callbacks.append(callback)
++        self.handles.append(handle)
++        return handle
++
++    def fire(self, index: int = -1) -> None:
++        # Fire even if cancellation won to exercise the lifecycle race gate.
++        self.callbacks[index]()
++
++
++class _ImmediateDeadlineScheduler:
++    def schedule(self, _delay_seconds: float, callback: Callable[[], None]):
++        handle = _ScheduledHandle()
++        callback()
++        return handle
++
++
++class _FailingCallDeadlineScheduler(_ManualDeadlineScheduler):
++    def __init__(self, *fail_on_calls: int) -> None:
++        super().__init__()
++        self._fail_on_calls = set(fail_on_calls)
++        self.calls = 0
++
++    def schedule(self, delay_seconds: float, callback: Callable[[], None]):
++        self.calls += 1
++        if self.calls in self._fail_on_calls:
++            raise RuntimeError("private scheduler failure")
++        return super().schedule(delay_seconds, callback)
++
++
++class _ImmediateOnceDeadlineScheduler(_ManualDeadlineScheduler):
++    def __init__(self) -> None:
++        super().__init__()
++        self.calls = 0
++
++    def schedule(self, delay_seconds: float, callback: Callable[[], None]):
++        self.calls += 1
++        if self.calls == 1:
++            handle = _ScheduledHandle()
++            callback()
++            return handle
++        return super().schedule(delay_seconds, callback)
++
++
++class _AsyncEarlyFireDeadlineScheduler(_ManualDeadlineScheduler):
++    def __init__(self, *early_fire_calls: int) -> None:
++        super().__init__()
++        self._early_fire_calls = set(early_fire_calls)
++        self.calls = 0
++        self.threads: list[threading.Thread] = []
++
++    def schedule(self, delay_seconds: float, callback: Callable[[], None]):
++        self.calls += 1
++        if self.calls not in self._early_fire_calls:
++            return super().schedule(delay_seconds, callback)
++        handle = _ScheduledHandle()
++        entered = threading.Barrier(2)
++        completed = threading.Event()
++
++        def fire_on_independent_thread() -> None:
++            try:
++                entered.wait(timeout=3)
++                callback()
++            finally:
++                completed.set()
++
++        thread = threading.Thread(target=fire_on_independent_thread, daemon=True)
++        self.threads.append(thread)
++        thread.start()
++        entered.wait(timeout=3)
++        # A correct pre-commit callback completes without acquiring the registry
++        # lock. The timeout only prevents an old deadlocking implementation from
++        # leaking the test thread; it is not used to order the passing path.
++        completed.wait(timeout=3)
++        return handle
++
++    def join_threads(self) -> None:
++        for thread in self.threads:
++            thread.join(timeout=3)
++            assert not thread.is_alive()
++
++
++class _MutableClock:
++    def __init__(self, value: object) -> None:
++        self.value = value
++
++    def __call__(self):
++        if isinstance(self.value, BaseException):
++            raise self.value
++        return self.value
++
++
++class _ScriptedClock:
++    def __init__(self, *values: object) -> None:
++        self._values = iter(values)
++
++    def __call__(self):
++        value = next(self._values)
++        if isinstance(value, BaseException):
++            raise value
++        return value
++
++
++def _runtime(**kwargs) -> ExtensionRuntimeV1:
++    return ExtensionRuntimeV1(
++        profile="default",
++        runtime_generation="generation-1",
++        host_bundle_id="ai.hermes.agent",
++        **kwargs,
++    )
++
++
++def _bind(
++    runtime: ExtensionRuntimeV1,
++    key: str = "session-1",
++    *,
++    controller_id: str | None = None,
++    generation: str = "generation-1",
++    expected_revision: int = 0,
++    lease_deadline_monotonic: float | None = None,
++):
++    return runtime.sessions.bind(
++        profile="default",
++        durable_session_key=key,
++        runtime_generation=generation,
++        controller_id=controller_id or f"controller-{key}",
++        expected_revision=expected_revision,
++        lease_deadline_monotonic=(
++            lease_deadline_monotonic
++            if lease_deadline_monotonic is not None
++            else time.monotonic() + 60
++        ),
++    )
++
++
++def _request(
++    key: str = "session-1",
++    *,
++    generation: str = "generation-1",
++    observer_contract: int = 1,
++    required_capabilities=frozenset(),
++) -> ObserverRequest:
++    return ObserverRequest(
++        profile="default",
++        durable_session_key=key,
++        runtime_generation=generation,
++        observer_contract=observer_contract,
++        required_capabilities=required_capabilities,
++    )
++
++
++def test_runtime_descriptor_advertises_only_real_stage2_components() -> None:
++    runtime = _runtime()
++
++    descriptor = runtime.host.runtime_descriptor()
++
++    assert descriptor.profile == "default"
++    assert descriptor.runtime_generation == "generation-1"
++    assert descriptor.state == "ready"
++    assert descriptor.capabilities == {
++        "extension.lifecycle.v1": 1,
++        "runtime.descriptor.v1": 1,
++        "session.observe.v1": 1,
++    }
++    assert "session.owner-actions.v1" not in descriptor.capabilities
++    assert "session.observe.output-parity.v1" not in descriptor.capabilities
++    assert set(vars(descriptor)) == {
++        "profile",
++        "runtime_generation",
++        "host_bundle_id",
++        "state",
++        "capabilities",
++    }
++    assert not any(
++        sensitive in repr(descriptor).lower()
++        for sensitive in ("socket_path", "token", "credential", "command")
++    )
++
++    _bind(runtime)
++    with pytest.raises(HostSpiCapabilityError):
++        runtime.host.prepare_observer(
++            _request(
++                observer_contract=2,
++                required_capabilities=frozenset(
++                    {"session.observe.output-parity.v1"}
++                ),
++            ),
++            _RecordingSink(),
++        )
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.host.invoke_owner_action(
++            OwnerActionRequest(
++                profile="default",
++                durable_session_key="session-1",
++                runtime_generation="generation-1",
++                command_id="command-1",
++                method="prompt.submit",
++                payload={"text": "not-executed"},
++            )
++        )
++    assert runtime.close() == ()
++    closed_descriptor = runtime.host.runtime_descriptor()
++    assert closed_descriptor.state == "unavailable"
++    assert closed_descriptor.capabilities == {}
++
++
++@pytest.mark.parametrize("invalid", [True, False, float("nan"), float("inf"), -float("inf"), "3"])
++@pytest.mark.parametrize(
++    "field_name",
++    ["activation_timeout_seconds", "observer_close_timeout_seconds"],
++)
++def test_runtime_rejects_non_finite_or_non_numeric_durations(
++    field_name: str,
++    invalid: object,
++) -> None:
++    with pytest.raises(ValueError):
++        _runtime(**{field_name: invalid})
++
++
++@pytest.mark.parametrize("invalid", [True, float("nan"), float("inf"), "20"])
++def test_authority_rejects_invalid_lease_deadlines(invalid: object) -> None:
++    runtime = _runtime(monotonic=lambda: 10.0)
++    with pytest.raises((ValueError, HostSpiUnavailableError)):
++        _bind(runtime, lease_deadline_monotonic=invalid)  # type: ignore[arg-type]
++    assert runtime.close() == ()
++
++
++def test_clock_failure_and_backwards_time_fail_closed_for_bind_and_resolve() -> None:
++    clock = _MutableClock(RuntimeError("private clock detail"))
++    runtime = _runtime(monotonic=clock)
++    with pytest.raises(HostSpiUnavailableError) as bind_error:
++        _bind(runtime, lease_deadline_monotonic=20.0)
++    assert bind_error.value.__cause__ is None
++    assert "private" not in str(bind_error.value)
++
++    clock.value = 10.0
++    _bind(runtime, lease_deadline_monotonic=20.0)
++    clock.value = 9.0
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        )
++    assert runtime.close() == ()
++
++
++def test_invalid_clock_fails_closed_during_prepare_and_activate_only() -> None:
++    prepare_clock = _ScriptedClock(10.0, 11.0, float("nan"))
++    runtime = _runtime(
++        monotonic=prepare_clock,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    _bind(runtime, lease_deadline_monotonic=20.0)
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.host.prepare_observer(_request(), _RecordingSink())
++
++    activate_clock = _MutableClock(10.0)
++    runtime2 = _runtime(
++        monotonic=activate_clock,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    _bind(runtime2, lease_deadline_monotonic=20.0)
++    activate_clock.value = 11.0
++    prepared = runtime2.host.prepare_observer(_request(), _RecordingSink())
++    activate_clock.value = float("inf")
++    with pytest.raises(ObserverStateError):
++        prepared.activate()
++
++    close_clock = _MutableClock(10.0)
++    runtime3 = _runtime(
++        monotonic=close_clock,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    _bind(runtime3, lease_deadline_monotonic=20.0)
++    close_clock.value = 11.0
++    runtime3.host.prepare_observer(_request(), _RecordingSink()).activate()
++    close_clock.value = float("nan")
++    assert runtime3.close() == ()
++
++
++def test_worker_clock_failure_is_observable_and_retires_subscription() -> None:
++    clock = _ScriptedClock(
++        10.0,
++        11.0,
++        11.0,
++        11.0,
++        11.0,
++        11.0,
++        float("nan"),
++    )
++    runtime = _runtime(
++        monotonic=clock,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    _bind(runtime, lease_deadline_monotonic=20.0)
++    runtime.host.prepare_observer(_request(), _RecordingSink()).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "clock-fails-before-delivery"},
++    )
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    assert runtime.observers.failure_counters["clock_failed"] >= 1
++    assert runtime.close() == ()
++
++
++def test_session_authority_concurrent_controllers_have_one_atomic_winner() -> None:
++    now = 10.0
++    runtime = _runtime(monotonic=lambda: now)
++    barrier = threading.Barrier(3)
++    winners = []
++    losers = []
++
++    def compete(controller_id: str) -> None:
++        barrier.wait()
++        try:
++            winners.append(
++                _bind(
++                    runtime,
++                    controller_id=controller_id,
++                    expected_revision=0,
++                    lease_deadline_monotonic=20.0,
++                )
++            )
++        except HostSpiUnavailableError as error:
++            losers.append(error)
++
++    threads = [
++        threading.Thread(target=compete, args=("controller-a",)),
++        threading.Thread(target=compete, args=("controller-b",)),
++    ]
++    for thread in threads:
++        thread.start()
++    barrier.wait()
++    for thread in threads:
++        thread.join(timeout=3)
++        assert not thread.is_alive()
++
++    assert len(winners) == 1
++    assert len(losers) == 1
++    binding = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    )
++    assert binding.controller_id in {"controller-a", "controller-b"}
++    assert binding.lease_deadline_monotonic == 20.0
++    assert binding.revision == 1
++    assert "controller-a" not in repr(binding)
++    assert "controller-b" not in repr(binding)
++    assert runtime.close() == ()
++
++
++@pytest.mark.parametrize("failure_point", ["creation", "start"])
++def test_first_bind_timer_failure_is_atomic_and_retryable(
++    monkeypatch,
++    failure_point: str,
++) -> None:
++    runtime = _runtime(monotonic=lambda: 10.0)
++    original_timer = runtime_module.threading.Timer
++    if failure_point == "creation":
++
++        def fail_timer_creation(*_args, **_kwargs):
++            raise RuntimeError("private timer creation failure")
++
++        monkeypatch.setattr(runtime_module.threading, "Timer", fail_timer_creation)
++    else:
++        original_start = original_timer.start
++
++        def fail_timer_start(_timer) -> None:
++            raise RuntimeError("private timer start failure")
++
++        monkeypatch.setattr(original_timer, "start", fail_timer_start)
++
++    with pytest.raises(HostSpiUnavailableError) as error:
++        _bind(runtime, lease_deadline_monotonic=20.0)
++    assert error.value.__cause__ is None
++    assert error.value.__context__ is None
++    assert runtime.sessions.runtime_generation == "generation-1"
++    assert runtime.sessions._records == {}
++
++    if failure_point == "creation":
++        monkeypatch.setattr(runtime_module.threading, "Timer", original_timer)
++    else:
++        monkeypatch.setattr(original_timer, "start", original_start)
++    registration = _bind(
++        runtime,
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ).revision == 1
++    registration.close()
++    assert runtime.close() == ()
++
++
++def test_authority_timer_firing_before_commit_fails_without_state_change() -> None:
++    scheduler = _ImmediateOnceDeadlineScheduler()
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        authority_deadline_scheduler=scheduler,
++    )
++
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(runtime, lease_deadline_monotonic=20.0)
++    assert runtime.sessions._records == {}
++    assert runtime.sessions.runtime_generation == "generation-1"
++
++    registration = _bind(
++        runtime,
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ).revision == 1
++    registration.close()
++    assert runtime.close() == ()
++
++
++def test_async_early_fire_first_bind_is_atomic_and_retryable() -> None:
++    scheduler = _AsyncEarlyFireDeadlineScheduler(1)
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        authority_deadline_scheduler=scheduler,
++    )
++    registration = None
++    try:
++        with pytest.raises(HostSpiUnavailableError):
++            _bind(runtime, lease_deadline_monotonic=20.0)
++        assert runtime.sessions._records == {}
++        assert runtime.sessions.runtime_generation == "generation-1"
++
++        registration = _bind(
++            runtime,
++            expected_revision=0,
++            lease_deadline_monotonic=20.0,
++        )
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        ).revision == 1
++    finally:
++        if registration is not None:
++            registration.close()
++        runtime.close()
++        scheduler.join_threads()
++
++
++def test_async_early_fire_renewal_preserves_old_authority_and_observer() -> None:
++    scheduler = _AsyncEarlyFireDeadlineScheduler(2)
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=scheduler,
++    )
++    first = _bind(runtime, lease_deadline_monotonic=20.0)
++    sink = _RecordingSink()
++    runtime.host.prepare_observer(_request(), sink).activate()
++    before = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    )
++    renewed = None
++    try:
++        with pytest.raises(HostSpiUnavailableError):
++            _bind(
++                runtime,
++                expected_revision=1,
++                lease_deadline_monotonic=30.0,
++            )
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        ) == before
++        assert scheduler.handles[0].cancelled is False
++        assert runtime.observers.active_count == 1
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.message",
++            payload={"text": "async-early-fire-did-not-commit"},
++        )
++        _wait_until(lambda: sink.count == 1)
++
++        renewed = _bind(
++            runtime,
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        ).revision == 2
++    finally:
++        first.close()
++        if renewed is not None:
++            renewed.close()
++        runtime.close()
++        scheduler.join_threads()
++
++
++def test_async_early_fire_rollover_preserves_all_old_generation_state() -> None:
++    scheduler = _AsyncEarlyFireDeadlineScheduler(3)
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=scheduler,
++    )
++    _bind(runtime, "session-a", lease_deadline_monotonic=20.0)
++    _bind(runtime, "session-b", lease_deadline_monotonic=20.0)
++    sink_a = _RecordingSink()
++    sink_b = _RecordingSink()
++    runtime.host.prepare_observer(_request("session-a"), sink_a).activate()
++    runtime.host.prepare_observer(_request("session-b"), sink_b).activate()
++    before_a = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-a",
++        runtime_generation="generation-1",
++    )
++    before_b = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-1",
++    )
++    rolled = None
++    rebound = None
++    try:
++        with pytest.raises(HostSpiUnavailableError):
++            _bind(
++                runtime,
++                "session-a",
++                generation="generation-2",
++                expected_revision=1,
++                lease_deadline_monotonic=30.0,
++            )
++        assert runtime.sessions.runtime_generation == "generation-1"
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-a",
++            runtime_generation="generation-1",
++        ) == before_a
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-b",
++            runtime_generation="generation-1",
++        ) == before_b
++        assert all(not handle.cancelled for handle in scheduler.handles[:2])
++        assert runtime.observers.active_count == 2
++        for key, sink in (("session-a", sink_a), ("session-b", sink_b)):
++            runtime.publish_event(
++                profile="default",
++                durable_session_key=key,
++                runtime_generation="generation-1",
++                sequence=1,
++                event_type="assistant.message",
++                payload={"text": "async-rollover-did-not-commit"},
++            )
++            _wait_until(lambda sink=sink: sink.count == 1)
++
++        rolled = _bind(
++            runtime,
++            "session-a",
++            generation="generation-2",
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++        rebound = _bind(
++            runtime,
++            "session-b",
++            generation="generation-2",
++            expected_revision=2,
++            lease_deadline_monotonic=30.0,
++        )
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-a",
++            runtime_generation="generation-2",
++        ).revision == 2
++        assert runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-b",
++            runtime_generation="generation-2",
++        ).revision == 3
++    finally:
++        if rolled is not None:
++            rolled.close()
++        if rebound is not None:
++            rebound.close()
++        runtime.close()
++        scheduler.join_threads()
++
++
++def test_failed_authority_renewal_preserves_binding_observer_and_timer() -> None:
++    scheduler = _FailingCallDeadlineScheduler(2)
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=scheduler,
++    )
++    first = _bind(runtime, lease_deadline_monotonic=20.0)
++    before = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    )
++    sink = _RecordingSink()
++    runtime.host.prepare_observer(_request(), sink).activate()
++
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(
++            runtime,
++            controller_id="controller-session-1",
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ) == before
++    assert scheduler.handles[0].cancelled is False
++    assert runtime.observers.active_count == 1
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.message",
++        payload={"text": "still-authoritative"},
++    )
++    _wait_until(lambda: sink.count == 1)
++
++    renewed = _bind(
++        runtime,
++        controller_id="controller-session-1",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++    assert scheduler.handles[0].cancelled is True
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    first.close()
++    renewed.close()
++    assert runtime.close() == ()
++
++
++def test_failed_generation_rollover_preserves_all_sessions_and_observers() -> None:
++    scheduler = _FailingCallDeadlineScheduler(3)
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=scheduler,
++    )
++    _bind(runtime, "session-a", lease_deadline_monotonic=20.0)
++    _bind(runtime, "session-b", lease_deadline_monotonic=20.0)
++    sink_a = _RecordingSink()
++    sink_b = _RecordingSink()
++    runtime.host.prepare_observer(_request("session-a"), sink_a).activate()
++    runtime.host.prepare_observer(_request("session-b"), sink_b).activate()
++    before_a = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-a",
++        runtime_generation="generation-1",
++    )
++    before_b = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-1",
++    )
++
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(
++            runtime,
++            "session-a",
++            generation="generation-2",
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++
++    assert runtime.sessions.runtime_generation == "generation-1"
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-a",
++        runtime_generation="generation-1",
++    ) == before_a
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-1",
++    ) == before_b
++    assert all(not handle.cancelled for handle in scheduler.handles[:2])
++    assert runtime.observers.active_count == 2
++    for key, sink in (("session-a", sink_a), ("session-b", sink_b)):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key=key,
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.message",
++            payload={"text": "rollover-did-not-commit"},
++        )
++        _wait_until(lambda sink=sink: sink.count == 1)
++
++    rolled = _bind(
++        runtime,
++        "session-a",
++        generation="generation-2",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    rebound = _bind(
++        runtime,
++        "session-b",
++        generation="generation-2",
++        expected_revision=2,
++        lease_deadline_monotonic=30.0,
++    )
++    rolled.close()
++    rebound.close()
++    assert runtime.close() == ()
++
++
++def test_expired_authority_can_be_taken_over_but_live_lease_rejects_loser() -> None:
++    now = [10.0]
++    runtime = _runtime(monotonic=lambda: now[0])
++    first = _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(
++            runtime,
++            controller_id="controller-b",
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++
++    now[0] = 21.0
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        )
++    second = _bind(
++        runtime,
++        controller_id="controller-b",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++    first.close()
++    binding = runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    )
++    assert binding.controller_id == "controller-b"
++    assert binding.revision == 2
++    second.close()
++    assert runtime.close() == ()
++
++
++def test_rebind_preserves_sequence_and_generation_matches_public_descriptor() -> None:
++    now = [10.0]
++    runtime = _runtime(monotonic=lambda: now[0])
++    first = _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "before-rebind"},
++    )
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(
++            runtime,
++            controller_id="controller-a",
++            expected_revision=0,
++            lease_deadline_monotonic=30.0,
++        )
++    renewed = _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++    first.close()
++    assert runtime.sessions.current_sequence(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ) == 1
++
++    rolled = _bind(
++        runtime,
++        controller_id="controller-a",
++        generation="generation-2",
++        expected_revision=2,
++        lease_deadline_monotonic=40.0,
++    )
++    renewed.close()
++    descriptor = runtime.host.runtime_descriptor()
++    assert descriptor.runtime_generation == "generation-2"
++    prepared = runtime.host.prepare_observer(
++        _request(generation="generation-2"),
++        _RecordingSink(),
++    )
++    assert prepared.snapshot.watermark == 1
++    assert prepared.snapshot.runtime_generation == descriptor.runtime_generation
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-2",
++        sequence=2,
++        event_type="assistant.message",
++        payload={"text": "after-rollover"},
++    )
++    assert runtime.sessions.current_sequence(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-2",
++    ) == 2
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.host.prepare_observer(_request(generation="generation-1"), _RecordingSink())
++    rolled.close()
++    assert runtime.close() == ()
++
++
++def test_same_generation_rebind_revokes_only_observers_from_old_revision() -> None:
++    now = 10.0
++    runtime = _runtime(monotonic=lambda: now)
++    _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    old_sink = _RecordingSink()
++    runtime.host.prepare_observer(_request(), old_sink).activate()
++    original_listener = runtime.sessions._revocation_listener
++    assert original_listener is not None
++    notification_started = threading.Event()
++    allow_notification = threading.Event()
++
++    def delayed_revocation(binding) -> None:
++        notification_started.set()
++        assert allow_notification.wait(timeout=3)
++        original_listener(binding)
++
++    runtime.sessions._revocation_listener = delayed_revocation
++    rebind_results = []
++    rebind_thread = threading.Thread(
++        target=lambda: rebind_results.append(
++            _bind(
++                runtime,
++                controller_id="controller-a",
++                expected_revision=1,
++                lease_deadline_monotonic=30.0,
++            )
++        )
++    )
++    rebind_thread.start()
++    assert notification_started.wait(timeout=3)
++
++    new_sink = _RecordingSink()
++    new_registration = runtime.host.prepare_observer(
++        _request(), new_sink
++    ).activate()
++    allow_notification.set()
++    rebind_thread.join(timeout=3)
++    assert not rebind_thread.is_alive()
++    _wait_until(lambda: runtime.observers.active_count == 1)
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.message",
++        payload={"text": "new-revision-only"},
++    )
++    _wait_until(lambda: new_sink.count == 1)
++    assert old_sink.count == 0
++    new_registration.close()
++    rebind_results[0].close()
++    assert runtime.close() == ()
++
++
++def test_generation_rollover_advances_cas_revision_for_other_sessions() -> None:
++    runtime = _runtime(monotonic=lambda: 10.0)
++    _bind(
++        runtime,
++        "session-a",
++        controller_id="controller-a",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    _bind(
++        runtime,
++        "session-b",
++        controller_id="controller-b",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    _bind(
++        runtime,
++        "session-a",
++        controller_id="controller-a",
++        generation="generation-2",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++
++    with pytest.raises(HostSpiUnavailableError):
++        _bind(
++            runtime,
++            "session-b",
++            controller_id="controller-b",
++            generation="generation-2",
++            expected_revision=1,
++            lease_deadline_monotonic=30.0,
++        )
++    rebound = _bind(
++        runtime,
++        "session-b",
++        controller_id="controller-b",
++        generation="generation-2",
++        expected_revision=2,
++        lease_deadline_monotonic=30.0,
++    )
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-2",
++    ).revision == 3
++    rebound.close()
++    assert runtime.close() == ()
++
++
++def test_authority_deadline_auto_revokes_and_stale_timer_cannot_revoke_renewal() -> None:
++    clock = _MutableClock(10.0)
++    authority_scheduler = _ManualDeadlineScheduler()
++    runtime = _runtime(
++        monotonic=clock,
++        authority_deadline_scheduler=authority_scheduler,
++    )
++    _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=0,
++        lease_deadline_monotonic=20.0,
++    )
++    sink = _RecordingSink()
++    runtime.host.prepare_observer(_request(), sink).activate()
++    renewed = _bind(
++        runtime,
++        controller_id="controller-a",
++        expected_revision=1,
++        lease_deadline_monotonic=30.0,
++    )
++    authority_scheduler.fire(0)
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ).revision == 2
++
++    authority_scheduler.fire(1)
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.sessions.resolve(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++        )
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    takeover = _bind(
++        runtime,
++        controller_id="controller-b",
++        expected_revision=2,
++        lease_deadline_monotonic=40.0,
++    )
++    assert runtime.sessions.resolve(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ).controller_id == "controller-b"
++    renewed.close()
++    takeover.close()
++    assert runtime.close() == ()
++
++
++def test_observer_total_and_per_scope_admission_are_bounded() -> None:
++    assert runtime_module.MAX_OBSERVERS_TOTAL >= 2
++    assert runtime_module.MAX_OBSERVERS_PER_SCOPE >= 2
++    observer_scheduler = _ManualDeadlineScheduler()
++    authority_scheduler = _ManualDeadlineScheduler()
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=observer_scheduler,
++        authority_deadline_scheduler=authority_scheduler,
++    )
++    _bind(runtime, "scope", lease_deadline_monotonic=20.0)
++    for _ in range(runtime_module.MAX_OBSERVERS_PER_SCOPE):
++        runtime.host.prepare_observer(_request("scope"), _RecordingSink())
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.host.prepare_observer(_request("scope"), _RecordingSink())
++    assert runtime.close() == ()
++
++    runtime2 = _runtime(
++        monotonic=lambda: 10.0,
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    for index in range(runtime_module.MAX_OBSERVERS_TOTAL):
++        key = f"total-{index}"
++        _bind(runtime2, key, lease_deadline_monotonic=20.0)
++        runtime2.host.prepare_observer(_request(key), _RecordingSink())
++    _bind(runtime2, "over-total", lease_deadline_monotonic=20.0)
++    with pytest.raises(HostSpiUnavailableError):
++        runtime2.host.prepare_observer(_request("over-total"), _RecordingSink())
++    assert runtime2.close() == ()
++
++
++def test_blocked_observer_admission_and_shutdown_share_global_bounds() -> None:
++    assert runtime_module.MAX_BLOCKED_OBSERVERS >= 2
++    close_timeout = 0.03
++    runtime = _runtime(
++        observer_close_timeout_seconds=close_timeout,
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    blocked_sinks = []
++    registrations = []
++    for index in range(runtime_module.MAX_BLOCKED_OBSERVERS):
++        key = f"blocked-{index}"
++        _bind(runtime, key)
++        sink = _PermanentBlockingSink()
++        blocked_sinks.append(sink)
++        registration = runtime.host.prepare_observer(
++            _request(key), sink
++        ).activate()
++        registrations.append(registration)
++        runtime.publish_event(
++            profile="default",
++            durable_session_key=key,
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.delta",
++            payload={"text": "blocked"},
++        )
++        assert sink.started.wait(timeout=3)
++        with pytest.raises(ObserverDeliveryBlockedError):
++            registration.close()
++
++    _bind(runtime, "admission-denied")
++    with pytest.raises(HostSpiUnavailableError):
++        runtime.host.prepare_observer(
++            _request("admission-denied"), _RecordingSink()
++        )
++
++    started = time.monotonic()
++    failures = runtime.close()
++    elapsed = time.monotonic() - started
++    assert elapsed < close_timeout * 2.5
++    assert len(failures) == runtime_module.MAX_BLOCKED_OBSERVERS
++    assert runtime.observers.blocked_delivery_count == len(blocked_sinks)
++
++    for sink in blocked_sinks:
++        sink.release_for_test_cleanup.set()
++    _wait_until(lambda: runtime.observers.blocked_delivery_count == 0)
++    assert runtime.close() == ()
++
++
++def test_close_all_uses_one_real_deadline_when_injected_clock_is_frozen() -> None:
++    close_timeout = 0.08
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        observer_close_timeout_seconds=close_timeout,
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    blocked_sinks: list[_PermanentBlockingSink] = []
++    for index in range(runtime_module.MAX_BLOCKED_OBSERVERS):
++        key = f"frozen-clock-blocked-{index}"
++        _bind(runtime, key, lease_deadline_monotonic=20.0)
++        sink = _PermanentBlockingSink()
++        blocked_sinks.append(sink)
++        runtime.host.prepare_observer(_request(key), sink).activate()
++        runtime.publish_event(
++            profile="default",
++            durable_session_key=key,
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.delta",
++            payload={"text": "blocks-until-test-cleanup"},
++        )
++    for sink in blocked_sinks:
++        assert sink.started.wait(timeout=3)
++
++    started = time.monotonic()
++    failures = runtime.close()
++    elapsed = time.monotonic() - started
++    try:
++        assert elapsed < close_timeout * 2.5
++        assert [failure.error_type for failure in failures] == [
++            "ObserverDeliveryBlockedError"
++        ] * len(blocked_sinks)
++        assert runtime.observers.blocked_delivery_count == len(blocked_sinks)
++    finally:
++        for sink in blocked_sinks:
++            sink.release_for_test_cleanup.set()
++        _wait_until(
++            lambda: not any(
++                thread.name.startswith("hermes-observer-")
++                and not thread.name.startswith("hermes-observer-cleanup-")
++                for thread in threading.enumerate()
++            )
++        )
++        cleanup_failures = runtime.close()
++    assert cleanup_failures == ()
++
++
++def test_concurrent_close_on_one_registration_includes_finish_lock_wait() -> None:
++    close_timeout = 0.08
++    closer_count = 4
++    runtime = _runtime(
++        monotonic=lambda: 10.0,
++        observer_close_timeout_seconds=close_timeout,
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++    )
++    _bind(runtime, lease_deadline_monotonic=20.0)
++    sink = _PermanentBlockingSink()
++    registration = runtime.host.prepare_observer(_request(), sink).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "blocks-concurrent-close"},
++    )
++    assert sink.started.wait(timeout=3)
++
++    start_barrier = threading.Barrier(closer_count + 1)
++    durations: list[float] = []
++    failures: list[str] = []
++    result_lock = threading.Lock()
++
++    def close_concurrently() -> None:
++        started = time.monotonic()
++        start_barrier.wait(timeout=3)
++        try:
++            registration.close()
++        except BaseException as error:
++            error_type = type(error).__name__
++        else:
++            error_type = "none"
++        elapsed = time.monotonic() - started
++        with result_lock:
++            durations.append(elapsed)
++            failures.append(error_type)
++
++    threads = [
++        threading.Thread(target=close_concurrently, daemon=True)
++        for _ in range(closer_count)
++    ]
++    for thread in threads:
++        thread.start()
++    start_barrier.wait(timeout=3)
++    for thread in threads:
++        thread.join(timeout=3)
++        assert not thread.is_alive()
++
++    try:
++        assert failures == ["ObserverDeliveryBlockedError"] * closer_count
++        assert len(durations) == closer_count
++        assert max(durations) < close_timeout * 2.5
++    finally:
++        sink.release_for_test_cleanup.set()
++        _wait_until(
++            lambda: not any(
++                thread.name.startswith("hermes-observer-")
++                and not thread.name.startswith("hermes-observer-cleanup-")
++                for thread in threading.enumerate()
++            )
++        )
++        cleanup_failures = runtime.close()
++    assert cleanup_failures == ()
++
++
++def test_observer_worker_start_failure_rolls_back_and_is_observable(
++    monkeypatch,
++) -> None:
++    close_events: list[str] = []
++    runtime = _runtime(
++        deadline_scheduler=_ManualDeadlineScheduler(),
++        authority_deadline_scheduler=_ManualDeadlineScheduler(),
++        observer_cleanup_factory=lambda request: _CloseRegistration(
++            request.durable_session_key,
++            close_events,
++        ),
++    )
++    _bind(runtime)
++    prepared = runtime.host.prepare_observer(_request(), _RecordingSink())
++    original_start = threading.Thread.start
++
++    def fail_observer_worker_start(thread) -> None:
++        if thread.name.startswith("hermes-observer-"):
++            raise RuntimeError("private start failure")
++        original_start(thread)
++
++    monkeypatch.setattr(threading.Thread, "start", fail_observer_worker_start)
++    with pytest.raises(HostSpiRegistrationError) as error:
++        prepared.activate()
++    assert error.value.__cause__ is None
++    assert error.value.__context__ is None
++    assert "private" not in str(error.value)
++    assert close_events == ["close:session-1"]
++    assert runtime.observers.active_count == 0
++    assert runtime.observers.pending_cleanup_count == 0
++    statuses = runtime.observers.failure_statuses
++    assert statuses[-1].category == "worker_start_failed"
++    assert statuses[-1].lifecycle_state == "closing"
++    assert runtime.close() == ()
++
++
++def test_default_deadline_scheduler_automatically_expires_prepared_observer() -> None:
++    close_events: list[str] = []
++    cleanup = _CloseRegistration("expired", close_events)
++    runtime = _runtime(
++        activation_timeout_seconds=0.03,
++        observer_cleanup_factory=lambda _request: cleanup,
++    )
++    _bind(runtime)
++    prepared = runtime.host.prepare_observer(_request(), _RecordingSink())
++
++    _wait_until(lambda: cleanup.attempts == 1)
++
++    with pytest.raises(ObserverStateError):
++        prepared.activate()
++    assert runtime.observers.prepared_count == 0
++    assert runtime.observers.active_count == 0
++    assert close_events == ["close:expired"]
++    assert runtime.close() == ()
++
++
++def test_prepare_fails_if_deadline_expires_before_scheduler_returns() -> None:
++    close_events: list[str] = []
++    cleanup = _CloseRegistration("immediate-expiry", close_events)
++    runtime = _runtime(
++        deadline_scheduler=_ImmediateDeadlineScheduler(),
++        observer_cleanup_factory=lambda _request: cleanup,
++    )
++    _bind(runtime)
++
++    with pytest.raises(ObserverStateError):
++        runtime.host.prepare_observer(_request(), _RecordingSink())
++
++    assert cleanup.attempts == 1
++    assert runtime.observers.prepared_count == 0
++    assert runtime.observers.pending_cleanup_count == 0
++    assert runtime.close() == ()
++
++
++def test_prepare_captures_snapshot_and_watermark_without_early_live_delivery() -> None:
++    runtime = _runtime()
++    _bind(runtime)
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="user.message",
++        payload={"text": "first"},
++    )
++    sink = _RecordingSink()
++
++    prepared = runtime.host.prepare_observer(_request(), sink)
++    assert prepared.snapshot.watermark == 1
++    assert [event.sequence for event in prepared.snapshot.events] == [1]
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=2,
++        event_type="assistant.delta",
++        payload={"text": "queued-before-activate"},
++    )
++    assert sink.events == []
++
++    active = prepared.activate()
++    _wait_until(lambda: sink.count == 1)
++    assert sink.events[0].sequence == 2
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=3,
++        event_type="assistant.message",
++        payload={"text": "live"},
++    )
++    _wait_until(lambda: sink.count == 2)
++    assert [event.sequence for event in sink.events] == [2, 3]
++
++    active.close()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=4,
++        event_type="session.status",
++        payload={"status": "completed"},
++    )
++    assert sink.count == 2
++    assert runtime.close() == ()
++
++
++def test_stage1_callable_event_sink_protocol_is_used_without_adapter_methods() -> None:
++    runtime = _runtime()
++    _bind(runtime)
++    received = []
++
++    def stage1_sink(event) -> None:
++        received.append(event)
++
++    registration = runtime.host.prepare_observer(
++        _request(), stage1_sink
++    ).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.message",
++        payload={"text": "callable-contract"},
++    )
++    _wait_until(lambda: len(received) == 1)
++    assert received[0].payload == {"text": "callable-contract"}
++    registration.close()
++    assert runtime.close() == ()
++
++
++def test_activate_expiry_close_race_has_exactly_one_lifecycle_winner() -> None:
++    scheduler = _ManualDeadlineScheduler()
++    close_events: list[str] = []
++    cleanups: list[_CloseRegistration] = []
++
++    def cleanup_factory(_request):
++        cleanup = _CloseRegistration("observer", close_events)
++        cleanups.append(cleanup)
++        return cleanup
++
++    runtime = _runtime(
++        deadline_scheduler=scheduler,
++        observer_cleanup_factory=cleanup_factory,
++    )
++    _bind(runtime)
++    prepared = runtime.host.prepare_observer(_request(), _RecordingSink())
++    barrier = threading.Barrier(4)
++    active_results = []
++
++    def activate() -> None:
++        barrier.wait()
++        try:
++            active_results.append(prepared.activate())
++        except ObserverStateError:
++            pass
++
++    def close() -> None:
++        barrier.wait()
++        prepared.close()
++
++    def expire() -> None:
++        barrier.wait()
++        scheduler.fire(0)
++
++    threads = [
++        threading.Thread(target=activate),
++        threading.Thread(target=close),
++        threading.Thread(target=expire),
++    ]
++    for thread in threads:
++        thread.start()
++    barrier.wait()
++    for thread in threads:
++        thread.join(timeout=5)
++        assert not thread.is_alive()
++
++    for active in active_results:
++        active.close()
++    _wait_until(lambda: cleanups[0].attempts == 1)
++    assert cleanups[0].attempts == 1
++    assert runtime.observers.prepared_count == 0
++    assert runtime.observers.active_count == 0
++    assert runtime.close() == ()
++
++
++def test_sequences_are_contiguous_per_session_and_gap_revokes_only_that_session() -> None:
++    close_events: list[str] = []
++
++    def cleanup_factory(request):
++        return _CloseRegistration(request.durable_session_key, close_events)
++
++    runtime = _runtime(observer_cleanup_factory=cleanup_factory)
++    _bind(runtime, "session-a")
++    _bind(runtime, "session-b")
++    sink_a = _RecordingSink()
++    sink_b = _RecordingSink()
++    active_a = runtime.host.prepare_observer(_request("session-a"), sink_a).activate()
++    active_b = runtime.host.prepare_observer(_request("session-b"), sink_b).activate()
++
++    event_a = runtime.publish_event(
++        profile="default",
++        durable_session_key="session-a",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "a1"},
++    )
++    event_b = runtime.publish_event(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "b1"},
++    )
++    assert event_a.sequence == event_b.sequence == 1
++    _wait_until(lambda: sink_a.count == 1 and sink_b.count == 1)
++
++    with pytest.raises(ObserverSequenceError):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="session-a",
++            runtime_generation="generation-1",
++            sequence=3,
++            event_type="assistant.delta",
++            payload={"text": "gap"},
++        )
++    _wait_until(lambda: "close:session-a" in close_events)
++    assert "close:session-b" not in close_events
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-b",
++        runtime_generation="generation-1",
++        sequence=2,
++        event_type="assistant.message",
++        payload={"text": "b2"},
++    )
++    _wait_until(lambda: sink_b.count == 2)
++    assert sink_a.count == 1
++
++    active_a.close()
++    active_b.close()
++    assert runtime.close() == ()
++
++
++def test_prepared_and_active_queues_are_bounded_and_observers_are_isolated() -> None:
++    close_events: list[str] = []
++
++    def cleanup_factory(request):
++        return _CloseRegistration(request.durable_session_key, close_events)
++
++    runtime = _runtime(observer_cleanup_factory=cleanup_factory)
++    _bind(runtime, "prepared")
++    prepared = runtime.host.prepare_observer(
++        _request("prepared"), _RecordingSink()
++    )
++    for sequence in range(1, MAX_OBSERVER_QUEUE_FRAMES + 2):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="prepared",
++            runtime_generation="generation-1",
++            sequence=sequence,
++            event_type="assistant.delta",
++            payload={"text": str(sequence)},
++        )
++    with pytest.raises(ObserverStateError):
++        prepared.activate()
++    _wait_until(lambda: "close:prepared" in close_events)
++
++    _bind(runtime, "active")
++    slow = _BlockingSink()
++    healthy = _RecordingSink()
++    slow_registration = runtime.host.prepare_observer(
++        _request("active"), slow
++    ).activate()
++    healthy_registration = runtime.host.prepare_observer(
++        _request("active"), healthy
++    ).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="active",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "1"},
++    )
++    assert slow.started.wait(timeout=3)
++    _wait_until(lambda: healthy.count == 1)
++    for sequence in range(2, MAX_OBSERVER_QUEUE_FRAMES + 2):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="active",
++            runtime_generation="generation-1",
++            sequence=sequence,
++            event_type="assistant.delta",
++            payload={"text": str(sequence)},
++        )
++        _wait_until(lambda sequence=sequence: healthy.count == sequence)
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="active",
++        runtime_generation="generation-1",
++        sequence=MAX_OBSERVER_QUEUE_FRAMES + 2,
++        event_type="assistant.delta",
++        payload={"text": "overflow"},
++    )
++    _wait_until(lambda: runtime.observers.active_count == 1)
++    slow.release.set()
++    _wait_until(lambda: "close:active" in close_events)
++    _wait_until(lambda: healthy.count == MAX_OBSERVER_QUEUE_FRAMES + 2)
++
++    slow_registration.close()
++    healthy_registration.close()
++    assert runtime.close() == ()
++
++
++def test_sink_exception_isolated_and_does_not_expose_exception_text() -> None:
++    close_events: list[str] = []
++
++    def cleanup_factory(request):
++        return _CloseRegistration(request.durable_session_key, close_events)
++
++    runtime = _runtime(observer_cleanup_factory=cleanup_factory)
++    _bind(runtime)
++    failing = _FailingSink()
++    healthy = _RecordingSink()
++    failed_registration = runtime.host.prepare_observer(
++        _request(), failing
++    ).activate()
++    healthy_registration = runtime.host.prepare_observer(
++        _request(), healthy
++    ).activate()
++
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "safe"},
++    )
++    _wait_until(lambda: failing.calls == 1 and healthy.count == 1)
++    _wait_until(lambda: runtime.observers.active_count == 1)
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=2,
++        event_type="assistant.message",
++        payload={"text": "still-live"},
++    )
++    _wait_until(lambda: healthy.count == 2)
++    assert failing.calls == 1
++
++    failed_registration.close()
++    healthy_registration.close()
++    assert runtime.close() == ()
++
++
++def test_sink_and_cleanup_failures_are_structured_safe_and_queryable() -> None:
++    close_events: list[str] = []
++    cleanups = []
++
++    def cleanup_factory(request):
++        cleanup = _CloseRegistration(
++            request.durable_session_key,
++            close_events,
++            failures=1 if request.durable_session_key == "cleanup" else 0,
++        )
++        cleanups.append(cleanup)
++        return cleanup
++
++    runtime = _runtime(observer_cleanup_factory=cleanup_factory)
++    _bind(runtime, "sink")
++    _bind(runtime, "cleanup")
++    runtime.host.prepare_observer(_request("sink"), _FailingSink()).activate()
++    cleanup_registration = runtime.host.prepare_observer(
++        _request("cleanup"), _RecordingSink()
++    ).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="sink",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "safe"},
++    )
++    _wait_until(
++        lambda: runtime.observers.failure_counters.get(
++            "sink_delivery_failed", 0
++        ) == 1
++    )
++    with pytest.raises(HostSpiRegistrationError) as cleanup_error:
++        cleanup_registration.close()
++    assert cleanup_error.value.__cause__ is None
++    assert cleanup_error.value.__context__ is None
++    assert "private close detail" not in str(cleanup_error.value)
++
++    statuses = runtime.observers.failure_statuses
++    categories = [status.category for status in statuses]
++    assert "sink_delivery_failed" in categories
++    assert "cleanup_failed" in categories
++    assert all(status.subscription_id > 0 for status in statuses)
++    assert all(status.lifecycle_state == "closing" for status in statuses)
++    assert all(
++        sensitive not in repr(status).lower()
++        for status in statuses
++        for sensitive in ("payload", "private", "session-", "secret")
++    )
++    assert runtime.observers.failure_counters["sink_delivery_failed"] == 1
++    assert runtime.observers.failure_counters["cleanup_failed"] == 1
++    assert runtime.close() == ()
++
++
++def test_audit_safe_capability_enforces_allowlist_scope_and_nested_secrets() -> None:
++    with pytest.raises(ValueError):
++        _runtime(audit_sink=object())
++    delivered = []
++    runtime = _runtime(audit_sink=delivered.append)
++    assert runtime.host.runtime_descriptor().capabilities["audit.safe.v1"] == 1
++    safe = SafeAuditEvent(
++        name="observer.lifecycle",
++        profile="default",
++        runtime_generation="generation-1",
++        attributes={
++            "action": "closed",
++            "state": "closed",
++            "subscription_id": 7,
++            "failure_category": "none",
++        },
++    )
++    runtime.host.audit(safe)
++    assert delivered == [safe]
++
++    unsafe_events = (
++        SafeAuditEvent(
++            name="observer.lifecycle",
++            profile="default",
++            runtime_generation="generation-1",
++            attributes={"details": {"nested": {"token": "secret"}}},
++        ),
++        SafeAuditEvent(
++            name="runtime.raw",
++            profile="default",
++            runtime_generation="generation-1",
++            attributes={"action": "raw", "tool_output": "private"},
++        ),
++        SafeAuditEvent(
++            name="observer.lifecycle",
++            profile="default",
++            runtime_generation="generation-1",
++            attributes={"action": "closed", "reasoning": {"text": "hidden"}},
++        ),
++    )
++    for event in unsafe_events:
++        with pytest.raises(HostSpiRegistrationError) as error:
++            runtime.host.audit(event)
++        assert error.value.__cause__ is None
++        assert all(
++            secret not in str(error.value).lower()
++            for secret in ("token", "private", "reasoning", "hidden")
++        )
++
++    for event in (
++        SafeAuditEvent(
++            name="observer.lifecycle",
++            profile="other",
++            runtime_generation="generation-1",
++            attributes={"action": "closed", "state": "closed"},
++        ),
++        SafeAuditEvent(
++            name="observer.lifecycle",
++            profile="default",
++            runtime_generation="generation-2",
++            attributes={"action": "closed", "state": "closed"},
++        ),
++    ):
++        with pytest.raises(HostSpiUnavailableError):
++            runtime.host.audit(event)
++    assert runtime.close() == ()
++
++
++def test_audit_sink_exception_is_suppressed_without_original_cause_or_text() -> None:
++    def failing_audit_sink(_event) -> None:
++        raise RuntimeError("private audit sink detail")
++
++    runtime = _runtime(audit_sink=failing_audit_sink)
++    event = SafeAuditEvent(
++        name="runtime.lifecycle",
++        profile="default",
++        runtime_generation="generation-1",
++        attributes={"action": "closing", "state": "unavailable"},
++    )
++    with pytest.raises(HostSpiRegistrationError) as error:
++        runtime.host.audit(event)
++    assert error.value.__cause__ is None
++    assert error.value.__context__ is None
++    assert "private" not in str(error.value)
++    assert runtime.close() == ()
++
++
++def test_display_safe_allowlist_freezes_payload_and_rejects_sensitive_frames() -> None:
++    assert DISPLAY_SAFE_EVENT_TYPES_V1 == frozenset(
++        {
++            "assistant.delta",
++            "assistant.message",
++            "session.status",
++            "tool.status",
++            "user.message",
++        }
++    )
++    display_event = DisplaySafeEventV1(
++        event_type="assistant.delta",
++        payload={"text": "visible"},
++    )
++    assert display_event.payload["text"] == "visible"
++    assert "visible" not in repr(display_event)
++    with pytest.raises(FrozenInstanceError):
++        display_event.event_type = "assistant.message"  # type: ignore[misc]
++    with pytest.raises(TypeError):
++        display_event.payload["text"] = "changed"  # type: ignore[index]
++
++    invalid = (
++        ("reasoning.delta", {"text": "hidden"}),
++        ("assistant.delta", {"reasoning": "hidden", "text": "visible"}),
++        ("tool.status", {"tool_name": "shell", "status": "running", "output": "raw"}),
++        ("session.status", {"status": "waiting", "approval": "secret"}),
++    )
++    for event_type, payload in invalid:
++        with pytest.raises(ValueError):
++            DisplaySafeEventV1(event_type=event_type, payload=payload)
++
++    runtime = _runtime()
++    _bind(runtime)
++    runtime.host.prepare_observer(_request(), _RecordingSink())
++    with pytest.raises(ObserverFrameError):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.delta",
++            payload={"text": "界" * (MAX_OBSERVER_FRAME_BYTES // 2)},
++        )
++    assert runtime.sessions.current_sequence(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    ) == 0
++    assert runtime.close() == ()
++
++
++def test_utf8_exact_frame_boundary_passes_and_surrogate_retires_scope() -> None:
++    def text_for_exact_frame(*, key: str, sequence: int) -> str:
++        frame = {
++            "profile": "default",
++            "durable_session_key": key,
++            "runtime_generation": "generation-1",
++            "sequence": sequence,
++            "event_type": "assistant.delta",
++            "payload": {"text": ""},
++        }
++        empty_size = len(
++            json.dumps(
++                frame,
++                ensure_ascii=False,
++                sort_keys=True,
++                separators=(",", ":"),
++                allow_nan=False,
++            ).encode("utf-8")
++        )
++        remaining = MAX_OBSERVER_FRAME_BYTES - empty_size
++        text = "界" * (remaining // 3) + "a" * (remaining % 3)
++        frame["payload"] = {"text": text}
++        assert len(
++            json.dumps(
++                frame,
++                ensure_ascii=False,
++                sort_keys=True,
++                separators=(",", ":"),
++                allow_nan=False,
++            ).encode("utf-8")
++        ) == MAX_OBSERVER_FRAME_BYTES
++        return text
++
++    runtime = _runtime()
++    _bind(runtime, "boundary")
++    sink = _RecordingSink()
++    runtime.host.prepare_observer(_request("boundary"), sink).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="boundary",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": text_for_exact_frame(key="boundary", sequence=1)},
++    )
++    _wait_until(lambda: sink.count == 1)
++    with pytest.raises(ObserverFrameError):
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="boundary",
++            runtime_generation="generation-1",
++            sequence=2,
++            event_type="assistant.delta",
++            payload={
++                "text": text_for_exact_frame(key="boundary", sequence=2) + "a"
++            },
++        )
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    assert runtime.sessions.current_sequence(
++        profile="default",
++        durable_session_key="boundary",
++        runtime_generation="generation-1",
++    ) == 1
++
++    _bind(runtime, "surrogate")
++    runtime.host.prepare_observer(
++        _request("surrogate"), _RecordingSink()
++    ).activate()
++    with pytest.raises(ObserverFrameError) as error:
++        runtime.publish_event(
++            profile="default",
++            durable_session_key="surrogate",
++            runtime_generation="generation-1",
++            sequence=1,
++            event_type="assistant.delta",
++            payload={"text": "unsafe-\ud800"},
++        )
++    assert error.value.__cause__ is None
++    _wait_until(lambda: runtime.observers.active_count == 0)
++    assert runtime.close() == ()
++
++
++def test_close_all_is_reverse_isolated_and_retains_failure_for_retry() -> None:
++    close_events: list[str] = []
++    resources: list[_CloseRegistration] = []
++
++    def cleanup_factory(request):
++        cleanup = _CloseRegistration(
++            request.durable_session_key,
++            close_events,
++            failures=1 if request.durable_session_key == "first" else 0,
++        )
++        resources.append(cleanup)
++        return cleanup
++
++    runtime = _runtime(observer_cleanup_factory=cleanup_factory)
++    _bind(runtime, "first")
++    _bind(runtime, "second")
++    runtime.host.prepare_observer(_request("first"), _RecordingSink()).activate()
++    runtime.host.prepare_observer(_request("second"), _RecordingSink()).activate()
++
++    failures = runtime.close()
++
++    assert len(failures) == 1
++    assert close_events == ["close:second", "close:first"]
++    assert runtime.observers.pending_cleanup_count == 1
++    assert resources[0].attempts == 1
++    assert resources[1].attempts == 1
++
++    assert runtime.close() == ()
++    assert close_events[-1] == "close:first"
++    assert resources[0].attempts == 2
++    assert resources[1].attempts == 1
++    assert runtime.observers.pending_cleanup_count == 0
++
++
++def test_permanently_blocked_sink_has_bounded_close_and_retryable_lifecycle() -> None:
++    close_events: list[str] = []
++
++    def cleanup_factory(request):
++        return _CloseRegistration(request.durable_session_key, close_events)
++
++    runtime = _runtime(
++        observer_cleanup_factory=cleanup_factory,
++        observer_close_timeout_seconds=0.03,
++    )
++    _bind(runtime, "blocked")
++    _bind(runtime, "healthy")
++    blocked = _PermanentBlockingSink()
++    healthy = _RecordingSink()
++    runtime.host.prepare_observer(_request("blocked"), blocked).activate()
++    runtime.host.prepare_observer(_request("healthy"), healthy).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="blocked",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "blocks-forever"},
++    )
++    assert blocked.started.wait(timeout=3)
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="healthy",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.message",
++        payload={"text": "healthy"},
++    )
++    _wait_until(lambda: healthy.count == 1)
++
++    started = time.monotonic()
++    failures = runtime.close()
++    elapsed = time.monotonic() - started
++
++    assert elapsed < 0.5
++    assert [failure.error_type for failure in failures] == [
++        "ObserverDeliveryBlockedError"
++    ]
++    assert close_events == ["close:healthy"]
++    assert runtime.observers.pending_cleanup_count == 1
++    assert runtime.observers.blocked_delivery_count == 1
++    assert not any(
++        thread.name.startswith("hermes-observer-cleanup-")
++        for thread in threading.enumerate()
++    )
++
++    blocked.release_for_test_cleanup.set()
++    _wait_until(
++        lambda: not any(
++            thread.name.startswith("hermes-observer-")
++            and not thread.name.startswith("hermes-observer-cleanup-")
++            for thread in threading.enumerate()
++        )
++    )
++    assert runtime.close() == ()
++    assert close_events == ["close:healthy", "close:blocked"]
++    assert runtime.observers.pending_cleanup_count == 0
++    assert runtime.observers.blocked_delivery_count == 0
++
++
++def test_sink_failure_during_close_does_not_deadlock_worker_and_closer() -> None:
++    close_events: list[str] = []
++    runtime = _runtime(
++        observer_cleanup_factory=lambda request: _CloseRegistration(
++            request.durable_session_key,
++            close_events,
++        ),
++        observer_close_timeout_seconds=0.2,
++    )
++    _bind(runtime)
++    sink = _BlockingFailingSink()
++    runtime.host.prepare_observer(_request(), sink).activate()
++    runtime.publish_event(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=1,
++        event_type="assistant.delta",
++        payload={"text": "in-flight"},
++    )
++    assert sink.started.wait(timeout=3)
++    close_results = []
++    closer = threading.Thread(target=lambda: close_results.append(runtime.close()))
++    closer.start()
++    assert runtime.observers.wait_for_pending_cleanup(minimum=1, timeout=1.0)
++    sink.release_for_test_cleanup.set()
++    closer.join(timeout=1)
++
++    assert not closer.is_alive()
++    assert close_results == [()]
++    assert close_events == ["close:session-1"]
++    assert runtime.observers.pending_cleanup_count == 0

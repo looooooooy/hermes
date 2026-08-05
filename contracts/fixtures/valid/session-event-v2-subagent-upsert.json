@@ -1,0 +1,25 @@
+{
+  "observer_contract": 2,
+  "profile": "default",
+  "runtime_generation": "runtime-20260801-01",
+  "session_key": "session-root-1",
+  "session_id": "runtime-session-1",
+  "type": "subagent.update",
+  "event_sequence": 2,
+  "payload": {
+    "turn_id": "turn-1",
+    "subagent_id": "subagent-1",
+    "revision": 1,
+    "first_event_sequence": 2,
+    "operation": "upsert",
+    "parent_subagent_id": null,
+    "name": "Test runner",
+    "goal": "Run the focused contract suite",
+    "summary": null,
+    "status": "running",
+    "model": "display-safe-model",
+    "progress": {"current": 1, "total": 3},
+    "token_counts": {"input": 100, "output": 20, "reasoning": 10},
+    "api_calls": 1
+  }
+}

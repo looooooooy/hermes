@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "event",
+  "params": {
+    "type": "status.update",
+    "session_id": "runtime-session-1",
+    "session_key": "session-root-1",
+    "event_sequence": 7,
+    "payload": {
+      "status": "idle",
+      "running": false
+    }
+  }
+}

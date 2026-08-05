@@ -1,0 +1,3476 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hermes Cloud API",
+    "version": "1.0.0",
+    "description": "Public compatibility surface for authenticated clients. Internal Connector and Local Gateway protocols are separate contracts."
+  },
+  "servers": [
+    {
+      "url": "/{basePath}",
+      "variables": {
+        "basePath": {
+          "default": "hermes",
+          "description": "Reverse-proxy path prefix without leading or trailing slash"
+        }
+      }
+    }
+  ],
+  "x-hermes-response-limits": {
+    "default_json_bytes": 262144,
+    "session_transcript_json_bytes": 4194304,
+    "max_string_bytes": 131072,
+    "max_nesting_depth": 32,
+    "max_object_fields": 1024,
+    "max_array_items": 1024
+  },
+  "paths": {
+    "/api/status": {
+      "get": {
+        "operationId": "getStatus",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Public service status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password-login": {
+      "post": {
+        "operationId": "passwordLogin",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated session cookies issued",
+            "x-hermes-cookie-contract": {
+              "required_name_suffixes": [
+                "hermes_session_at",
+                "hermes_session_rt",
+                "hermes_session_provider"
+              ],
+              "secure": true,
+              "http_only": true,
+              "same_site": "strict",
+              "access_cookie_requires_expiry": true
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/native/refresh": {
+      "post": {
+        "operationId": "refreshAccessToken",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rotated access and refresh token pair",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logoutBrowserSession",
+        "security": [],
+        "x-hermes-empty-body-required": true,
+        "x-hermes-same-origin-policy": {
+          "requires_https_origin": true,
+          "origin_must_match_effective_host_exactly": true,
+          "fetch_metadata_not_accepted": true,
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true
+        },
+        "responses": {
+          "200": {
+            "description": "Browser refresh session revoked and browser cookies expired; repeated logout is idempotent",
+            "x-hermes-cookie-contract": {
+              "accepted_names": [
+                "hermes_session_at",
+                "hermes_session_rt",
+                "hermes_session_provider"
+              ],
+              "expired_names": [
+                "hermes_session_at",
+                "hermes_session_rt",
+                "hermes_session_provider"
+              ],
+              "path": "/",
+              "secure": true,
+              "http_only": true,
+              "same_site": "strict",
+              "max_age": 0,
+              "expires_required": true,
+              "resolvable_session_revocation_required_before_expiry": true,
+              "failure_preserves_session_and_cookies": true,
+              "idempotent_when_cookies_absent_or_session_already_revoked": true
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request body was not empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidLogoutRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Browser session cookies were malformed or conflicting",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutAuthenticationFailedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request was not an exact trusted same-origin HTTPS mutation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The browser session could not be durably revoked; cookies remain active for retry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutFailedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents": {
+      "get": {
+        "operationId": "listAgentsCompatibility",
+        "deprecated": true,
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookieAuth": []
+          }
+        ],
+        "x-hermes-cookie-read-policy": {
+          "cookie_name": "hermes_session_at",
+          "requires_effective_https": true,
+          "same_origin_evidence": {
+            "origin_must_match_effective_host_exactly": true,
+            "fetch_metadata_alternative": {
+              "Sec-Fetch-Site": "same-origin",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Dest": "empty"
+            }
+          },
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true,
+          "bearer_and_cookie_must_resolve_to_same_principal": true,
+          "invalid_or_conflicting_credentials": "fail_closed"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkspaceIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agents in workspaces visible through active membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/agents": {
+      "get": {
+        "operationId": "listAgents",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookieAuth": []
+          }
+        ],
+        "x-hermes-cookie-read-policy": {
+          "cookie_name": "hermes_session_at",
+          "requires_effective_https": true,
+          "same_origin_evidence": {
+            "origin_must_match_effective_host_exactly": true,
+            "fetch_metadata_alternative": {
+              "Sec-Fetch-Site": "same-origin",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Dest": "empty"
+            }
+          },
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true,
+          "bearer_and_cookie_must_resolve_to_same_principal": true,
+          "invalid_or_conflicting_credentials": "fail_closed"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkspaceIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agents in workspaces visible through active membership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/sessions": {
+      "get": {
+        "operationId": "listSessions",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookieAuth": []
+          }
+        ],
+        "x-hermes-cookie-read-policy": {
+          "cookie_name": "hermes_session_at",
+          "requires_effective_https": true,
+          "same_origin_evidence": {
+            "origin_must_match_effective_host_exactly": true,
+            "fetch_metadata_alternative": {
+              "Sec-Fetch-Site": "same-origin",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Dest": "empty"
+            }
+          },
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true,
+          "bearer_and_cookie_must_resolve_to_same_principal": true,
+          "invalid_or_conflicting_credentials": "fail_closed"
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "min_messages",
+            "in": "query",
+            "schema": {
+              "enum": [0, 1],
+              "default": 0
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "const": "exclude"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "const": "recent"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AgentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized server-side session projections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/SessionScopeAmbiguous"
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "operationId": "listSessionsCompatibility",
+        "deprecated": true,
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookieAuth": []
+          }
+        ],
+        "x-hermes-cookie-read-policy": {
+          "cookie_name": "hermes_session_at",
+          "requires_effective_https": true,
+          "same_origin_evidence": {
+            "origin_must_match_effective_host_exactly": true,
+            "fetch_metadata_alternative": {
+              "Sec-Fetch-Site": "same-origin",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Dest": "empty"
+            }
+          },
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true,
+          "bearer_and_cookie_must_resolve_to_same_principal": true,
+          "invalid_or_conflicting_credentials": "fail_closed"
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "min_messages",
+            "in": "query",
+            "schema": {
+              "enum": [0, 1],
+              "default": 0
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "const": "exclude"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "const": "recent"
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AgentIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized server-side session projections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/SessionScopeAmbiguous"
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "operationId": "getSession",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AgentIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One authorized session projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionProjection"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/messages": {
+      "get": {
+        "operationId": "getSessionMessages",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/AgentIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative transcript projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTranscript"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/auth/ws-ticket": {
+      "post": {
+        "operationId": "mintWebSocketTicket",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "sessionCookieAuth": []
+          }
+        ],
+        "x-hermes-cookie-csrf": {
+          "cookie_name": "hermes_session_at",
+          "requires_https_origin": true,
+          "origin_must_match_effective_host_exactly": true,
+          "forwarded_headers_trusted_only_from_configured_reverse_proxy": true,
+          "bearer_and_cookie_must_resolve_to_same_principal": true,
+          "invalid_or_conflicting_credentials": "fail_closed"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebSocketTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Short-lived single-use WebSocket ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSocketTicketResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/offers": {
+      "post": {
+        "operationId": "createPairingOffer",
+        "security": [],
+        "x-hermes-authentication-subject": "connector_bootstrap",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "PAIRING_INVALID_REQUEST",
+          "IDEMPOTENCY_CONFLICT",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePairingOfferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant-neutral five-minute pairing offer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePairingOfferResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/offers/{pairing_offer_id}": {
+      "get": {
+        "operationId": "getPairingOffer",
+        "security": [
+          {
+            "pairingOfferAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "pairing_offer",
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "PAIRING_NOT_FOUND",
+          "PAIRING_EXPIRED",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PairingOfferId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connector-only pairing progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorPairingStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "410": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/claims": {
+      "post": {
+        "operationId": "claimPairingCode",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "owner",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-pairing-claim-policy": {
+          "principal_key": [
+            "tenant_id",
+            "user_id"
+          ],
+          "failed_lookup_window_seconds": 300,
+          "max_failed_lookups": 5,
+          "failed_lookup_effect": "block_principal_claims_until_window_expires",
+          "failed_lookup_offer_effect": "none",
+          "unavailable_response_code": "PAIRING_CLAIM_UNAVAILABLE",
+          "correct_code_effect": "atomic_offer_digest_compare_and_swap",
+          "idempotency_replay": "same_key_same_digest"
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "PAIRING_INVALID_REQUEST",
+          "PAIRING_CLAIM_UNAVAILABLE",
+          "IDEMPOTENCY_CONFLICT",
+          "PAIRING_CLAIM_RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimPairingSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "200": {
+            "description": "Owner-bound pairing session awaiting fingerprint confirmation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingOwnerView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingClaimUnavailable"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingClaimRateLimited"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/sessions/{pairing_session_id}": {
+      "get": {
+        "operationId": "getPairingSession",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "owner",
+        "x-hermes-polling": {
+          "minimum_interval_ms": 1000,
+          "response": "complete_authoritative_owner_snapshot",
+          "stop_activation_states": [
+            "active",
+            "blocked"
+          ],
+          "stop_session_states": [
+            "expired",
+            "cancelled"
+          ]
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "PAIRING_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PairingSessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete authoritative owner pairing snapshot",
+            "headers": {
+              "Cache-Control": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingOwnerView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/sessions/{pairing_session_id}/confirm": {
+      "post": {
+        "operationId": "confirmPairingSession",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "owner",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "PAIRING_NOT_FOUND",
+          "PAIRING_STATE_CONFLICT",
+          "IDEMPOTENCY_CONFLICT",
+          "PAIRING_EXPIRED",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PairingSessionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPairingSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner confirmed scope; device proof still required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingOwnerView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "410": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/sessions/{pairing_session_id}/cancel": {
+      "post": {
+        "operationId": "cancelPairingSession",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "owner",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "PAIRING_NOT_FOUND",
+          "PAIRING_STATE_CONFLICT",
+          "IDEMPOTENCY_CONFLICT",
+          "PAIRING_EXPIRED",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PairingSessionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelPairingSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pairing cancelled before activation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingOwnerView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "410": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-pairing/sessions/{pairing_session_id}/proof": {
+      "post": {
+        "operationId": "provePairingSession",
+        "security": [
+          {
+            "pairingOfferAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "pairing_offer",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "PAIRING_NOT_FOUND",
+          "PAIRING_STATE_CONFLICT",
+          "IDEMPOTENCY_CONFLICT",
+          "PAIRING_EXPIRED",
+          "CHALLENGE_EXPIRED",
+          "CHALLENGE_INVALID",
+          "CHALLENGE_REPLAYED",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PairingSessionId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceChallengeProofRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device credential activated and initial connector token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "410": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-auth/challenges": {
+      "post": {
+        "operationId": "createDeviceAuthenticationChallenge",
+        "security": [],
+        "x-hermes-authentication-subject": "device_bootstrap",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "DEVICE_AUTH_UNAVAILABLE",
+          "IDEMPOTENCY_CONFLICT",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAuthenticationChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Single-use Ed25519 device challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAuthenticationChallenge"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/device-auth/tokens": {
+      "post": {
+        "operationId": "mintConnectorToken",
+        "security": [],
+        "x-hermes-authentication-subject": "device_proof",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "CHALLENGE_INVALID",
+          "DEVICE_AUTH_UNAVAILABLE",
+          "IDEMPOTENCY_CONFLICT",
+          "CHALLENGE_EXPIRED",
+          "CHALLENGE_REPLAYED",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceAuthenticationTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Short-lived device-bound connector token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "410": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    },
+    "/api/devices/{device_id}/revoke": {
+      "post": {
+        "operationId": "revokeDevice",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-hermes-authentication-subject": "owner",
+        "x-hermes-idempotency": {
+          "same_key_same_digest": "replay_business_result",
+          "same_key_different_digest": "reject_idempotency_conflict"
+        },
+        "x-hermes-error-codes": [
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "PAIRING_NOT_FOUND",
+          "PAIRING_STATE_CONFLICT",
+          "IDEMPOTENCY_CONFLICT",
+          "RATE_LIMITED"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeDeviceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device and every credential revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeDeviceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "403": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "404": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "409": {
+            "$ref": "#/components/responses/PairingError"
+          },
+          "429": {
+            "$ref": "#/components/responses/PairingError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque"
+      },
+      "sessionCookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "hermes_session_at",
+        "description": "Secure HttpOnly SameSite=Strict browser session cookie; accepted only by operations that declare sessionCookieAuth and their endpoint-specific same-origin policy."
+      },
+      "pairingOfferAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Hermes-Pairing-Offer",
+        "description": "Raw connector-only pairing offer secret. The server stores only its SHA-256 digest."
+      }
+    },
+    "parameters": {
+      "SessionId": {
+        "name": "session_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "AgentId": {
+        "name": "agent_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "AgentIdQuery": {
+        "name": "agent_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "WorkspaceIdQuery": {
+        "name": "workspace_id",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "PairingOfferId": {
+        "name": "pairing_offer_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "PairingSessionId": {
+        "name": "pairing_session_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "DeviceId": {
+        "name": "device_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated browser request failed trusted same-origin policy",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Authorized resource is not available",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "SessionScopeAmbiguous": {
+        "description": "The omitted Agent or profile scope resolves to more than one authorized session scope",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SessionScopeAmbiguousResponse"
+            }
+          }
+        }
+      },
+      "PairingClaimUnavailable": {
+        "description": "The pairing claim is unavailable; unknown, wrong, expired, cancelled, and already claimed codes are intentionally indistinguishable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PairingClaimUnavailableResponse"
+            }
+          }
+        }
+      },
+      "PairingClaimRateLimited": {
+        "description": "The authenticated owner principal is blocked from pairing-code claims until the five-minute failure window expires",
+        "headers": {
+          "Retry-After": {
+            "required": true,
+            "description": "Seconds remaining in the authenticated owner principal's five-minute claim block",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PairingClaimRateLimitedResponse"
+            }
+          }
+        }
+      },
+      "PairingError": {
+        "description": "Device pairing or device authentication failed closed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "StatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gateway_running",
+          "gateway_state",
+          "auth_required",
+          "auth_providers",
+          "auth_flows",
+          "overall"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "release_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "gateway_running": {
+            "type": "boolean"
+          },
+          "gateway_state": {
+            "type": "string",
+            "enum": [
+              "starting",
+              "ready",
+              "degraded",
+              "draining",
+              "failed"
+            ]
+          },
+          "auth_required": {
+            "type": "boolean"
+          },
+          "auth_providers": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "basic"
+              ]
+            }
+          },
+          "auth_flows": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "password"
+              ]
+            }
+          },
+          "overall": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "degraded",
+              "unavailable"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "gateway_running": {
+                  "const": false
+                }
+              },
+              "required": [
+                "gateway_running"
+              ]
+            },
+            "then": {
+              "properties": {
+                "gateway_state": {
+                  "enum": [
+                    "starting",
+                    "draining",
+                    "failed"
+                  ]
+                },
+                "overall": {
+                  "enum": [
+                    "degraded",
+                    "unavailable"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "gateway_state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "gateway_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "gateway_running": {
+                  "const": true
+                },
+                "overall": {
+                  "const": "healthy"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "gateway_state": {
+                  "const": "degraded"
+                }
+              },
+              "required": [
+                "gateway_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "gateway_running": {
+                  "const": true
+                },
+                "overall": {
+                  "const": "degraded"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "gateway_state": {
+                  "const": "failed"
+                }
+              },
+              "required": [
+                "gateway_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "gateway_running": {
+                  "const": false
+                },
+                "overall": {
+                  "const": "unavailable"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "overall": {
+                  "const": "healthy"
+                }
+              },
+              "required": [
+                "overall"
+              ]
+            },
+            "then": {
+              "properties": {
+                "gateway_running": {
+                  "const": true
+                },
+                "gateway_state": {
+                  "const": "ready"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "auth_required": {
+                  "const": true
+                }
+              },
+              "required": [
+                "auth_required"
+              ]
+            },
+            "then": {
+              "properties": {
+                "auth_providers": {
+                  "minItems": 1,
+                  "contains": {
+                    "const": "basic"
+                  }
+                },
+                "auth_flows": {
+                  "minItems": 1,
+                  "contains": {
+                    "const": "password"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PasswordLoginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider",
+          "username",
+          "password",
+          "next"
+        ],
+        "properties": {
+          "provider": {
+            "const": "basic"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "next": {
+            "type": "string",
+            "maxLength": 0
+          }
+        }
+      },
+      "PasswordLoginResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "InvalidLogoutRequestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "const": "INVALID_REQUEST"
+          },
+          "reason": {
+            "const": "empty request body required"
+          }
+        }
+      },
+      "LogoutAuthenticationFailedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "const": "AUTHENTICATION_FAILED"
+          },
+          "reason": {
+            "const": "authentication failed"
+          }
+        }
+      },
+      "ForbiddenResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "const": "FORBIDDEN"
+          },
+          "reason": {
+            "const": "trusted same-origin request required"
+          }
+        }
+      },
+      "LogoutFailedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "const": "LOGOUT_FAILED"
+          },
+          "reason": {
+            "const": "logout failed"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "refresh_token",
+          "provider"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "provider": {
+            "const": "basic"
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_at",
+          "provider",
+          "user_id"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "refresh_token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "token_type": {
+            "const": "Bearer"
+          },
+          "expires_at": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "provider": {
+            "const": "basic"
+          },
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "AgentProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent_id",
+          "workspace_id",
+          "agent_key",
+          "status",
+          "last_seen_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "workspace_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "disabled", "offline"]
+          },
+          "last_seen_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agents"],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "maxItems": 1024,
+            "items": {
+              "$ref": "#/components/schemas/AgentProjection"
+            }
+          }
+        }
+      },
+      "SessionProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "agent_id",
+          "workspace_id",
+          "started_at",
+          "message_count",
+          "tool_call_count",
+          "input_tokens",
+          "output_tokens",
+          "is_active",
+          "archived",
+          "directory_source",
+          "availability",
+          "runtime_generation",
+          "surface",
+          "authority_revision",
+          "available_actions",
+          "transcript_available"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "agent_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "workspace_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "_lineage_root_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "parent_session_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128,
+            "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "git_branch": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 512
+          },
+          "started_at": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "ended_at": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "last_active": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "message_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tool_call_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "input_tokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "output_tokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "directory_source": {
+            "type": "string",
+            "enum": [
+              "host_catalog",
+              "transcript_projection"
+            ]
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "live",
+              "offline"
+            ]
+          },
+          "runtime_generation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "surface": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "authority_revision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "available_actions": {
+            "type": "array",
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "approval.respond",
+                "clarify.respond",
+                "prompt.submit",
+                "session.interrupt",
+                "session.steer"
+              ]
+            }
+          },
+          "transcript_available": {
+            "type": "boolean"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "directory_source": {
+                  "const": "host_catalog"
+                }
+              },
+              "required": [
+                "directory_source"
+              ]
+            },
+            "then": {
+              "required": [
+                "agent_id",
+                "_lineage_root_id",
+                "profile",
+                "runtime_generation",
+                "surface",
+                "authority_revision"
+              ],
+              "properties": {
+                "agent_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "_lineage_root_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "profile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+                },
+                "runtime_generation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "surface": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "authority_revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "transcript_available": {
+                  "const": false
+                },
+                "title": {
+                  "const": null
+                },
+                "started_at": {
+                  "const": null
+                },
+                "last_active": {
+                  "const": null
+                },
+                "ended_at": {
+                  "const": null
+                },
+                "preview": {
+                  "const": null
+                },
+                "source": {
+                  "const": null
+                },
+                "model": {
+                  "const": null
+                },
+                "cwd": {
+                  "const": null
+                },
+                "git_branch": {
+                  "const": null
+                },
+                "message_count": {
+                  "const": 0
+                },
+                "tool_call_count": {
+                  "const": 0
+                },
+                "input_tokens": {
+                  "const": 0
+                },
+                "output_tokens": {
+                  "const": 0
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "runtime_generation": {
+                  "const": null
+                },
+                "surface": {
+                  "const": null
+                },
+                "authority_revision": {
+                  "const": null
+                },
+                "available_actions": {
+                  "const": []
+                },
+                "transcript_available": {
+                  "const": true
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SessionPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sessions",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/SessionProjection"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "SessionTranscript": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "agent_id",
+          "workspace_id",
+          "messages",
+          "pagination"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "agent_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "workspace_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "messages": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "role"
+              ],
+              "properties": {
+                "id": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "content": {},
+                "timestamp": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0
+                },
+                "reasoning": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "reasoning_content": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "reasoning_details": {},
+                "tool_call_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 256
+                },
+                "tool_calls": {},
+                "tool_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 256
+                },
+                "display_kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 128
+                },
+                "display_metadata": {}
+              }
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "offset",
+              "returned"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 500
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "returned": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 500
+              }
+            }
+          }
+        }
+      },
+      "WebSocketTicketRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "maxProperties": 0
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "connection_role",
+              "client_instance_id"
+            ],
+            "properties": {
+              "connection_role": {
+                "const": "observer"
+              },
+              "client_instance_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "agent_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "connection_role",
+              "client_instance_id",
+              "observer_contract"
+            ],
+            "properties": {
+              "connection_role": {
+                "const": "observer"
+              },
+              "client_instance_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "observer_contract": {
+                "const": 2
+              },
+              "agent_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "connection_role",
+              "client_instance_id",
+              "session_id",
+              "profile"
+            ],
+            "properties": {
+              "connection_role": {
+                "const": "control"
+              },
+              "client_instance_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "session_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              },
+              "profile": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+              },
+              "agent_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+              }
+            }
+          }
+        ]
+      },
+      "WebSocketTicketResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticket",
+              "ttl_seconds",
+              "connection_role"
+            ],
+            "properties": {
+              "ticket": {
+                "type": "string",
+                "minLength": 32,
+                "maxLength": 4096
+              },
+              "ttl_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60
+              },
+              "connection_role": {
+                "const": "observer"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticket",
+              "ttl_seconds",
+              "connection_role",
+              "observer_contract"
+            ],
+            "properties": {
+              "ticket": {
+                "type": "string",
+                "minLength": 32,
+                "maxLength": 4096
+              },
+              "ttl_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60
+              },
+              "connection_role": {
+                "const": "observer"
+              },
+              "observer_contract": {
+                "const": 2
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticket",
+              "ttl_seconds",
+              "connection_role"
+            ],
+            "properties": {
+              "ticket": {
+                "type": "string",
+                "minLength": 32,
+                "maxLength": 4096
+              },
+              "ttl_seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60
+              },
+              "connection_role": {
+                "const": "control"
+              }
+            }
+          }
+        ]
+      },
+      "CreatePairingOfferRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connector_instance_id",
+          "display_name",
+          "platform_family",
+          "connector_version",
+          "key_algorithm",
+          "public_key"
+        ],
+        "properties": {
+          "connector_instance_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^\\S(?:.*\\S)?$"
+          },
+          "platform_family": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "connector_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$"
+          },
+          "key_algorithm": {
+            "const": "Ed25519"
+          },
+          "public_key": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        }
+      },
+      "CreatePairingOfferResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pairing_offer_id",
+          "pairing_code",
+          "pairing_offer_secret",
+          "credential_fingerprint",
+          "state",
+          "revision",
+          "ttl_seconds",
+          "expires_at"
+        ],
+        "properties": {
+          "pairing_offer_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "pairing_code": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$"
+          },
+          "pairing_offer_secret": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "writeOnly": true
+          },
+          "credential_fingerprint": {
+            "type": "string",
+            "pattern": "^SHA256:[A-Za-z0-9_-]{43}$"
+          },
+          "state": {
+            "const": "pending"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ttl_seconds": {
+            "const": 300
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ClaimPairingSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pairing_code",
+          "workspace_id",
+          "agent_id",
+          "device_display_name",
+          "scopes",
+          "expected_revision"
+        ],
+        "properties": {
+          "pairing_code": {
+            "type": "string",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$",
+            "writeOnly": true
+          },
+          "workspace_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "device_display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^\\S(?:.*\\S)?$"
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "session.observe",
+                "session.control.request"
+              ]
+            }
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ConfirmPairingSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "credential_fingerprint",
+          "expected_revision"
+        ],
+        "properties": {
+          "credential_fingerprint": {
+            "type": "string",
+            "pattern": "^SHA256:[A-Za-z0-9_-]{43}$"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "CancelPairingSessionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "expected_revision"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "owner_cancelled",
+              "fingerprint_mismatch"
+            ]
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "PairingOwnerView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pairing_offer_id",
+          "pairing_session_id",
+          "state",
+          "activation_state",
+          "binding",
+          "display_name",
+          "platform_family",
+          "connector_version",
+          "key_algorithm",
+          "credential_fingerprint",
+          "expires_at",
+          "revision",
+          "device_revision"
+        ],
+        "properties": {
+          "pairing_offer_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "pairing_session_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "confirmed",
+              "expired",
+              "cancelled"
+            ]
+          },
+          "activation_state": {
+            "type": "string",
+            "enum": [
+              "waiting_owner_confirmation",
+              "awaiting_proof",
+              "active",
+              "blocked"
+            ]
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tenant_id",
+              "user_id",
+              "workspace_id",
+              "agent_id",
+              "device_id",
+              "credential_id",
+              "scopes"
+            ],
+            "properties": {
+              "tenant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "user_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "workspace_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "agent_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "device_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "credential_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "scopes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "session.observe",
+                    "session.control.request"
+                  ]
+                }
+              }
+            }
+          },
+          "credential_fingerprint": {
+            "type": "string",
+            "pattern": "^SHA256:[A-Za-z0-9_-]{43}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^\\S(?:.*\\S)?$"
+          },
+          "platform_family": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "connector_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$"
+          },
+          "key_algorithm": {
+            "const": "Ed25519"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Pairing session public revision for confirmation, cancellation, and status consistency. Never use this value for a device lifecycle mutation."
+          },
+          "device_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Device lifecycle public revision. Use this value as RevokeDeviceRequest.expected_revision."
+          }
+        }
+      },
+      "DeviceAuthenticationChallenge": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "challenge_id",
+          "signing_payload",
+          "ttl_seconds",
+          "expires_at"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "signing_payload": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "minLength": 64,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConnectorPairingStatusResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pairing_offer_id",
+              "state",
+              "activation_state",
+              "expires_at",
+              "revision"
+            ],
+            "properties": {
+              "pairing_offer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "const": "pending"
+              },
+              "activation_state": {
+                "const": "waiting_owner"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pairing_offer_id",
+              "pairing_session_id",
+              "state",
+              "activation_state",
+              "expires_at",
+              "revision"
+            ],
+            "properties": {
+              "pairing_offer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "pairing_session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "const": "claimed"
+              },
+              "activation_state": {
+                "const": "waiting_owner_confirmation"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pairing_offer_id",
+              "pairing_session_id",
+              "state",
+              "activation_state",
+              "binding",
+              "challenge",
+              "expires_at",
+              "revision"
+            ],
+            "properties": {
+              "pairing_offer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "pairing_session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "const": "confirmed"
+              },
+              "activation_state": {
+                "const": "awaiting_proof"
+              },
+              "binding": {
+                "$ref": "#/components/schemas/ConnectorDeviceBinding"
+              },
+              "challenge": {
+                "$ref": "#/components/schemas/DeviceAuthenticationChallenge"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pairing_offer_id",
+              "pairing_session_id",
+              "state",
+              "activation_state",
+              "binding",
+              "expires_at",
+              "revision"
+            ],
+            "properties": {
+              "pairing_offer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "pairing_session_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "const": "confirmed"
+              },
+              "activation_state": {
+                "const": "active"
+              },
+              "binding": {
+                "$ref": "#/components/schemas/ConnectorDeviceBinding"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pairing_offer_id",
+              "state",
+              "activation_state",
+              "expires_at",
+              "revision"
+            ],
+            "properties": {
+              "pairing_offer_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "expired",
+                  "cancelled"
+                ]
+              },
+              "activation_state": {
+                "const": "blocked"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        ]
+      },
+      "DeviceChallengeProofRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "challenge_id",
+          "signing_payload",
+          "signature_algorithm",
+          "signature"
+        ],
+        "properties": {
+          "challenge_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "signing_payload": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "minLength": 64,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "signature_algorithm": {
+            "const": "Ed25519"
+          },
+          "signature": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          }
+        }
+      },
+      "DeviceAuthenticationChallengeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "credential_id"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "credential_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        }
+      },
+      "DeviceAuthenticationTokenRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "credential_id",
+          "challenge_id",
+          "signing_payload",
+          "signature_algorithm",
+          "signature"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "credential_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "challenge_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "signing_payload": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "minLength": 64,
+            "maxLength": 1024,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "signature_algorithm": {
+            "const": "Ed25519"
+          },
+          "signature": {
+            "type": "string",
+            "contentEncoding": "base64url",
+            "pattern": "^[A-Za-z0-9_-]{86}$"
+          }
+        }
+      },
+      "ConnectorDeviceBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant_id",
+          "device_id",
+          "credential_id",
+          "agent_id",
+          "scopes"
+        ],
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "credential_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "session.observe",
+                "session.control.request"
+              ]
+            }
+          }
+        }
+      },
+      "ConnectorTokenResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "access_token",
+          "token_type",
+          "ttl_seconds",
+          "expires_at",
+          "binding"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "token_type": {
+            "const": "Bearer"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tenant_id",
+              "device_id",
+              "credential_id",
+              "agent_id",
+              "scopes"
+            ],
+            "properties": {
+              "tenant_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "device_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "credential_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "agent_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "scopes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 2,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "session.observe",
+                    "session.control.request"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "RevokeDeviceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "expected_revision"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "user_requested",
+              "device_lost",
+              "security_event"
+            ]
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Device lifecycle public revision. This value must equal PairingOwnerView.device_revision, not PairingOwnerView.revision."
+          }
+        }
+      },
+      "RevokeDeviceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_id",
+          "status",
+          "revision",
+          "revoked_at"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "const": "revoked"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PairingClaimUnavailableResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "PAIRING_CLAIM_UNAVAILABLE"
+          },
+          "reason": {
+            "type": "string",
+            "const": "pairing claim unavailable"
+          }
+        }
+      },
+      "PairingClaimRateLimitedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "PAIRING_CLAIM_RATE_LIMITED"
+          },
+          "reason": {
+            "type": "string",
+            "const": "pairing claims temporarily unavailable"
+          }
+        }
+      },
+      "SessionScopeAmbiguousResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "SESSION_SCOPE_AMBIGUOUS"
+          },
+          "reason": {
+            "type": "string",
+            "const": "session scope is ambiguous"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    }
+  }
+}

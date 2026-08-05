@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/session-event.schema.json",
+  "title": "Hermes Connector Session Event Payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "runtime_generation",
+    "session_key",
+    "session_id",
+    "type",
+    "event_sequence",
+    "payload"
+  ],
+  "properties": {
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "session_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "type": {
+      "enum": [
+        "message.start",
+        "message.delta",
+        "message.complete",
+        "agent.terminal.output",
+        "reasoning.delta",
+        "status.update",
+        "thinking.delta",
+        "tool.output.delta"
+      ]
+    },
+    "event_sequence_start": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 1024
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"type": {"const": "message.start"}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "message_id": {"type": "string", "minLength": 1, "maxLength": 256},
+              "role": {"const": "assistant"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"enum": ["message.delta", "reasoning.delta", "thinking.delta"]}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": {"text": {"type": "string", "maxLength": 131072}}
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "message.complete"}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status"],
+            "properties": {
+              "text": {"type": "string", "maxLength": 131072},
+              "status": {"enum": ["complete", "error"]},
+              "error": {"type": ["string", "null"], "maxLength": 4096}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "agent.terminal.output"}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": {
+              "process_id": {"type": "string", "minLength": 1, "maxLength": 256},
+              "stream": {"enum": ["stdout", "stderr"]},
+              "text": {"type": "string", "maxLength": 131072},
+              "sequence": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "status.update"}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "running"],
+            "properties": {
+              "status": {"type": "string", "minLength": 1, "maxLength": 64},
+              "running": {"type": "boolean"},
+              "text": {"type": "string", "maxLength": 131072}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "tool.output.delta"}}, "required": ["type"]},
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": {
+              "tool_call_id": {"type": "string", "minLength": 1, "maxLength": 256},
+              "tool_name": {"type": "string", "minLength": 1, "maxLength": 256},
+              "text": {"type": "string", "maxLength": 131072},
+              "sequence": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

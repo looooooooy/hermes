@@ -1,0 +1,15 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-20260803-01",
+  "catalog_sequence": 9,
+  "action": "remove",
+  "entry": {
+    "session_key": "durable-session-real",
+    "surface": "gateway",
+    "authority_revision": 4,
+    "available_actions": [
+      "prompt.submit",
+      "session.interrupt"
+    ]
+  }
+}

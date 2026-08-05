@@ -1,0 +1,12 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-range",
+  "session_key": "session-range",
+  "session_id": "runtime-session-range",
+  "type": "message.complete",
+  "event_sequence_start": 1,
+  "event_sequence": 2,
+  "payload": {
+    "status": "complete"
+  }
+}

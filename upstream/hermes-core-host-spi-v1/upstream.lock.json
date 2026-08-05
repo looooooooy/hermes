@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "stage": 3,
+  "upstream": {
+    "distribution": "hermes-agent",
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "version": "0.19.0",
+    "commit": "14db1a99e21e5523ee61f10f5c3300a5087e8449"
+  },
+  "patches": [
+    {
+      "path": "patches/0001-gateway-extension-host-spi-v1-stage1.patch",
+      "sha256": "0d5b946e809e0792305a1f0b8f234ece6054b7eb14d208c871b53a03c9bcf8aa"
+    },
+    {
+      "path": "patches/0002-session-authority-observer-stage2.patch",
+      "sha256": "f1f06c530c9605470a31aaf68fc0ca49729b83a415cfc6bee2bf939e6bcb71b2"
+    },
+    {
+      "path": "patches/0003-production-composition-owner-actions-stage3.patch",
+      "sha256": "7a10d91a2e18185f64d741e3df4608d1e175206c6f50017be963eae4ef0d0687"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "dist/hermes_agent-0.19.0-py3-none-any.whl",
+      "sha256": "885bfff72d203ad0cea88b7906d2b5845bc089b37c79696a1fa02a9aea89854c"
+    },
+    {
+      "path": "dist/hermes_agent-0.19.0.tar.gz",
+      "sha256": "f7e4a7e3292af70a04bc749fd49dc00fc189b53dbfb2e5e0e10de100c48602bc"
+    }
+  ],
+  "artifact_provenance": {
+    "schema_version": 1,
+    "stage3_patch_sha256": "7a10d91a2e18185f64d741e3df4608d1e175206c6f50017be963eae4ef0d0687",
+    "source_files": [
+      {
+        "path": "gateway/run.py",
+        "sha256": "80fb638f0a3f7b87d554f78573e154cb17a93022c7874b5aabf37f1f85e0f034"
+      },
+      {
+        "path": "hermes_cli/plugins.py",
+        "sha256": "d7ab352f35890537aa4a96fea2e69f013e1aa1de402cc3d4f3891c9d40686173"
+      },
+      {
+        "path": "hermes_cli/web_server.py",
+        "sha256": "b511bb017261f591ddf1402ca9e8e74ffe1ecaa6a3e7991e2bf9faaa6e46dffb"
+      },
+      {
+        "path": "hermes_cli/plugin_store_v1.py",
+        "sha256": "88475b548775237c3422268fdd8d16dd4863f42bc7e87157616a5753fc2aec7c"
+      },
+      {
+        "path": "hermes_cli/extension_runtime.py",
+        "sha256": "e89542f90598a6126295c313a1203181c9d4311085be73edbaf61d903ee2fc8a"
+      }
+    ]
+  },
+  "artifact_build": {
+    "source_date_epoch": 1785409311,
+    "environment": {
+      "HERMES_NIX_BUILD": "1"
+    },
+    "command": [
+      "uv",
+      "build",
+      "--wheel",
+      "--sdist",
+      "--out-dir",
+      "dist",
+      "--clear",
+      "--no-create-gitignore"
+    ]
+  },
+  "verification": {
+    "environment": {
+      "kind": "uv-all-dev-locked",
+      "command": [
+        "uv",
+        "sync",
+        "--extra",
+        "all",
+        "--extra",
+        "dev",
+        "--locked",
+        "--check",
+        "--no-install-project"
+      ],
+      "required_imports": [
+        "pytest",
+        "rich"
+      ]
+    },
+    "command": [
+      "scripts/run_tests.sh",
+      "-j",
+      "2",
+      "tests/hermes_cli/test_extension_host_v1_contract.py",
+      "tests/hermes_cli/test_extension_runtime_stage2.py",
+      "tests/hermes_cli/test_extension_runtime_stage3.py",
+      "tests/hermes_cli/test_extension_surface_output_parity.py",
+      "tests/hermes_cli/test_gateway_extension_registration.py",
+      "tests/hermes_cli/test_plugins.py",
+      "tests/hermes_cli/test_plugin_store_v1.py",
+      "tests/tools/test_process_registry.py",
+      "tests/test_tui_gateway_server.py",
+      "tests/test_tui_gateway_queue_on_busy.py",
+      "-q"
+    ],
+    "related_regression_gates": [
+      {
+        "id": "plugin-manager-clean-environment",
+        "python_profile": "pytest-without-project-entrypoint",
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-p",
+          "no:cacheprovider",
+          "tests/hermes_cli/test_plugin_auxiliary_tasks.py",
+          "tests/hermes_cli/test_plugin_cli_registration.py",
+          "tests/hermes_cli/test_plugin_scanner_recursion.py",
+          "tests/hermes_cli/test_plugins_transcription_registration.py",
+          "tests/hermes_cli/test_plugins_tts_registration.py",
+          "tests/hermes_cli/test_safe_mode.py",
+          "tests/hermes_cli/test_startup_plugin_gating.py",
+          "tests/test_plugin_skills.py",
+          "tests/test_transform_tool_result_hook.py",
+          "-q"
+        ]
+      },
+      {
+        "id": "plugin-manager-full-dependencies",
+        "python_profile": "pytest-with-hermes-plugin-development-dependencies",
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-p",
+          "no:cacheprovider",
+          "tests/agent/test_context_engine_host_contract.py",
+          "tests/hermes_cli/test_plugins_cmd.py",
+          "tests/hermes_cli/test_plugins_cmd_enable_disable_nested.py",
+          "-q"
+        ]
+      }
+    ]
+  }
+}

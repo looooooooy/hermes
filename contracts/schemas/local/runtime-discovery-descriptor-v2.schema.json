@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v2/local/runtime-discovery-descriptor.schema.json",
+  "title": "Hermes Local Runtime Discovery Descriptor v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "pid",
+    "profile",
+    "runtime_generation",
+    "socket_path",
+    "instance_id",
+    "process_start_time_ns",
+    "process_executable",
+    "process_executable_device",
+    "process_executable_inode",
+    "host_bundle_id"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "socket_path": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$"
+    },
+    "instance_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "process_start_time_ns": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "process_executable": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 4096,
+      "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$"
+    },
+    "process_executable_device": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "process_executable_inode": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "host_bundle_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*$"
+    }
+  }
+}

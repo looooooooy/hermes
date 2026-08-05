@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/cloud/payloads/stream-nack-v1.schema.json",
+  "title": "Observer Stream Recovery NACK v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observer_message_id",
+    "payload_digest",
+    "connector_sequence",
+    "observer_message_type",
+    "profile",
+    "session_key",
+    "runtime_generation",
+    "runtime_session_id",
+    "event_sequence",
+    "reason",
+    "expected_event_sequence",
+    "recovery",
+    "rejected_at"
+  ],
+  "properties": {
+    "observer_message_id": {"type": "string", "format": "uuid"},
+    "payload_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "connector_sequence": {"type": "integer", "minimum": 0},
+    "observer_message_type": {"type": "string", "enum": ["session.snapshot", "session.event"]},
+    "profile": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"},
+    "session_key": {"type": "string", "minLength": 1, "maxLength": 256},
+    "runtime_generation": {"type": "string", "minLength": 1, "maxLength": 128},
+    "runtime_session_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "event_sequence": {"type": "integer", "minimum": 0},
+    "reason": {
+      "type": "string",
+      "enum": ["event_gap", "projection_conflict", "runtime_binding_mismatch"]
+    },
+    "expected_event_sequence": {"type": "integer", "minimum": 0},
+    "recovery": {"type": "string", "enum": ["send_snapshot", "stop_stream"]},
+    "rejected_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"},
+      "additionalProperties": {"type": "object"}
+    }
+  }
+}

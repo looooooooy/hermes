@@ -1,0 +1,37 @@
+{
+  "contract": "canonical-payload-digest",
+  "decoder_requirements": {
+    "duplicate_object_members": "reject",
+    "non_finite_numbers": "reject"
+  },
+  "scope": "connector observer stream receipt payload_digest",
+  "serialization": {
+    "allow_nan": false,
+    "encoding": "UTF-8",
+    "ensure_ascii": false,
+    "separators": [
+      ",",
+      ":"
+    ],
+    "sort_keys": true
+  },
+  "vectors": [
+    {
+      "canonical_utf8": "{\"items\":[\"移动端\",3],\"message\":\"你好，Hermes\",\"nested\":{\"a\":true,\"z\":1}}",
+      "name": "utf8-chinese-v1",
+      "payload": {
+        "items": [
+          "移动端",
+          3
+        ],
+        "message": "你好，Hermes",
+        "nested": {
+          "a": true,
+          "z": 1
+        }
+      },
+      "sha256": "fc8c9ae630b9a4baba1252ee82bc62c50bd4d2000e16fb5673af92325313703d"
+    }
+  ],
+  "version": 1
+}

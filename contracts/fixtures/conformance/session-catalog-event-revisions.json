@@ -1,0 +1,12 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3},
+  "operations": [
+    {"op": "snapshot", "writer_id": "connector-a", "writer_fence": 3, "pages": [{"profile": "default", "runtime_generation": "runtime-a", "snapshot_id": "44444444-4444-4444-8444-444444444444", "catalog_revision": 7, "page_index": 0, "is_last": true, "sessions": [{"session_key": "root-a", "authority_revision": 3}]}]},
+    {"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-a", "catalog_sequence": 8, "action": "upsert", "entry": {"session_key": "root-a", "authority_revision": 3}},
+    {"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-a", "catalog_sequence": 9, "action": "upsert", "entry": {"session_key": "root-a", "authority_revision": 4}},
+    {"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-a", "catalog_sequence": 10, "action": "remove", "entry": {"session_key": "root-a", "authority_revision": 4}},
+    {"op": "assert_state", "equals": {"catalog_sequence": 10, "catalog_entries": {}, "catalog_session_keys": []}}
+  ],
+  "expected_errors": []
+}

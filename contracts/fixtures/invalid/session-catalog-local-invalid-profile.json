@@ -1,0 +1,6 @@
+{
+  "jsonrpc": "2.0",
+  "id": "11111111-1111-4111-8111-111111111111",
+  "method": "session.catalog.subscribe",
+  "params": {"profile": "bad/profile", "runtime_generation": "runtime-20260803-01", "page_size": 128}
+}

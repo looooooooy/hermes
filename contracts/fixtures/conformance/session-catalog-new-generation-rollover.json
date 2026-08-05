@@ -1,0 +1,50 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {
+    "profile": "default",
+    "current_writer_id": "connector-a",
+    "current_writer_fence": 3,
+    "active_runtime_generation": "runtime-old",
+    "retired_runtime_generations": [],
+    "catalog_revision": 8,
+    "catalog_sequence": 5,
+    "catalog_session_keys": ["old-root"],
+    "stable_session_ids": {}
+  },
+  "operations": [
+    {
+      "op": "snapshot",
+      "writer_id": "connector-a",
+      "writer_fence": 3,
+      "pages": [
+        {
+          "profile": "default",
+          "runtime_generation": "runtime-new",
+          "snapshot_id": "22222222-2222-4222-8222-222222222222",
+          "catalog_revision": 1,
+          "page_index": 0,
+          "is_last": false,
+          "sessions": [{"session_key": "new-root-a", "authority_revision": 1}]
+        },
+        {
+          "profile": "default",
+          "runtime_generation": "runtime-new",
+          "snapshot_id": "22222222-2222-4222-8222-222222222222",
+          "catalog_revision": 1,
+          "page_index": 1,
+          "is_last": true,
+          "sessions": [{"session_key": "new-root-b", "authority_revision": 2}]
+        }
+      ]
+    },
+    {
+      "op": "assert_state",
+      "equals": {
+        "active_runtime_generation": "runtime-new",
+        "retired_runtime_generations": ["runtime-old"],
+        "catalog_session_keys": ["new-root-a", "new-root-b"]
+      }
+    }
+  ],
+  "expected_errors": []
+}

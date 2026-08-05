@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/session-catalog-degradation-v1.schema.json",
+  "title": "Hermes Session Catalog N-1 and capability degradation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_version", "target_contract", "current_contract_version", "peer_contract_version", "classification", "available_capabilities", "unavailable_capabilities", "safe_effect"],
+  "properties": {
+    "profile_version": {"const": 1},
+    "target_contract": {"const": "session_catalog_v1"},
+    "current_contract_version": {"const": 1},
+    "peer_contract_version": {"enum": [0, 1]},
+    "classification": {"enum": ["n_1", "capability_degradation"]},
+    "available_capabilities": {
+      "type": "array",
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "session.observe",
+          "session.observe.output-parity.v1",
+          "session.control",
+          "file.exchange",
+          "a2a.message",
+          "view.card",
+          "view.interaction",
+          "enterprise.data",
+          "mcp.app"
+        ]
+      }
+    },
+    "unavailable_capabilities": {"const": ["session.catalog.v1"]},
+    "safe_effect": {"const": "directory_unavailable_without_synthetic_sessions"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"classification": {"const": "n_1"}}, "required": ["classification"]},
+      "then": {"properties": {"peer_contract_version": {"const": 0}}},
+      "else": {"properties": {"peer_contract_version": {"const": 1}}}
+    }
+  ]
+}

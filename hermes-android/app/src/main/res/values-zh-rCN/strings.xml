@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_unavailable">控制不可用</string>
+    <string name="transcript_minimap_turn_description">第%1$d轮，%2$s，%3$s</string>
+    <string name="transcript_minimap_range_description">对话项目第%1$d至%2$d项；选择第%3$d轮，%4$s，%5$s</string>
+    <string name="long_running_waiting">等待中</string>
+    <string name="long_running_running">运行中</string>
+    <string name="long_running_complete">已完成</string>
+    <string name="long_running_interrupted">已中断</string>
+    <string name="long_running_failed">失败</string>
+    <string name="tool_unknown">状态未知</string>
+    <string name="subagents_omitted">还有 %1$d 个子代理未显示</string>
+</resources>

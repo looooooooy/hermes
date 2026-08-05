@@ -1,0 +1,69 @@
+{
+  "contract": "runtime-process-identity-coherence-v1",
+  "vectors": [
+    {
+      "name": "stable-process-and-executable",
+      "descriptor": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "observed": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "accepted": true
+    },
+    {
+      "name": "pid-reuse-changes-start-time",
+      "descriptor": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "observed": {
+        "start_time_ns": 11000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "accepted": false
+    },
+    {
+      "name": "executable-path-replacement-changes-inode",
+      "descriptor": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "observed": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41002
+      },
+      "accepted": false
+    },
+    {
+      "name": "exec-transition-changes-path-and-file",
+      "descriptor": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/Hermes.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 41001
+      },
+      "observed": {
+        "start_time_ns": 10000001000,
+        "executable_path": "/Applications/HermesNext.app/Contents/MacOS/Hermes",
+        "executable_device": 16777234,
+        "executable_inode": 51001
+      },
+      "accepted": false
+    }
+  ]
+}

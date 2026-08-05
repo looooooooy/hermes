@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/connector-welcome.schema.json",
+  "title": "Hermes Connector Welcome Payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "connection_id",
+    "server_generation",
+    "server_time",
+    "accepted_capabilities",
+    "unavailable_optional_capabilities",
+    "resume_decision",
+    "next_connector_sequence",
+    "next_cloud_sequence",
+    "heartbeat_interval_ms",
+    "max_in_flight"
+  ],
+  "properties": {
+    "connection_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "server_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "server_time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "accepted_capabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "unavailable_optional_capabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "$comment": "Must be disjoint from accepted_capabilities."
+    },
+    "resume_decision": {
+      "enum": [
+        "fresh",
+        "resumed",
+        "reset_required"
+      ]
+    },
+    "next_connector_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_cloud_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "heartbeat_interval_ms": {
+      "type": "integer",
+      "minimum": 5000,
+      "maximum": 120000
+    },
+    "max_in_flight": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

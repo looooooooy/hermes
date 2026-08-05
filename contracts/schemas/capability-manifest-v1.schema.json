@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/capability-manifest.schema.json",
+  "title": "Hermes Capability Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "runtime_generation",
+    "capabilities"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": 1
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "capabilities": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "session.observe",
+          "session.observe.output-parity.v1",
+          "session.control",
+          "session.catalog.v1",
+          "file.exchange",
+          "a2a.message",
+          "view.card",
+          "view.interaction",
+          "enterprise.data",
+          "mcp.app"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3, "active_runtime_generation": "runtime-current", "catalog_revision": 5, "catalog_sequence": 5, "catalog_entries": {"current-root": 3}, "catalog_session_keys": ["current-root"]},
+  "operations": [
+    {"op": "snapshot", "writer_id": "connector-a", "writer_fence": 3, "pages": [{"profile": "default", "runtime_generation": "runtime-next", "snapshot_id": "55555555-5555-4555-8555-555555555555", "catalog_revision": 6, "page_index": 1, "is_last": true, "sessions": [{"session_key": "next-root", "authority_revision": 1}]}]},
+    {"op": "snapshot", "writer_id": "connector-a", "writer_fence": 3, "pages": [{"profile": "default", "runtime_generation": "runtime-next", "snapshot_id": "66666666-6666-4666-8666-666666666666", "catalog_revision": 6, "page_index": 1, "is_last": true, "sessions": [{"session_key": "next-root", "authority_revision": 1}]}]},
+    {"op": "assert_state", "equals": {"active_runtime_generation": "runtime-current", "catalog_revision": 5, "catalog_sequence": 5, "catalog_entries": {"current-root": 3}, "catalog_session_keys": ["current-root"]}}
+  ],
+  "expected_errors": ["page_index_gap"]
+}

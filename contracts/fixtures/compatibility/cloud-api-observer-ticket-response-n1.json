@@ -1,0 +1,5 @@
+{
+  "ticket": "opaque-single-use-observer-ticket-value",
+  "ttl_seconds": 60,
+  "connection_role": "observer"
+}

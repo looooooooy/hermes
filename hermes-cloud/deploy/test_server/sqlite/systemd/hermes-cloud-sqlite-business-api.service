@@ -1,0 +1,46 @@
+[Unit]
+Description=Hermes Cloud SQLite test server Business API
+Wants=network-online.target
+Wants=hermes-cloud-sqlite-connector-gateway.service
+After=network-online.target
+After=hermes-cloud-sqlite-connector-gateway.service
+
+[Service]
+Type=simple
+User=hermes-cloud
+Group=hermes-cloud
+UMask=0007
+EnvironmentFile=/etc/hermes-cloud/sqlite/test-server.env
+Environment=HERMES_RUNTIME_DSN_FILE=/etc/hermes-cloud/sqlite/secrets/runtime_database_dsn
+Environment=HERMES_SIGNING_SECRET_FILE=/etc/hermes-cloud/sqlite/secrets/business_api_signing_secret
+Environment=HERMES_CONNECTOR_SIGNING_SECRET_FILE=/etc/hermes-cloud/sqlite/secrets/connector_signing_secret
+Environment=HERMES_OBSERVER_KEYRING_FILE=/etc/hermes-cloud/sqlite/secrets/observer_keyring.json
+Environment=HERMES_OWNER_CONTROL_SOCKET=/run/hermes-cloud-sqlite-owner-control/owner-control.sock
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/sqlite/scripts/preflight.sh --sqlite-business
+ExecStart=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/run_asgi.sh hermes_cloud.entrypoints.business_api.bootstrap:app ${HERMES_BUSINESS_API_BIND} ${HERMES_BUSINESS_API_PORT}
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StateDirectory=hermes-cloud-sqlite
+StateDirectoryMode=0770
+
+[Install]
+WantedBy=multi-user.target

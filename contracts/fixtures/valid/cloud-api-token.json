@@ -1,0 +1,8 @@
+{
+  "access_token": "fixture-access-token-not-a-secret",
+  "refresh_token": "fixture-refresh-token-not-a-secret",
+  "token_type": "Bearer",
+  "expires_at": 1785403600,
+  "provider": "basic",
+  "user_id": "user-fixture-1"
+}

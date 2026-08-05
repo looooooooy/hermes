@@ -1,0 +1,8 @@
+{
+  "connector_instance_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "display_name": "Hermes Connector",
+  "platform_family": "macos",
+  "connector_version": "1.0.0",
+  "key_algorithm": "Ed25519",
+  "public_key": "too-short"
+}

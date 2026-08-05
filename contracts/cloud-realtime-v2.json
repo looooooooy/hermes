@@ -1,0 +1,736 @@
+{
+  "protocol": "hermes-cloud-realtime",
+  "observer_contract": 2,
+  "websocket_subprotocol": "hermes.tui.v2",
+  "endpoint": "same_as_v1",
+  "selection": {
+    "request_field": "observer_contract",
+    "ticket_claim": "observer_contract",
+    "ticket_single_use": true,
+    "ready_echo": "observer_contract",
+    "subscribe_echo": "observer_contract",
+    "unsupported": "reject_without_ticket",
+    "fallback": "forbidden",
+    "mismatch": "fail_closed"
+  },
+  "sequence": {
+    "field": "event_sequence",
+    "snapshot_field": "snapshot_event_sequence",
+    "contiguous": true,
+    "mergeable_event_types": [
+      "message.delta",
+      "agent.terminal.output",
+      "reasoning.delta",
+      "status.update",
+      "thinking.delta",
+      "tool.output.delta"
+    ],
+    "non_mergeable_event_types": [
+      "message.start",
+      "message.complete",
+      "todo.update",
+      "subagent.update",
+      "tool.update",
+      "terminal.update"
+    ],
+    "gap": "fail_closed_resubscribe"
+  },
+  "runtime_rollover": "reject_event_then_resubscribe_snapshot",
+  "schema_dependencies": [
+    "schemas/cloud/payloads/session-event-v2.schema.json",
+    "schemas/public/session-event-v2.schema.json"
+  ],
+  "limits": {
+    "max_text_frame_bytes": 262144,
+    "max_string_bytes": 131072,
+    "max_nesting_depth": 32,
+    "max_object_fields": 1024,
+    "max_array_items": 1024
+  },
+  "schemas": {
+    "gateway_ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "event"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "payload"
+          ],
+          "properties": {
+            "type": {
+              "const": "gateway.ready"
+            },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "observer_contract",
+                "connection_role"
+              ],
+              "properties": {
+                "observer_contract": {
+                  "const": 2
+                },
+                "connection_role": {
+                  "const": "observer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "observe_subscribe_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "const": "session.observe.subscribe"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observer_contract",
+            "session_id",
+            "profile"
+          ],
+          "properties": {
+            "observer_contract": {
+              "const": 2
+            },
+            "session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            },
+            "agent_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "observe_unsubscribe_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "const": "session.observe.unsubscribe"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observer_contract",
+            "subscription_id"
+          ],
+          "properties": {
+            "observer_contract": {
+              "const": 2
+            },
+            "subscription_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      }
+    },
+    "observe_unsubscribe_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observer_contract"
+          ],
+          "properties": {
+            "observer_contract": {
+              "const": 2
+            }
+          }
+        }
+      }
+    },
+    "observe_subscribe_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observer_contract",
+            "subscription_id",
+            "profile",
+            "runtime_generation",
+            "session_id",
+            "running",
+            "status",
+            "event_sequence",
+            "snapshot_event_sequence",
+            "messages",
+            "inflight",
+            "todo_sections",
+            "subagents",
+            "tools",
+            "terminals",
+            "replay_events"
+          ],
+          "properties": {
+            "observer_contract": {
+              "const": 2
+            },
+            "subscription_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+            },
+            "runtime_generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "running": {
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "event_sequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "snapshot_event_sequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "messages": {
+              "type": "array",
+              "maxItems": 500,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "content": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 131072
+                  }
+                }
+              }
+            },
+            "inflight": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "user",
+                "assistant",
+                "streaming",
+                "error"
+              ],
+              "properties": {
+                "user": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "assistant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "streaming": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 4096
+                }
+              }
+            },
+            "todo_sections": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/todoState"
+              }
+            },
+            "subagents": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/subagentState"
+              }
+            },
+            "tools": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/toolState"
+              }
+            },
+            "terminals": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/terminalState"
+              }
+            },
+            "replay_events": {
+              "type": "array",
+              "maxItems": 1024,
+              "items": {
+                "$ref": "https://contracts.hermes.local/public/session-event-v2.schema.json"
+              }
+            }
+          }
+        }
+      },
+      "$defs": {
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "todoItem": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "label",
+            "status"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "todoState": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turn_id",
+            "section_id",
+            "revision",
+            "first_event_sequence",
+            "status",
+            "items"
+          ],
+          "properties": {
+            "turn_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "section_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            },
+            "first_event_sequence": {
+              "$ref": "#/$defs/revision"
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "in_progress",
+                "completed",
+                "cancelled"
+              ]
+            },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/todoItem"
+              }
+            }
+          }
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current",
+            "total"
+          ],
+          "properties": {
+            "current": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "tokenCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input",
+            "output",
+            "reasoning"
+          ],
+          "properties": {
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "reasoning": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "subagentState": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turn_id",
+            "subagent_id",
+            "revision",
+            "first_event_sequence",
+            "parent_subagent_id",
+            "name",
+            "goal",
+            "summary",
+            "status"
+          ],
+          "properties": {
+            "turn_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "subagent_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            },
+            "first_event_sequence": {
+              "$ref": "#/$defs/revision"
+            },
+            "parent_subagent_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/identifier"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "goal": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "summary": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096
+            },
+            "status": {
+              "enum": [
+                "queued",
+                "waiting",
+                "running",
+                "completed",
+                "failed",
+                "interrupted"
+              ]
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "progress": {
+              "$ref": "#/$defs/progress"
+            },
+            "token_counts": {
+              "$ref": "#/$defs/tokenCounts"
+            },
+            "api_calls": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "lifecycleStatus": {
+          "enum": [
+            "running",
+            "completed",
+            "failed",
+            "interrupted",
+            "unknown"
+          ]
+        },
+        "toolState": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turn_id",
+            "tool_call_id",
+            "revision",
+            "first_event_sequence",
+            "status",
+            "name"
+          ],
+          "properties": {
+            "turn_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "tool_call_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            },
+            "first_event_sequence": {
+              "$ref": "#/$defs/revision"
+            },
+            "status": {
+              "$ref": "#/$defs/lifecycleStatus"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "call_label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "terminalState": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turn_id",
+            "process_id",
+            "revision",
+            "first_event_sequence",
+            "status"
+          ],
+          "properties": {
+            "turn_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "process_id": {
+              "$ref": "#/$defs/identifier"
+            },
+            "revision": {
+              "$ref": "#/$defs/revision"
+            },
+            "first_event_sequence": {
+              "$ref": "#/$defs/revision"
+            },
+            "status": {
+              "$ref": "#/$defs/lifecycleStatus"
+            },
+            "exit_code": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        }
+      }
+    },
+    "session_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "event"
+        },
+        "params": {
+          "$ref": "https://contracts.hermes.local/public/session-event-v2.schema.json"
+        }
+      }
+    }
+  }
+}

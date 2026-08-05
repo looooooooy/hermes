@@ -1,0 +1,6 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {},
+  "operations": [7],
+  "expected_errors": ["invalid_vector"]
+}

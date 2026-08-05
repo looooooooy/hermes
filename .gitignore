@@ -1,0 +1,28 @@
+.gradle/
+.kotlin/
+.idea/
+**/build/
+local.properties
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Python build and test artifacts
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.py[cod]
+**/dist/
+**/*.egg-info/
+
+# Local deployment credentials and generated private connection material
+.hermes/secrets/
+
+# Local scratch space, editor state, and local-only evidence (never commit)
+.tmp/
+.vscode/
+.hermes/plans/
+.hermes/device-evidence/

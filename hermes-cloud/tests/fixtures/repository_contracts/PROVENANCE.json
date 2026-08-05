@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "source_scope": "repository-contract-fixtures",
+  "files": [
+    {
+      "path": "canonical-payload-digest-v1.json",
+      "source": "contracts/canonical-payload-digest-v1.json",
+      "sha256": "0f91d009929e0216e7bc84022fc47d4e4754bf39df683d5a17d0fca36f388800"
+    },
+    {
+      "path": "fixtures/invalid/capability-unknown.json",
+      "source": "contracts/fixtures/invalid/capability-unknown.json",
+      "sha256": "df0c7da45e0b231e96f4d66bb1db6a5594e1ea83f1a747c6eea24baa9a721b88"
+    },
+    {
+      "path": "fixtures/invalid/cloud-envelope-duplicate-key.json",
+      "source": "contracts/fixtures/invalid/cloud-envelope-duplicate-key.json",
+      "sha256": "52df5018059c1a1e29ccacbb8e8ab83f8334105be0559e0b2b6ae2712aeaee80"
+    },
+    {
+      "path": "fixtures/invalid/cloud-envelope-negative-sequence.json",
+      "source": "contracts/fixtures/invalid/cloud-envelope-negative-sequence.json",
+      "sha256": "e648ab6e99aca8a747f6677e2a7a98c573eaff9a43b2be3f129fad8ac986656d"
+    },
+    {
+      "path": "fixtures/invalid/cloud-envelope-non-utc.json",
+      "source": "contracts/fixtures/invalid/cloud-envelope-non-utc.json",
+      "sha256": "344f804a2b4d82ceb7915b4d87f77cd5aa82961ce2a1294a600d23bbfa7f75b8"
+    },
+    {
+      "path": "fixtures/invalid/cloud-envelope-noncanonical-uuid.json",
+      "source": "contracts/fixtures/invalid/cloud-envelope-noncanonical-uuid.json",
+      "sha256": "691b5a2dc1554b0632b12984d2e957fbc678cb2ac80c8558c3f2b98c8270a63a"
+    },
+    {
+      "path": "fixtures/invalid/session-event-local-type.json",
+      "source": "contracts/fixtures/invalid/session-event-local-type.json",
+      "sha256": "dbf1fe46d88369bd9ed1e209951693b87638bc90eaa5833717156ca4ac219126"
+    },
+    {
+      "path": "fixtures/invalid/session-event-missing-profile.json",
+      "source": "contracts/fixtures/invalid/session-event-missing-profile.json",
+      "sha256": "618eafd025b87cb84a3bf98f69ccf8d632ae4a8de047981e9cfa4afe9322d3e5"
+    },
+    {
+      "path": "fixtures/invalid/session-event-nonmergeable-range.json",
+      "source": "contracts/fixtures/invalid/session-event-nonmergeable-range.json",
+      "sha256": "d3ad3c85b0e246745da6747b0533a20e2266bb3cea5fa57e48fd20085c8ec233"
+    },
+    {
+      "path": "fixtures/invalid/session-snapshot-replay-gap.json",
+      "source": "contracts/fixtures/invalid/session-snapshot-replay-gap.json",
+      "sha256": "e29f3b07cfcf8dc7b7502db99974fde9af94546e6d837e8f28d70c4a99f5fc63"
+    },
+    {
+      "path": "fixtures/invalid/session-snapshot-status-mismatch.json",
+      "source": "contracts/fixtures/invalid/session-snapshot-status-mismatch.json",
+      "sha256": "963547f0562475eb428dd5e95915bb335c639cdbaeb403b88ce4ee99680b0069"
+    },
+    {
+      "path": "fixtures/valid/capability-manifest.json",
+      "source": "contracts/fixtures/valid/capability-manifest.json",
+      "sha256": "5555cf07c6d1656508baa0c5556fd47aca7baa7a18aaedeec3b3b75239788239"
+    },
+    {
+      "path": "fixtures/valid/cloud-api-observer-ticket-request.json",
+      "source": "contracts/fixtures/valid/cloud-api-observer-ticket-request.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    {
+      "path": "fixtures/valid/cloud-connector-envelope.json",
+      "source": "contracts/fixtures/valid/cloud-connector-envelope.json",
+      "sha256": "2951ea4fe15ff5c97a57a0939668b45e16375849be821ef3318555d92a22db63"
+    },
+    {
+      "path": "fixtures/valid/local-gateway-handshake.json",
+      "source": "contracts/fixtures/valid/local-gateway-handshake.json",
+      "sha256": "b6c7e4c1d3e91399c5e2ceed9a9e58a875481fc56197017773b32d25b95d3143"
+    },
+    {
+      "path": "fixtures/valid/local-gateway-welcome.json",
+      "source": "contracts/fixtures/valid/local-gateway-welcome.json",
+      "sha256": "1049003cae8aeeb9856f97c3d37405228578b3aae6e4c4c4ae5afd1df0f46e3c"
+    },
+    {
+      "path": "fixtures/valid/session-event-payload.json",
+      "source": "contracts/fixtures/valid/session-event-payload.json",
+      "sha256": "b439a32ffda03f7dd2daedfa4f8421b7856dc69427bfeb56ff7a750d02609f1b"
+    },
+    {
+      "path": "fixtures/valid/session-event-v2-todo-upsert.json",
+      "source": "contracts/fixtures/valid/session-event-v2-todo-upsert.json",
+      "sha256": "08236399fb433a542867509e3a16b706999aa05f7af5451dd84eba2ac9cf029b"
+    },
+    {
+      "path": "fixtures/valid/session-event-v2-tool-upsert.json",
+      "source": "contracts/fixtures/valid/session-event-v2-tool-upsert.json",
+      "sha256": "9b6f125ae51f95b0c926ccab006536681e6bd57e421acf03abe2c2f9c54714a5"
+    },
+    {
+      "path": "fixtures/valid/session-snapshot-payload.json",
+      "source": "contracts/fixtures/valid/session-snapshot-payload.json",
+      "sha256": "6d856f37b882439516e2f45809e3c4af5867a23bc3c9eaba818cc1c38977e79f"
+    },
+    {
+      "path": "fixtures/valid/session-snapshot-v2-payload.json",
+      "source": "contracts/fixtures/valid/session-snapshot-v2-payload.json",
+      "sha256": "3839bc6c442806003069925dabe1bee81e9913d18b59243b272b6d4d28be2b71"
+    },
+    {
+      "path": "schemas/capability-manifest-v1.schema.json",
+      "source": "contracts/schemas/capability-manifest-v1.schema.json",
+      "sha256": "1e87eaa10a9d65731edd08e26fb4f2a07755c533b180f6be58fcdb3067d0d7b7"
+    },
+    {
+      "path": "sources/mobile-control-v1.json",
+      "source": "contracts/sources/mobile-control-v1.json",
+      "sha256": "73c3d57acd223f7132594ab1d07c4be6c9c51da7de3debdac6dace343cfc0342"
+    }
+  ]
+}

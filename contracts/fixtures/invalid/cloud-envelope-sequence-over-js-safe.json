@@ -1,0 +1,14 @@
+{
+  "contract_version": 1,
+  "message_id": "22222222-2222-4222-8222-222222222222",
+  "message_type": "connector.hello",
+  "tenant_id": "tenant-test",
+  "device_id": "device-test",
+  "sequence": 9007199254740992,
+  "sent_at": "2026-07-30T00:00:00Z",
+  "traceparent": "00-11111111111111111111111111111111-2222222222222222-01",
+  "idempotency_key": "hello-device-test-0",
+  "payload": {
+    "connector_version": "0.1.0"
+  }
+}

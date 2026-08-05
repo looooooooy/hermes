@@ -1,0 +1,16 @@
+{
+  "profile_version": 1,
+  "target_contract": "cloud_realtime_v1",
+  "current_contract_version": 1,
+  "peer_contract_version": 0,
+  "classification": "n_1",
+  "scenario": "observer_n_1_without_optional_capabilities",
+  "available_capabilities": [
+    "session.observe"
+  ],
+  "unavailable_capabilities": [
+    "session.observe.replay"
+  ],
+  "safe_effect": "observer_available_without_optional_capabilities",
+  "evidence_fixture": "fixtures/compatibility/cloud-realtime-ready-n1.json"
+}

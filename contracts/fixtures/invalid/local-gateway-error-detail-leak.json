@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 4301,
+    "reason": "invalid_envelope",
+    "details": "unexpected token near a local filesystem path"
+  }
+}

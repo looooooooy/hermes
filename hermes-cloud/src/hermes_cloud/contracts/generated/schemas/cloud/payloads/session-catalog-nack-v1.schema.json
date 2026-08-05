@@ -1,0 +1,201 @@
+{
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-catalog-nack-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "const": null
+        },
+        "expected_page_index": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "const": "page_gap"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      }
+    },
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_page_index": {
+          "const": null
+        },
+        "reason": {
+          "const": "event_gap"
+        },
+        "snapshot_id": {
+          "const": null
+        }
+      }
+    },
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "const": null
+        },
+        "expected_page_index": {
+          "const": null
+        },
+        "reason": {
+          "const": "runtime_mismatch"
+        },
+        "snapshot_id": {
+          "const": null
+        }
+      }
+    },
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "const": null
+        },
+        "expected_page_index": {
+          "const": null
+        },
+        "reason": {
+          "const": "stale_writer"
+        },
+        "snapshot_id": {
+          "const": null
+        }
+      }
+    },
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "const": null
+        },
+        "expected_page_index": {
+          "const": null
+        },
+        "reason": {
+          "const": "contract_mismatch"
+        },
+        "snapshot_id": {
+          "const": null
+        }
+      }
+    },
+    {
+      "properties": {
+        "expected_catalog_sequence": {
+          "const": null
+        },
+        "expected_page_index": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "const": "revision_conflict"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        }
+      }
+    }
+  ],
+  "properties": {
+    "expected_catalog_sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "expected_page_index": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "page_gap",
+        "event_gap",
+        "runtime_mismatch",
+        "stale_writer",
+        "contract_mismatch",
+        "revision_conflict"
+      ]
+    },
+    "rejected_connector_sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "rejected_message_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "rejected_payload_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "reset_required": {
+      "const": true
+    },
+    "runtime_generation": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "snapshot_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "profile",
+    "runtime_generation",
+    "rejected_message_id",
+    "rejected_payload_digest",
+    "rejected_connector_sequence",
+    "reason",
+    "reset_required",
+    "snapshot_id",
+    "expected_page_index",
+    "expected_catalog_sequence"
+  ],
+  "title": "Hermes Session Catalog business NACK v1",
+  "type": "object"
+}

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes Mobile · Approval / Clarify UI draft</title>
+<style>
+  :root {
+    --board:#111216; --board-line:#292b32; --phone:#0f1013; --surface:#17191e;
+    --surface-2:#1d2026; --line:#2d3038; --text:#f2f3f5; --muted:#959aa6;
+    --subtle:#707681; --cyan:#67d7e8; --blue:#7db4ff; --green:#73d7a1;
+    --amber:#f0ad5b; --red:#f17777; --violet:#b7a2ff;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
+    color:var(--text); background:
+      radial-gradient(circle at 50% -10%, #252832 0, var(--board) 42%), var(--board);
+    -webkit-font-smoothing:antialiased;
+  }
+  .page { height:100%; padding:18px 28px 20px; display:flex; flex-direction:column; }
+  .header { height:68px; display:flex; align-items:flex-start; justify-content:space-between; }
+  .eyebrow { font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.16em; color:var(--cyan); text-transform:uppercase; }
+  h1 { margin:5px 0 0; font-size:21px; letter-spacing:-.02em; }
+  .header-note { margin-top:7px; max-width:450px; text-align:right; color:var(--muted); font-size:11px; line-height:1.45; }
+  .board { flex:1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:26px; min-height:0; }
+  .case { min-width:0; display:flex; flex-direction:column; align-items:center; }
+  .case-head { width:min(100%,335px); height:39px; display:flex; align-items:flex-start; justify-content:space-between; }
+  .case-title { font-size:13px; font-weight:650; }
+  .case-title span { color:var(--muted); font-weight:450; }
+  .case-code { font:500 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--subtle); padding-top:3px; }
+  .phone {
+    width:min(100%,335px); flex:1; min-height:0; max-height:520px; border:1px solid #3a3d46;
+    border-radius:28px; background:var(--phone); overflow:hidden; position:relative;
+    box-shadow:0 20px 70px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.015);
+    display:flex; flex-direction:column;
+  }
+  .status { height:20px; padding:6px 15px 0; display:flex; justify-content:space-between; color:#bcc0c8; font-size:8px; font-weight:600; }
+  .topbar { height:43px; padding:0 13px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+  .back { color:var(--muted); font-size:15px; }
+  .session { min-width:0; flex:1; }
+  .session strong { display:block; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .session small { display:block; margin-top:2px; color:var(--muted); font-size:8px; }
+  .control-pill { display:flex; align-items:center; gap:5px; font-size:8px; color:#c9cdd4; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px rgba(115,215,161,.1); }
+  .dot.amber { background:var(--amber); box-shadow:0 0 0 3px rgba(240,173,91,.1); }
+  .transcript { flex:1; min-height:0; padding:12px 13px 8px 15px; overflow:hidden; position:relative; }
+  .prompt { display:grid; grid-template-columns:16px 1fr; gap:8px; color:#fafafa; font-size:10px; line-height:1.45; margin-bottom:13px; }
+  .prompt-mark { color:var(--cyan); font:700 12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .process { margin-left:6px; padding-left:17px; border-left:1px solid #343740; position:relative; }
+  .section { position:relative; margin-bottom:12px; }
+  .section::before { content:""; position:absolute; left:-21px; top:4px; width:7px; height:7px; border-radius:50%; background:var(--phone); border:1.5px solid var(--subtle); }
+  .section.done::before { background:var(--green); border-color:var(--green); box-shadow:0 0 0 3px rgba(115,215,161,.08); }
+  .section.active::before { background:var(--cyan); border-color:var(--cyan); box-shadow:0 0 0 3px rgba(103,215,232,.1); }
+  .section-label { display:flex; justify-content:space-between; align-items:center; color:#c5c9d1; font-size:9px; font-weight:620; }
+  .chev { color:var(--subtle); font-size:8px; }
+  .process-copy { margin-top:5px; color:var(--muted); font-size:8.5px; line-height:1.5; }
+  .tool { margin-top:6px; padding:7px 8px; background:var(--surface); border:1px solid var(--line); border-radius:7px; }
+  .tool-head { display:flex; justify-content:space-between; font:600 8px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .tool-head .ok { color:var(--green); }
+  .code { margin-top:5px; color:#aeb5c1; font:500 7.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-line; }
+  .response { margin:9px 0 0; padding-left:12px; border-left:2px solid var(--cyan); }
+  .response-label { color:var(--cyan); font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; }
+  .response p { margin:5px 0 0; font-size:9px; line-height:1.48; color:#dfe2e7; }
+  .lost-banner { display:flex; align-items:center; justify-content:space-between; padding:7px 13px; border-bottom:1px solid rgba(240,173,91,.24); background:rgba(240,173,91,.07); }
+  .lost-banner span { color:var(--amber); font-size:8.5px; font-weight:600; }
+  .tiny-btn { border:1px solid #5b4b36; color:#ffd9a4; background:#271f17; border-radius:6px; padding:5px 8px; font-size:8px; }
+  .dock-wrap { border-top:1px solid var(--line); background:#121317; padding:8px 10px 7px; }
+  .dock { background:var(--surface); border:1px solid #353943; border-radius:11px; padding:10px; box-shadow:0 -8px 30px rgba(0,0,0,.18); }
+  .dock-kicker { color:var(--cyan); font-size:7.5px; font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+  .dock h2 { margin:5px 0 0; font-size:11px; letter-spacing:-.01em; }
+  .dock p { margin:4px 0 0; color:var(--muted); font-size:8.2px; line-height:1.42; }
+  .command { margin-top:7px; padding:6px 7px; color:#c8d1dc; background:#101116; border:1px solid #292c34; border-radius:6px; font:500 7.5px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .options { margin-top:8px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  button { font:600 8.2px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; cursor:pointer; }
+  .option { height:27px; color:#c9cdd5; background:#15171c; border:1px solid #373b44; border-radius:7px; }
+  .option.selected { color:#eafaff; border-color:var(--cyan); background:rgba(103,215,232,.09); box-shadow:inset 0 0 0 1px rgba(103,215,232,.08); }
+  .option.danger { color:#ffbbbb; border-color:#59373a; }
+  .option:disabled { opacity:.42; cursor:default; }
+  .confirm-note { margin-top:8px; display:flex; gap:7px; align-items:flex-start; padding:7px; border-radius:7px; background:rgba(240,173,91,.08); border:1px solid rgba(240,173,91,.2); color:#ffd59f; font-size:8px; line-height:1.35; }
+  .confirm-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:7px; }
+  .secondary,.primary { height:28px; border-radius:7px; }
+  .secondary { color:#d0d3da; background:transparent; border:1px solid #3a3e48; }
+  .primary { color:#071316; background:var(--cyan); border:1px solid var(--cyan); }
+  .choice-list { display:grid; gap:6px; margin-top:8px; }
+  .choice { min-height:30px; padding:0 9px; display:flex; align-items:center; justify-content:space-between; color:#d7dae0; background:#15171c; border:1px solid #353942; border-radius:7px; text-align:left; }
+  .choice.selected { border-color:var(--blue); background:rgba(125,180,255,.08); }
+  .radio { width:10px; height:10px; border:1px solid #666c78; border-radius:50%; position:relative; }
+  .choice.selected .radio { border-color:var(--blue); }
+  .choice.selected .radio::after { content:""; position:absolute; inset:2px; border-radius:50%; background:var(--blue); }
+  .other { margin-top:7px; }
+  .other label { display:block; color:#b8bdc7; font-size:7.5px; margin-bottom:4px; }
+  .field { width:100%; height:31px; color:#eceef2; background:#101116; border:1px solid var(--blue); border-radius:7px; padding:0 8px; font-size:8.5px; outline:0; }
+  .feedback { margin:0 10px 7px; padding:7px 9px; border-radius:8px; background:rgba(240,173,91,.07); border:1px solid rgba(240,173,91,.18); color:#f5c98d; font-size:8px; line-height:1.35; }
+  .retry { width:100%; height:29px; margin-top:8px; color:#071316; border:1px solid var(--cyan); background:var(--cyan); border-radius:7px; }
+  .composer { height:45px; padding:7px 10px 8px; border-top:1px solid var(--line); display:flex; gap:7px; background:#101115; }
+  .composer-box { flex:1; border:1px solid #323640; border-radius:8px; color:#666c78; display:flex; align-items:center; padding:0 9px; font-size:8px; }
+  .composer-send { width:49px; border:1px solid #30343c; border-radius:8px; background:#1b1d23; color:#646a75; }
+  .toast { position:absolute; left:50%; bottom:57px; transform:translateX(-50%) translateY(8px); opacity:0; pointer-events:none; padding:7px 10px; border-radius:7px; background:#e9fbff; color:#101419; font-size:8px; font-weight:650; transition:.22s ease; white-space:nowrap; box-shadow:0 8px 25px rgba(0,0,0,.35); }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  @media (max-height:900px) {
+    .page { padding-top:12px; padding-bottom:12px; }
+    .header { height:57px; }
+    h1 { font-size:18px; }
+    .header-note { display:none; }
+    .case-head { height:34px; }
+    .phone { max-height:520px; }
+    .dock { padding:8px; }
+    .section { margin-bottom:9px; }
+    .process-copy { line-height:1.35; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <div><div class="eyebrow">Hermes Mobile · native control</div><h1>Approval / Clarify interaction states</h1></div>
+    <div class="header-note">One authoritative runtime · observer/control separation · stable request identity · no chat bubbles</div>
+  </header>
+  <main class="board">
+    <section class="case">
+      <div class="case-head"><div class="case-title">Approval <span>· durable confirmation</span></div><div class="case-code">A / PENDING</div></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>●●● 5G ▰</span></div>
+        <div class="topbar"><span class="back">‹</span><div class="session"><strong>Hermes Agent</strong><small>session · mobile-ui</small></div><div class="control-pill"><span class="dot"></span> Controller</div></div>
+        <div class="transcript">
+          <div class="prompt"><span class="prompt-mark">❯</span><span>Run the focused Android control tests and fix the first real failure.</span></div>
+          <div class="process">
+            <div class="section done"><div class="section-label"><span>Thinking</span><span class="chev">⌃</span></div></div>
+            <div class="section active"><div class="section-label"><span>Tool calls (1)</span><span class="chev">⌃</span></div><div class="tool"><div class="tool-head"><span>Terminal(gradlew…)</span><span class="ok">Running</span></div><div class="code">:app:testDebugUnitTest</div></div></div>
+          </div>
+        </div>
+        <div class="dock-wrap">
+          <div class="dock">
+            <div class="dock-kicker">Input required · approval</div><h2>Always allow this operation?</h2><p>This choice affects future sessions and requires explicit confirmation.</p>
+            <div class="command">./gradlew :app:testDebugUnitTest</div>
+            <div class="options"><button class="option">Allow once</button><button class="option">For session</button><button class="option selected">Always allow</button><button class="option danger">Deny</button></div>
+            <div class="confirm-note"><span>⚠</span><span>Always allow this operation in future sessions?</span></div>
+            <div class="confirm-row"><button class="secondary">Cancel</button><button class="primary" onclick="showToast('approval-toast')">Confirm</button></div>
+          </div>
+        </div>
+        <div class="composer"><div class="composer-box">Message Hermes</div><button class="composer-send" disabled>Send</button></div>
+        <div id="approval-toast" class="toast">Response accepted · waiting for revision</div>
+      </div>
+    </section>
+
+    <section class="case">
+      <div class="case-head"><div class="case-title">Clarify <span>· exact answer form</span></div><div class="case-code">B / INPUT</div></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>●●● Wi‑Fi ▰</span></div>
+        <div class="topbar"><span class="back">‹</span><div class="session"><strong>Release preparation</strong><small>session · vivo-e2e</small></div><div class="control-pill"><span class="dot"></span> Controller</div></div>
+        <div class="transcript">
+          <div class="prompt"><span class="prompt-mark">❯</span><span>Prepare the physical-device validation, but do not deploy until the target is explicit.</span></div>
+          <div class="process">
+            <div class="section done"><div class="section-label"><span>Todo (3)</span><span class="chev">⌃</span></div><div class="process-copy">✓ Build debug APK<br>✓ Verify control contract<br><span style="color:var(--cyan)">● Choose target environment</span></div></div>
+          </div>
+          <div class="response"><div class="response-label">Response</div><p>The APK is ready. Select one target.</p></div>
+        </div>
+        <div class="dock-wrap">
+          <div class="dock">
+            <div class="dock-kicker">Input required · clarify</div><h2>Which target should Hermes use?</h2><p>Choose a server-provided option or provide one Other answer.</p>
+            <div class="choice-list">
+              <button class="choice" onclick="selectChoice(this)"><span>Staging</span><span class="radio"></span></button>
+              <button class="choice" onclick="selectChoice(this)"><span>Production</span><span class="radio"></span></button>
+            </div>
+            <div class="other"><label>Other</label><input class="field" value="Internal QA cluster" onfocus="clearChoices(this)" /></div>
+            <button class="retry" onclick="showToast('clarify-toast')">Submit answer</button>
+          </div>
+        </div>
+        <div class="composer"><div class="composer-box">Message Hermes</div><button class="composer-send" disabled>Send</button></div>
+        <div id="clarify-toast" class="toast">Answer submitted · one form only</div>
+      </div>
+    </section>
+
+    <section class="case">
+      <div class="case-head"><div class="case-title">Recovery <span>· same-request retry</span></div><div class="case-code">C / RECONCILED</div></div>
+      <div class="phone">
+        <div class="status"><span>9:41</span><span>●●● 5G ▰</span></div>
+        <div class="topbar"><span class="back">‹</span><div class="session"><strong>Hermes Agent</strong><small>session · mobile-ui</small></div><div class="control-pill"><span class="dot amber"></span> Restored</div></div>
+        <div class="lost-banner"><span>Control connection restored</span><button class="tiny-btn">Details</button></div>
+        <div class="transcript">
+          <div class="prompt"><span class="prompt-mark">❯</span><span>Continue after reconnect without duplicating the pending action.</span></div>
+          <div class="process">
+            <div class="section done"><div class="section-label"><span>Thinking</span><span class="chev">⌃</span></div><div class="process-copy">The runtime remains authoritative. The original response identity is preserved.</div></div>
+            <div class="section active"><div class="section-label"><span>Tool calls (1)</span><span class="chev">⌃</span></div><div class="tool"><div class="tool-head"><span>Approval response</span><span style="color:var(--amber)">Unknown</span></div><div class="code">request: approval-1
+retry identity: preserved</div></div></div>
+          </div>
+          <div class="response"><div class="response-label">Partial response preserved</div><p>No duplicate request was created while the control connection was unavailable.</p></div>
+        </div>
+        <div class="feedback">Response delivery was unknown. The same authoritative request is still pending; retry reuses the original response identity.</div>
+        <div class="dock-wrap">
+          <div class="dock">
+            <div class="dock-kicker">Input required · restored</div><h2>Run focused Android tests?</h2><p>The selected response is frozen until this retry completes.</p>
+            <div class="command">./gradlew :app:testDebugUnitTest</div>
+            <div class="options"><button class="option selected" disabled>Allow once</button><button class="option" disabled>For session</button><button class="option" disabled>Always allow</button><button class="option danger" disabled>Deny</button></div>
+            <button class="retry" onclick="retryState(this)">Try again · same request</button>
+          </div>
+        </div>
+        <div class="composer"><div class="composer-box">Message Hermes</div><button class="composer-send" disabled>Send</button></div>
+        <div id="retry-toast" class="toast">Retry sent with original client request ID</div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  function showToast(id){ const el=document.getElementById(id); el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1700); }
+  function selectChoice(btn){ document.querySelectorAll('.choice').forEach(x=>x.classList.remove('selected')); btn.classList.add('selected'); document.querySelector('.field').value=''; }
+  function clearChoices(){ document.querySelectorAll('.choice').forEach(x=>x.classList.remove('selected')); }
+  function retryState(btn){ btn.textContent='Submitting…'; btn.disabled=true; setTimeout(()=>{ btn.textContent='Accepted · awaiting revision'; showToast('retry-toast'); },500); }
+</script>
+</body>
+</html>

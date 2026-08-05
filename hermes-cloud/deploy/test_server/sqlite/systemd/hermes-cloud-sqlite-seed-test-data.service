@@ -1,0 +1,36 @@
+[Unit]
+Description=Hermes Cloud explicit SQLite test-data seed
+After=hermes-cloud-sqlite-migrate.service
+
+[Service]
+Type=oneshot
+User=hermes-cloud-migrate
+Group=hermes-cloud
+UMask=0007
+EnvironmentFile=/etc/hermes-cloud/sqlite/test-server.env
+Environment=HERMES_BOOTSTRAP_DSN_FILE=/etc/hermes-cloud/sqlite/secrets/bootstrap_database_dsn
+Environment=HERMES_INITIAL_USER_PASSWORD_FILE=/etc/hermes-cloud/sqlite/secrets/initial_user_password
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/sqlite/scripts/preflight.sh --sqlite-seed
+ExecStart=/usr/bin/env ${HERMES_VENV}/bin/python ${HERMES_CURRENT}/deploy/test_server/scripts/seed_test_data.py --apply
+RemainAfterExit=no
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+LimitNOFILE=4096
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+StateDirectory=hermes-cloud-sqlite
+StateDirectoryMode=0770
+RuntimeDirectory=hermes-cloud-sqlite-seed

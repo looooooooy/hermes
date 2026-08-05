@@ -1,0 +1,37 @@
+{
+  "sessions": [
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "agent_id": null,
+      "workspace_id": null,
+      "_lineage_root_id": "session-root-1",
+      "parent_session_id": null,
+      "title": "Fixture session",
+      "preview": "Fixture preview",
+      "source": "hermes-agent",
+      "model": "fixture-model",
+      "profile": "default",
+      "cwd": "/fixture/workspace",
+      "git_branch": "fixture-branch",
+      "started_at": 1785400000.0,
+      "ended_at": null,
+      "last_active": 1785400060.0,
+      "message_count": 2,
+      "tool_call_count": 0,
+      "input_tokens": 10,
+      "output_tokens": 20,
+      "is_active": true,
+      "archived": false,
+      "directory_source": "transcript_projection",
+      "availability": "live",
+      "runtime_generation": null,
+      "surface": null,
+      "authority_revision": null,
+      "available_actions": [],
+      "transcript_available": true
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}

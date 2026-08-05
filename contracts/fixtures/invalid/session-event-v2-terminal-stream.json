@@ -1,0 +1,14 @@
+{
+  "observer_contract": 2,
+  "profile": "default",
+  "runtime_generation": "runtime-20260801-01",
+  "session_key": "session-root-1",
+  "session_id": "runtime-session-1",
+  "type": "terminal.update",
+  "event_sequence": 4,
+  "payload": {
+    "turn_id": "turn-1", "process_id": "process-1", "revision": 1,
+    "first_event_sequence": 4, "operation": "upsert", "status": "running",
+    "stream": "stdout"
+  }
+}

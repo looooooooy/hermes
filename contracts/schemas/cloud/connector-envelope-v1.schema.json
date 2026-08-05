@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/connector-envelope.schema.json",
+  "title": "Hermes Connector Cloud Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "message_id",
+    "message_type",
+    "tenant_id",
+    "device_id",
+    "sequence",
+    "sent_at",
+    "payload"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": 1
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "message_type": {
+      "enum": [
+        "connector.hello",
+        "connector.welcome",
+        "connector.heartbeat",
+        "command.deliver",
+        "command.receipt",
+        "command.result",
+        "control.request",
+        "control.response",
+        "session.catalog.snapshot.page",
+        "session.catalog.event",
+        "session.catalog.ack",
+        "session.catalog.nack",
+        "session.snapshot",
+        "session.event",
+        "session.observe.open",
+        "session.observe.close",
+        "stream.ack",
+        "stream.nack",
+        "session.snapshot.v2",
+        "session.event.v2",
+        "session.observe.open.v2",
+        "session.observe.close.v2",
+        "stream.ack.v2",
+        "stream.nack.v2",
+        "file.transfer",
+        "a2a.message",
+        "view.card.invalidate"
+      ]
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "traceparent": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 1024
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

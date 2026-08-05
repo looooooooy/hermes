@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/command-deliver.schema.json",
+  "title": "Hermes Command Deliver Payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "command_id",
+    "connector_instance_id",
+    "client_instance_id",
+    "session_key",
+    "profile",
+    "client_request_id",
+    "method",
+    "params",
+    "issued_at",
+    "expires_at",
+    "revision"
+  ],
+  "properties": {
+    "command_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "connector_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "client_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "session_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "client_request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "method": {
+      "enum": [
+        "prompt.submit",
+        "session.interrupt"
+      ]
+    },
+    "params": {
+      "type": "object"
+    },
+    "issued_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "prompt.submit"
+          }
+        },
+        "required": [
+          "method"
+        ]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/prompt_submit_params"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "const": "session.interrupt"
+          }
+        },
+        "required": [
+          "method"
+        ]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/session_interrupt_params"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "canonical_uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "utc_instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "prompt_submit_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_session_id",
+        "runtime_generation",
+        "client_turn_id",
+        "text"
+      ],
+      "properties": {
+        "runtime_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runtime_generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "client_turn_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        }
+      }
+    },
+    "session_interrupt_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_session_id",
+        "runtime_generation"
+      ],
+      "properties": {
+        "runtime_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runtime_generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

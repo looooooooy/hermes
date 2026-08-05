@@ -1,0 +1,6 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"stable_session_ids": {}},
+  "operations": [{"op": "map_identity", "authenticated_agent_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "profile": "default", "session_key": "durable-root", "session_id": "not-a-uuid"}],
+  "expected_errors": ["invalid_stable_session_id"]
+}

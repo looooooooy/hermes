@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "method": "event",
+  "params": {
+    "type": "message.complete",
+    "session_id": "session-tip-1",
+    "session_key": "session-root-1",
+    "event_sequence": 5,
+    "payload": {
+      "text": "Fixture event",
+      "status": "complete"
+    }
+  }
+}

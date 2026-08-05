@@ -1,0 +1,44 @@
+{
+  "jsonrpc": "2.0",
+  "method": "event",
+  "params": {
+    "type": "gateway.ready",
+    "payload": {
+      "observer_contract": 1,
+      "control_contract": 1,
+      "connection_role": "control",
+      "control_available_methods": [
+        "session.control.acquire",
+        "session.control.renew",
+        "session.control.release",
+        "session.control.status",
+        "session.command.status",
+        "prompt.submit",
+        "session.interrupt",
+        "session.steer",
+        "approval.respond",
+        "clarify.respond"
+      ],
+      "control_error_codes": {
+        "control_role_required": 4200,
+        "control_contract_unsupported": 4201,
+        "live_runtime_unavailable": 4202,
+        "controller_conflict": 4203,
+        "lease_required": 4204,
+        "lease_expired": 4205,
+        "lease_mismatch": 4206,
+        "request_id_payload_conflict": 4207,
+        "pending_request_conflict": 4208,
+        "method_not_allowed": 4209,
+        "command_unknown": 4210,
+        "revision_conflict": 4211,
+        "session_binding_mismatch": 4212,
+        "invalid_pending_response": 4213,
+        "owner_adapter_unavailable": 4214,
+        "relay_overloaded": 4215,
+        "deadline_exceeded_before_effect": 4306,
+        "effect_unknown": 4307
+      }
+    }
+  }
+}

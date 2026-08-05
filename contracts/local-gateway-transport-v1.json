@@ -1,0 +1,49 @@
+{
+  "contract": "local-gateway.transport",
+  "version": 1,
+  "posix_transport": "unix-domain-stream-socket",
+  "connection": {
+    "max_requests": 1,
+    "reuse": false
+  },
+  "framing": {
+    "length_prefix_bytes": 4,
+    "length_prefix_encoding": "unsigned-big-endian",
+    "body_encoding": "utf-8-json",
+    "max_body_bytes": 262144
+  },
+  "reject": [
+    "zero-length-body",
+    "body-too-large",
+    "truncated-frame",
+    "non-utf8-body",
+    "duplicate-json-key"
+  ],
+  "descriptor": {
+    "schema": "schemas/local/gateway-discovery-v1.schema.json",
+    "publication": "atomic-replace-after-listen",
+    "file_type": "regular",
+    "file_mode": "0600",
+    "parent_mode": "0700",
+    "owner": "effective-user",
+    "allow_symlink": false,
+    "require_live_pid": true
+  },
+  "socket": {
+    "file_type": "socket",
+    "file_mode": "0600",
+    "owner": "effective-user",
+    "allow_symlink": false
+  },
+  "lifecycle": {
+    "deadline_scope": "discovery-through-response",
+    "clock": "monotonic",
+    "cancellation": "close-immediately",
+    "cleanup": "all-terminal-paths"
+  },
+  "windows": {
+    "transport": "named-pipe-adapter",
+    "status": "reserved",
+    "json_body_unchanged": true
+  }
+}

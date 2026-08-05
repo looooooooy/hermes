@@ -1,0 +1,12 @@
+{
+  "profile": "bad/profile",
+  "runtime_generation": "runtime-20260803-01",
+  "rejected_message_id": "77777777-7777-4777-8777-777777777777",
+  "rejected_payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "rejected_connector_sequence": 18,
+  "reason": "event_gap",
+  "reset_required": true,
+  "snapshot_id": null,
+  "expected_page_index": null,
+  "expected_catalog_sequence": 8
+}

@@ -1,0 +1,18 @@
+{
+  "connection_id": "22222222-2222-4222-8222-222222222222",
+  "server_generation": "cloud-20260730-01",
+  "server_time": "2026-07-30T12:00:00Z",
+  "accepted_capabilities": [
+    "session.observe",
+    "session.observe.output-parity.v1",
+    "view.card"
+  ],
+  "unavailable_optional_capabilities": [
+    "session.control"
+  ],
+  "resume_decision": "fresh",
+  "next_connector_sequence": 0,
+  "next_cloud_sequence": 0,
+  "heartbeat_interval_ms": 20000,
+  "max_in_flight": 64
+}

@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes.local/contracts/external-degradation-profile-v1.schema.json",
+  "title": "External compatibility and degradation profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile_version",
+    "target_contract",
+    "current_contract_version",
+    "peer_contract_version",
+    "classification",
+    "scenario",
+    "available_capabilities",
+    "unavailable_capabilities",
+    "safe_effect",
+    "evidence_fixture"
+  ],
+  "properties": {
+    "profile_version": {
+      "const": 1
+    },
+    "target_contract": {
+      "type": "string",
+      "enum": [
+        "cloud_api_v1",
+        "cloud_realtime_v1"
+      ]
+    },
+    "current_contract_version": {
+      "const": 1
+    },
+    "peer_contract_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "classification": {
+      "type": "string",
+      "enum": [
+        "n_1",
+        "capability_degradation"
+      ]
+    },
+    "scenario": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "available_capabilities": {
+      "$ref": "#/$defs/capabilitySet"
+    },
+    "unavailable_capabilities": {
+      "$ref": "#/$defs/capabilitySet"
+    },
+    "safe_effect": {
+      "type": "string",
+      "enum": [
+        "observer_available_without_optional_capabilities",
+        "idle_snapshot_without_replay"
+      ]
+    },
+    "evidence_fixture": {
+      "type": "string",
+      "pattern": "^fixtures/(compatibility|degradation)/[a-z0-9-]+\\.json$",
+      "maxLength": 256
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "const": "n_1"
+          }
+        },
+        "required": [
+          "classification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_contract": {
+            "const": "cloud_realtime_v1"
+          },
+          "peer_contract_version": {
+            "const": 0
+          },
+          "scenario": {
+            "const": "observer_n_1_without_optional_capabilities"
+          },
+          "available_capabilities": {
+            "const": [
+              "session.observe"
+            ]
+          },
+          "unavailable_capabilities": {
+            "const": [
+              "session.observe.replay"
+            ]
+          },
+          "safe_effect": {
+            "const": "observer_available_without_optional_capabilities"
+          },
+          "evidence_fixture": {
+            "const": "fixtures/compatibility/cloud-realtime-ready-n1.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "const": "capability_degradation"
+          }
+        },
+        "required": [
+          "classification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_contract": {
+            "const": "cloud_realtime_v1"
+          },
+          "peer_contract_version": {
+            "const": 1
+          },
+          "scenario": {
+            "const": "replay_unavailable_idle_snapshot"
+          },
+          "available_capabilities": {
+            "const": [
+              "session.observe"
+            ]
+          },
+          "unavailable_capabilities": {
+            "const": [
+              "session.observe.replay"
+            ]
+          },
+          "safe_effect": {
+            "const": "idle_snapshot_without_replay"
+          },
+          "evidence_fixture": {
+            "const": "fixtures/degradation/cloud-realtime-idle-subscription.json"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "capabilitySet": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "maxLength": 128
+      }
+    }
+  }
+}

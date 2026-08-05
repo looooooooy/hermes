@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/cloud/payloads/stream-ack-v2.schema.json",
+  "title": "Observer Stream Commit ACK v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["observer_contract", "observer_message_id", "payload_digest", "connector_sequence", "observer_message_type", "profile", "session_key", "runtime_generation", "runtime_session_id", "event_sequence", "committed_at"],
+  "properties": {
+    "observer_contract": {"const": 2}, "observer_message_id": {"type": "string", "format": "uuid"},
+    "payload_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "connector_sequence": {"type": "integer", "minimum": 0},
+    "observer_message_type": {"enum": ["session.snapshot.v2", "session.event.v2"]},
+    "profile": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"},
+    "session_key": {"type": "string", "minLength": 1, "maxLength": 256}, "runtime_generation": {"type": "string", "minLength": 1, "maxLength": 128},
+    "runtime_session_id": {"type": "string", "minLength": 1, "maxLength": 256}, "event_sequence": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "committed_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "extensions": {"type": "object", "maxProperties": 16, "propertyNames": {"pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"}, "additionalProperties": {"type": "object"}}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-n1",
+  "session_key": "session-n1",
+  "runtime_session_id": "runtime-session-n1",
+  "running": false,
+  "status": "idle",
+  "event_sequence": 0,
+  "snapshot_event_sequence": 0,
+  "messages": [],
+  "inflight": {
+    "user": null,
+    "assistant": null,
+    "streaming": false,
+    "error": null
+  },
+  "replay_events": []
+}

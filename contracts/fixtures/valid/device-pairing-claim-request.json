@@ -1,0 +1,11 @@
+{
+  "pairing_code": "2AB3-C4D5",
+  "workspace_id": "55555555-5555-4555-8555-555555555555",
+  "agent_id": "66666666-6666-4666-8666-666666666666",
+  "device_display_name": "Office Mac",
+  "scopes": [
+    "session.observe",
+    "session.control.request"
+  ],
+  "expected_revision": 1
+}

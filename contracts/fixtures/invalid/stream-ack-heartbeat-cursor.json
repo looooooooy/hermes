@@ -1,0 +1,13 @@
+{
+  "observer_message_id": "83000000-0000-4000-8000-000000000001",
+  "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "connector_sequence": 41,
+  "observer_message_type": "session.event",
+  "profile": "default",
+  "session_key": "session-root-1",
+  "runtime_generation": "runtime-20260731-01",
+  "runtime_session_id": "runtime-session-1",
+  "event_sequence": 105,
+  "committed_at": "2026-07-31T09:00:01Z",
+  "next_inbound_sequence": 42
+}

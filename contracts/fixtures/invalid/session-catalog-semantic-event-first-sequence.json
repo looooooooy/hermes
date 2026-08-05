@@ -1,0 +1,9 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3},
+  "operations": [
+    {"op": "snapshot", "writer_id": "connector-a", "writer_fence": 3, "pages": [{"profile": "default", "runtime_generation": "runtime-a", "snapshot_id": "77777777-7777-4777-8777-777777777777", "catalog_revision": 7, "page_index": 0, "is_last": true, "sessions": [{"session_key": "root-a", "authority_revision": 3}]}]},
+    {"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-a", "catalog_sequence": 1, "action": "upsert", "entry": {"session_key": "root-a", "authority_revision": 4}}
+  ],
+  "expected_errors": ["event_sequence_gap"]
+}

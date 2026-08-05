@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-08-02",
+  "live_source_root": "/Users/apple/.hermes/hermes-agent",
+  "latest_bundle_updated_on": "2026-08-03",
+  "latest_verified_target": "/Users/apple/hermesmobile/.tmp/hermes-core-host-spi-v1-verified-stage3-r20-final",
+  "latest_stage3_patch_sha256": "ee47c21433164e7cfb3ab06a5a25d9308200c7e310d32ce99065b433d6eeb6a1",
+  "r20_live_probe": "none; the 2026-08-02 before/after snapshot below is retained without a new live-source read",
+  "before": {
+    "head": "14db1a99e21e5523ee61f10f5c3300a5087e8449",
+    "tree": "38684e2d37286da76f9e32d650e2b212e3974e5d",
+    "status_porcelain": "",
+    "files": {
+      "hermes_cli/plugins.py": {
+        "mtime_epoch": 1785400818,
+        "size": 103313,
+        "sha256": "2cb8c309ce7747331669f22060a7e357e9c7a865f07cc779f30f17f8ce90daf5"
+      },
+      "pyproject.toml": {
+        "mtime_epoch": 1785401640,
+        "size": 22106,
+        "sha256": "c447ee65e119ed17f29001d3cc714e02ec37c1605ce15c01531ae53afbb011a2"
+      },
+      "scripts/run_tests.sh": {
+        "mtime_epoch": 1785401640,
+        "size": 7560,
+        "sha256": "a4c2b46433d30c57d0e55f6c1565c2624c6f77076386c8654d087c0c1dcc6465"
+      }
+    }
+  },
+  "after": {
+    "stage": 3,
+    "head": "14db1a99e21e5523ee61f10f5c3300a5087e8449",
+    "tree": "38684e2d37286da76f9e32d650e2b212e3974e5d",
+    "status_porcelain": "",
+    "files_match_before": true,
+    "files": {
+      "hermes_cli/plugins.py": {
+        "mtime_epoch": 1785400818,
+        "size": 103313,
+        "sha256": "2cb8c309ce7747331669f22060a7e357e9c7a865f07cc779f30f17f8ce90daf5"
+      },
+      "pyproject.toml": {
+        "mtime_epoch": 1785401640,
+        "size": 22106,
+        "sha256": "c447ee65e119ed17f29001d3cc714e02ec37c1605ce15c01531ae53afbb011a2"
+      },
+      "scripts/run_tests.sh": {
+        "mtime_epoch": 1785401640,
+        "size": 7560,
+        "sha256": "a4c2b46433d30c57d0e55f6c1565c2624c6f77076386c8654d087c0c1dcc6465"
+      }
+    }
+  },
+  "operations_on_live_source": [
+    "git rev-parse",
+    "git status",
+    "git archive",
+    "read-only file metadata and digest checks"
+  ],
+  "verification_runner_probe_deviations": {
+    "count": 3,
+    "scope": "read-only venv/pytest probes only",
+    "observed_behavior": "Each probe only checked the live HOME venv, activate, Python, and pytest-guard paths and invoked that Python solely to import pytest.",
+    "excluded_behavior": [
+      "Hermes source or configuration content reads",
+      "source or configuration writes",
+      "package installation or update",
+      "Hermes service or runtime start, stop, or restart"
+    ],
+    "remediation": "The verifier now creates an isolated verification HOME and sets HOME, HERMES_HOME, XDG_CONFIG_HOME, XDG_STATE_HOME, and XDG_DATA_HOME before invoking the upstream runner. Its test proves an operator-HOME sentinel Python is not executed."
+  },
+  "live_source_writes": false,
+  "branch_created": false,
+  "worktree_created": false,
+  "wheel_installed": false,
+  "configuration_modified": false,
+  "process_restarted": false
+}

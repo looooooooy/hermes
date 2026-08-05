@@ -1,0 +1,40 @@
+[Unit]
+Description=Hermes Cloud test server asynchronous worker
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hermes-cloud
+Group=hermes-cloud
+UMask=0077
+EnvironmentFile=/etc/hermes-cloud/test-server.env
+LoadCredential=database_dsn:/etc/hermes-cloud/secrets/runtime_database_dsn
+Environment=HERMES_RUNTIME_DSN_FILE=%d/database_dsn
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/preflight.sh --runtime
+ExecStart=/usr/bin/env ${HERMES_VENV}/bin/python ${HERMES_CURRENT}/deploy/test_server/scripts/run_worker.py
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+StateDirectory=hermes-cloud
+RuntimeDirectory=hermes-cloud
+
+[Install]
+WantedBy=multi-user.target

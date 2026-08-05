@@ -1,0 +1,18 @@
+{
+  "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "connector_instance_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "client_instance_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "session_key": "durable-root-1",
+  "profile": "default",
+  "client_request_id": "req-client-01",
+  "method": "prompt.submit",
+  "params": {
+    "runtime_session_id": "runtime-7",
+    "runtime_generation": "run-7",
+    "client_turn_id": "turn-client-01",
+    "text": "Continue the current task."
+  },
+  "issued_at": "2026-07-30T08:00:00Z",
+  "expires_at": "2026-07-30T08:05:00Z",
+  "revision": 1
+}

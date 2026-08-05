@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "replay_event": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "message.start"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "message_id": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "role": {
+                    "const": "assistant"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "message.delta",
+                  "reasoning.delta",
+                  "thinking.delta"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "maxLength": 131072,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "message.complete"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "maxLength": 4096,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "complete",
+                      "error"
+                    ]
+                  },
+                  "text": {
+                    "maxLength": 131072,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "agent.terminal.output"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "process_id": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sequence": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "stream": {
+                    "enum": [
+                      "stdout",
+                      "stderr"
+                    ]
+                  },
+                  "text": {
+                    "maxLength": 131072,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "status.update"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "running": {
+                    "type": "boolean"
+                  },
+                  "status": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "text": {
+                    "maxLength": 131072,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "running"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "tool.output.delta"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "additionalProperties": false,
+                "properties": {
+                  "sequence": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "text": {
+                    "maxLength": 131072,
+                    "type": "string"
+                  },
+                  "tool_call_id": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "tool_name": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "event_sequence": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "event_sequence_start": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "payload": {
+          "maxProperties": 1024,
+          "type": "object"
+        },
+        "session_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_key": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "message.start",
+            "message.delta",
+            "message.complete",
+            "agent.terminal.output",
+            "reasoning.delta",
+            "status.update",
+            "thinking.delta",
+            "tool.output.delta"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "session_id",
+        "session_key",
+        "event_sequence",
+        "payload"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/session-snapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "event_sequence": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "inflight": {
+      "additionalProperties": false,
+      "properties": {
+        "assistant": {
+          "maxLength": 131072,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "maxLength": 4096,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "streaming": {
+          "type": "boolean"
+        },
+        "user": {
+          "maxLength": 131072,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "user",
+        "assistant",
+        "streaming",
+        "error"
+      ],
+      "type": "object"
+    },
+    "messages": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 131072,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "type": "object"
+      },
+      "maxItems": 500,
+      "type": "array"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "replay_events": {
+      "items": {
+        "$ref": "#/$defs/replay_event"
+      },
+      "maxItems": 1024,
+      "type": "array"
+    },
+    "running": {
+      "type": "boolean"
+    },
+    "runtime_generation": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "runtime_session_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "snapshot_event_sequence": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "status": {
+      "maxLength": 64,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile",
+    "runtime_generation",
+    "session_key",
+    "runtime_session_id",
+    "running",
+    "status",
+    "event_sequence",
+    "snapshot_event_sequence",
+    "messages",
+    "inflight",
+    "replay_events"
+  ],
+  "title": "Hermes Connector Session Snapshot Payload v1",
+  "type": "object"
+}

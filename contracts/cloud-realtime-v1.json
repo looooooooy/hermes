@@ -1,0 +1,1008 @@
+{
+  "contract": "cloud-api.realtime",
+  "version": 1,
+  "path": "/api/ws",
+  "subprotocol": "hermes.tui.v1",
+  "ticket": {
+    "query_parameter": "ticket",
+    "single_use": true,
+    "query_only": true,
+    "allow_bearer_query": false,
+    "max_ttl_seconds": 60
+  },
+  "transport": {
+    "frame_type": "text",
+    "one_json_document_per_frame": true,
+    "binary_frame_action": "close_protocol_error",
+    "first_server_frame": "gateway.ready"
+  },
+  "limits": {
+    "max_text_frame_bytes": 262144,
+    "max_string_bytes": 131072,
+    "max_nesting_depth": 32,
+    "max_object_fields": 1024,
+    "max_array_items": 1024
+  },
+  "methods": {
+    "session.observe.subscribe": {
+      "effect": "open_authorized_projection",
+      "requires_session_acl": true
+    },
+    "session.observe.unsubscribe": {
+      "effect": "close_projection",
+      "idempotent": true
+    }
+  },
+  "status_semantics": {
+    "running_statuses": [
+      "running",
+      "working",
+      "streaming"
+    ],
+    "running_boolean_rule": "iff_status_is_running"
+  },
+  "sequence": {
+    "start_minimum": 0,
+    "event_minimum": 1,
+    "next_event_rule": "last_plus_one",
+    "stale_event_action": "ignore",
+    "gap_action": "resync",
+    "allow_gap_inference": false,
+    "mergeable_event_types": [
+      "agent.terminal.output",
+      "message.delta",
+      "reasoning.delta",
+      "status.update",
+      "thinking.delta",
+      "tool.output.delta"
+    ]
+  },
+  "replay_semantics": {
+    "require_session_id": true,
+    "require_same_session_key": true,
+    "require_same_runtime_session_id": true,
+    "range_start_field": "event_sequence_start",
+    "range_start_must_not_exceed_event_sequence": true,
+    "range_only_for_mergeable_event_types": true,
+    "empty_replay_requires_snapshot_equals_head": true,
+    "events_are_contiguous_from_snapshot": true
+  },
+  "rpc_error_codes": {
+    "session_not_found": 4001,
+    "replay_unavailable": 4091
+  },
+  "control_error_codes": {
+    "live_runtime_unavailable": 4202,
+    "controller_conflict": 4203,
+    "lease_required": 4204,
+    "lease_expired": 4205,
+    "lease_mismatch": 4206,
+    "request_id_payload_conflict": 4207,
+    "pending_request_conflict": 4208,
+    "method_not_allowed": 4209,
+    "command_unknown": 4210,
+    "revision_conflict": 4211,
+    "session_binding_mismatch": 4212,
+    "invalid_pending_response": 4213,
+    "owner_adapter_unavailable": 4214,
+    "relay_overloaded": 4215,
+    "deadline_exceeded_before_effect": 4306,
+    "effect_unknown": 4307
+  },
+  "close_codes": {
+    "protocol_error": 1002,
+    "message_too_big": 1009
+  },
+  "event_types": {
+    "message.start": {
+      "mergeable": false,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "role": {
+            "const": "assistant"
+          }
+        }
+      }
+    },
+    "message.delta": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          }
+        }
+      }
+    },
+    "message.complete": {
+      "mergeable": false,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "error"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          }
+        }
+      }
+    },
+    "agent.terminal.output": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "process_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "stream": {
+            "type": "string",
+            "enum": [
+              "stdout",
+              "stderr"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "reasoning.delta": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          }
+        }
+      }
+    },
+    "status.update": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "running"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          }
+        }
+      }
+    },
+    "thinking.delta": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          }
+        }
+      }
+    },
+    "tool.output.delta": {
+      "mergeable": true,
+      "payload_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "tool_call_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "tool_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 131072
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  },
+  "schemas": {
+    "gateway_ready": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jsonrpc",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "jsonrpc": {
+              "const": "2.0"
+            },
+            "method": {
+              "const": "event"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "payload"
+              ],
+              "properties": {
+                "type": {
+                  "const": "gateway.ready"
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "observer_contract",
+                    "connection_role"
+                  ],
+                  "properties": {
+                    "observer_contract": {
+                      "const": 1
+                    },
+                    "connection_role": {
+                      "const": "observer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "jsonrpc",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "jsonrpc": {
+              "const": "2.0"
+            },
+            "method": {
+              "const": "event"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "type",
+                "payload"
+              ],
+              "properties": {
+                "type": {
+                  "const": "gateway.ready"
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "observer_contract",
+                    "control_contract",
+                    "connection_role",
+                    "control_available_methods",
+                    "control_error_codes"
+                  ],
+                  "properties": {
+                    "observer_contract": {
+                      "const": 1
+                    },
+                    "control_contract": {
+                      "const": 1
+                    },
+                    "connection_role": {
+                      "const": "control"
+                    },
+                    "control_available_methods": {
+                      "type": "array",
+                      "maxItems": 10,
+                      "uniqueItems": true,
+                      "items": {
+                        "enum": [
+                          "session.control.acquire",
+                          "session.control.renew",
+                          "session.control.release",
+                          "session.control.status",
+                          "session.command.status",
+                          "prompt.submit",
+                          "session.interrupt",
+                          "session.steer",
+                          "approval.respond",
+                          "clarify.respond"
+                        ]
+                      }
+                    },
+                    "control_error_codes": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "control_role_required",
+                        "control_contract_unsupported",
+                        "live_runtime_unavailable",
+                        "controller_conflict",
+                        "lease_required",
+                        "lease_expired",
+                        "lease_mismatch",
+                        "request_id_payload_conflict",
+                        "pending_request_conflict",
+                        "method_not_allowed",
+                        "command_unknown",
+                        "revision_conflict",
+                        "session_binding_mismatch",
+                        "invalid_pending_response",
+                        "owner_adapter_unavailable",
+                        "relay_overloaded",
+                        "deadline_exceeded_before_effect",
+                        "effect_unknown"
+                      ],
+                      "properties": {
+                        "control_role_required": {"const": 4200},
+                        "control_contract_unsupported": {"const": 4201},
+                        "live_runtime_unavailable": {
+                          "const": 4202
+                        },
+                        "controller_conflict": {"const": 4203},
+                        "lease_required": {"const": 4204},
+                        "lease_expired": {"const": 4205},
+                        "lease_mismatch": {"const": 4206},
+                        "request_id_payload_conflict": {"const": 4207},
+                        "pending_request_conflict": {"const": 4208},
+                        "method_not_allowed": {
+                          "const": 4209
+                        },
+                        "command_unknown": {"const": 4210},
+                        "revision_conflict": {"const": 4211},
+                        "session_binding_mismatch": {"const": 4212},
+                        "invalid_pending_response": {"const": 4213},
+                        "owner_adapter_unavailable": {"const": 4214},
+                        "relay_overloaded": {"const": 4215},
+                        "deadline_exceeded_before_effect": {"const": 4306},
+                        "effect_unknown": {"const": 4307}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "control_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "enum": [
+            "session.control.acquire",
+            "session.control.renew",
+            "session.control.release",
+            "session.control.status",
+            "session.command.status",
+            "prompt.submit",
+            "session.interrupt",
+            "session.steer",
+            "approval.respond",
+            "clarify.respond"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "required": ["session_id"],
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          },
+          "maxProperties": 1024
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {"const": "session.command.status"}
+            },
+            "required": ["method"]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["session_id", "method", "client_request_id"],
+                "properties": {
+                  "session_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                  },
+                  "profile": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "client_instance_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "method": {
+                    "enum": [
+                      "prompt.submit",
+                      "session.interrupt",
+                      "session.steer",
+                      "approval.respond",
+                      "clarify.respond"
+                    ]
+                  },
+                  "client_request_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "control_rpc_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "error"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "enum": [
+                4202,
+                4203,
+                4204,
+                4205,
+                4206,
+                4207,
+                4208,
+                4209,
+                4210,
+                4211,
+                4212,
+                4213,
+                4214,
+                4215,
+                4306,
+                4307
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "data": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 16
+            }
+          }
+        }
+      }
+    },
+    "observe_subscribe_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "const": "session.observe.subscribe"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "session_key"
+          ],
+          "properties": {
+            "session_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "agent_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "observe_unsubscribe_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "const": "session.observe.unsubscribe"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subscription_id"
+          ],
+          "properties": {
+            "subscription_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        }
+      }
+    },
+    "observe_unsubscribe_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "maxProperties": 0
+        }
+      }
+    },
+    "json_rpc_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "error"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "integer",
+              "enum": [
+                4001,
+                4091
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "data": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 16
+            }
+          }
+        }
+      }
+    },
+    "observe_subscribe_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subscription_id",
+            "session_key",
+            "runtime_session_id",
+            "running",
+            "status",
+            "event_sequence",
+            "snapshot_event_sequence",
+            "messages",
+            "inflight",
+            "replay_events"
+          ],
+          "properties": {
+            "subscription_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "session_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "runtime_session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "running": {
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "event_sequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "snapshot_event_sequence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "messages": {
+              "type": "array",
+              "maxItems": 500,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "content": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 131072
+                  }
+                }
+              }
+            },
+            "inflight": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "user",
+                "assistant",
+                "streaming",
+                "error"
+              ],
+              "properties": {
+                "user": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "assistant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 131072
+                },
+                "streaming": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 4096
+                }
+              }
+            },
+            "replay_events": {
+              "type": "array",
+              "maxItems": 1024,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "session_id",
+                  "session_key",
+                  "event_sequence",
+                  "payload"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "message.start",
+                      "message.delta",
+                      "message.complete",
+                      "agent.terminal.output",
+                      "reasoning.delta",
+                      "status.update",
+                      "thinking.delta",
+                      "tool.output.delta"
+                    ]
+                  },
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "session_key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "event_sequence_start": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "event_sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "payload": {
+                    "type": "object",
+                    "maxProperties": 1024
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "session_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "event"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "session_id",
+            "session_key",
+            "event_sequence",
+            "payload"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "message.start",
+                "message.delta",
+                "message.complete",
+                "agent.terminal.output",
+                "reasoning.delta",
+                "status.update",
+                "thinking.delta",
+                "tool.output.delta"
+              ]
+            },
+            "session_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "session_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "event_sequence_start": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "event_sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "payload": {
+              "type": "object",
+              "maxProperties": 1024
+            }
+          }
+        }
+      }
+    }
+  }
+}

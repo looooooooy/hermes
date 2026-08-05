@@ -1,0 +1,49 @@
+{
+  "name": "hermes-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:cloud": "npm run build && vite preview --mode cloud",
+    "build": "vite build && node scripts/prepare-sites-build.mjs && node scripts/check-production-bundle.mjs",
+    "check:iana-registry": "node scripts/check-iana-registry-drift.mjs",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "npm run test:app && npm run test:iana-registry-parser && npm run test:bundle-budget && npm run test:cloud-preview-runtime && npm run test:real-full-chain-cli",
+    "test:app": "vitest run --config vitest.config.ts",
+    "test:browser": "playwright test",
+    "test:browser:production": "playwright test --config playwright.production.config.ts",
+    "test:bundle-budget": "node --test tests/production-bundle-budget.test.mjs",
+    "test:cloud-preview-runtime": "vitest run --config vitest.runtime.config.mjs",
+    "test:cloud-preview": "npm run build && node scripts/check-cloud-preview.mjs",
+    "test:real-full-chain-cli": "node --test tests/real-full-chain-gate.test.mjs",
+    "test:iana-registry-parser": "vitest run --config vitest.iana.config.mjs",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.browser.json && tsc -p tsconfig.node.json && tsc -p tsconfig.test.json",
+    "test:sites": "node --test tests/sites-worker.test.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}

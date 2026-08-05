@@ -1,0 +1,12 @@
+{
+  "contract_version": 1,
+  "message_type": "local.welcome",
+  "runtime_generation": "runtime-20260730-01",
+  "profile": "default",
+  "accepted_capabilities": [
+    "session.observe"
+  ],
+  "unavailable_optional_capabilities": [
+    "session.control"
+  ]
+}

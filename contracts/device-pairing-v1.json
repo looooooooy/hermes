@@ -1,0 +1,376 @@
+{
+  "contract": "hermes.device-pairing",
+  "version": 1,
+  "openapi_authority": "openapi/cloud-api-v1.json",
+  "authentication_subjects": {
+    "createPairingOffer": "connector_bootstrap",
+    "getPairingOffer": "pairing_offer",
+    "claimPairingCode": "owner",
+    "getPairingSession": "owner",
+    "confirmPairingSession": "owner",
+    "cancelPairingSession": "owner",
+    "provePairingSession": "pairing_offer",
+    "createDeviceAuthenticationChallenge": "device_bootstrap",
+    "mintConnectorToken": "device_proof",
+    "revokeDevice": "owner"
+  },
+  "authority": {
+    "connector_offer": {
+      "trust": "tenant_neutral",
+      "forbidden_self_asserted_fields": [
+        "agent_id",
+        "device_id",
+        "scopes",
+        "tenant_id",
+        "user_id",
+        "workspace_id"
+      ],
+      "authorization_effect": "none"
+    },
+    "owner_binding": {
+      "principal_derived_fields": [
+        "tenant_id",
+        "user_id"
+      ],
+      "owner_selected_fields": [
+        "workspace_id",
+        "agent_id",
+        "device_display_name",
+        "scopes"
+      ],
+      "server_generated_fields": [
+        "device_id",
+        "credential_id"
+      ],
+      "confirmation_requires_fingerprint_match": true
+    },
+    "owner_claim_lookup": {
+      "lookup_input": "pairing_code_request_body_only",
+      "lookup_operation": "atomic_pairing_code_digest_match",
+      "unauthenticated_lookup": false,
+      "offer_id_required_from_owner": false,
+      "unknown_or_unavailable_response": "PAIRING_CLAIM_UNAVAILABLE",
+      "unknown_or_wrong_code_offer_effect": "none",
+      "correct_code_transition": "atomic_offer_digest_compare_and_swap",
+      "idempotent_replay": "same_key_same_digest_replays_prior_result"
+    },
+    "owner_review": {
+      "connector_supplied_untrusted_fields": [
+        "display_name",
+        "platform_family",
+        "connector_version",
+        "key_algorithm"
+      ],
+      "server_derived_fields": [
+        "credential_fingerprint",
+        "expires_at"
+      ],
+      "trust": "display_only_not_authorization"
+    }
+  },
+  "state_machine": {
+    "offer": {
+      "initial": "pending",
+      "transitions": {
+        "pending": [
+          "claimed",
+          "expired",
+          "cancelled"
+        ],
+        "claimed": [],
+        "expired": [],
+        "cancelled": []
+      }
+    },
+    "session": {
+      "initial": "claimed",
+      "transitions": {
+        "claimed": [
+          "confirmed",
+          "expired",
+          "cancelled"
+        ],
+        "confirmed": [
+          "expired",
+          "cancelled"
+        ],
+        "expired": [],
+        "cancelled": []
+      }
+    },
+    "activation_states": [
+      "waiting_owner",
+      "waiting_owner_confirmation",
+      "awaiting_proof",
+      "active",
+      "blocked"
+    ],
+    "credential_activation_rule": "confirmed pairing plus verified single-use Ed25519 challenge"
+  },
+  "ttl_seconds": {
+    "pairing_session": 300,
+    "pairing_expiry_origin": "offer_created_at",
+    "claim_or_confirm_extends_pairing": false,
+    "challenge_must_not_outlive_pairing": true,
+    "device_challenge": 60,
+    "connector_token_min": 1,
+    "connector_token_max": 3600
+  },
+  "limits": {
+    "failed_code_lookup_window_seconds": 300,
+    "max_failed_code_lookups_per_owner_principal": 5,
+    "failed_code_lookup_principal_fields": [
+      "tenant_id",
+      "user_id"
+    ],
+    "failed_code_lookup_effect": "block_principal_claims_until_window_expires",
+    "failed_code_lookup_offer_effect": "none",
+    "pairing_code_entropy_bits": 40,
+    "offer_secret_entropy_bits": 256,
+    "max_device_name_utf8_bytes": 128
+  },
+  "secrets": {
+    "device_private_key": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "os_secure_store_only",
+      "transport": "never",
+      "generation": "connector"
+    },
+    "pairing_code": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "sha256_digest_only",
+      "transport": "owner_claim_body_only",
+      "generation": "cloud",
+      "alone_authorizes_activation": false
+    },
+    "pairing_offer_secret": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "sha256_digest_only",
+      "transport": "x_hermes_pairing_offer_header_only",
+      "generation": "cloud",
+      "alone_authorizes_activation": false,
+      "idempotency_replay": "reconstruct_or_decrypt_without_plaintext_at_rest"
+    },
+    "device_challenge": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "sha256_digest_only",
+      "transport": "response_and_proof_body",
+      "generation": "cloud"
+    },
+    "device_signature": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "digest_or_redacted_audit_only",
+      "transport": "proof_body",
+      "generation": "connector_secure_key_operation"
+    },
+    "connector_token": {
+      "log": "forbidden",
+      "trace": "forbidden",
+      "diagnostic": "forbidden",
+      "persistence": "never_plaintext_at_rest",
+      "transport": "response_body_then_authorization_header",
+      "generation": "cloud",
+      "idempotency_replay": "reconstruct_or_decrypt_without_plaintext_at_rest"
+    }
+  },
+  "proof_of_possession": {
+    "algorithm": "Ed25519",
+    "private_key_location": "connector_os_secure_store_only",
+    "challenge_storage": "sha256_digest_only",
+    "challenge_single_use": true,
+    "signing_payload_prefix": "hermes-device-auth-v1\\0",
+    "signature_input": "base64url_decoded_signing_payload_bytes",
+    "required_for_initial_activation": true,
+    "required_for_every_connector_token": true,
+    "additional_authentication": "pairing_offer_secret"
+  },
+  "connector_token": {
+    "required_binding_claims": [
+      "tenant_id",
+      "device_id",
+      "credential_id",
+      "agent_id",
+      "scopes",
+      "issued_at",
+      "expires_at",
+      "token_id"
+    ],
+    "revocation_check": "on_issue_and_every_gateway_connection",
+    "blocked_device_states": [
+      "suspended",
+      "revoked"
+    ],
+    "blocked_credential_states": [
+      "expired",
+      "revoked"
+    ],
+    "gateway_trusts_hello_authority_fields": false
+  },
+  "connector_wss_lifecycle_close": {
+    "policy_close_code": 1008,
+    "matching": "code_and_exact_reason",
+    "reasons": {
+      "revoked": "device_authorization_revoked",
+      "suspended": "device_authorization_suspended"
+    },
+    "unknown_close_effect": "disconnect_and_reconnect_without_lifecycle_change",
+    "envelope_message_type": "forbidden"
+  },
+  "controller_invariant": {
+    "authoritative_agent_runtime_count": 1,
+    "pairing_acquires_control": false,
+    "controller_cardinality": "at_most_one_per_realtime_session",
+    "control_scope_semantics": "permission_to_request_control_not_control_ownership"
+  },
+  "idempotency": {
+    "header": "Idempotency-Key",
+    "request_digest": "sha256_of_canonical_method_path_principal_and_body",
+    "same_key_same_digest": "replay_business_result_without_duplicate_effect",
+    "same_key_different_digest": "reject_with_idempotency_conflict",
+    "bearer_secret_plaintext_persistence": "forbidden"
+  },
+  "revocation": {
+    "owner_endpoint": "/api/devices/{device_id}/revoke",
+    "effects": [
+      "close_existing_connector_wss",
+      "reject_new_device_challenges",
+      "reject_connector_token_issuance",
+      "clear_unexecuted_sensitive_commands",
+      "invalidate_pairing_session_auth",
+      "retain_redacted_security_audit"
+    ],
+    "automatic_repairing": false
+  },
+  "errors": {
+    "PAIRING_INVALID_REQUEST": 400,
+    "UNAUTHORIZED": 401,
+    "FORBIDDEN": 403,
+    "PAIRING_NOT_FOUND": 404,
+    "PAIRING_STATE_CONFLICT": 409,
+    "IDEMPOTENCY_CONFLICT": 409,
+    "PAIRING_EXPIRED": 410,
+    "CHALLENGE_EXPIRED": 410,
+    "CHALLENGE_INVALID": 401,
+    "CHALLENGE_REPLAYED": 409,
+    "PAIRING_CLAIM_UNAVAILABLE": 404,
+    "PAIRING_CLAIM_RATE_LIMITED": 429,
+    "DEVICE_AUTH_UNAVAILABLE": 403,
+    "RATE_LIMITED": 429
+  },
+  "fixtures": {
+    "valid": [
+      {
+        "schema": "CreatePairingOfferRequest",
+        "path": "fixtures/valid/device-pairing-create-offer-request.json"
+      },
+      {
+        "schema": "CreatePairingOfferResponse",
+        "path": "fixtures/valid/device-pairing-create-offer-response.json"
+      },
+      {
+        "schema": "ClaimPairingSessionRequest",
+        "path": "fixtures/valid/device-pairing-claim-request.json"
+      },
+      {
+        "schema": "PairingOwnerView",
+        "path": "fixtures/valid/device-pairing-owner-view.json"
+      },
+      {
+        "schema": "PairingClaimUnavailableResponse",
+        "path": "fixtures/valid/device-pairing-claim-unavailable-response.json"
+      },
+      {
+        "schema": "PairingClaimRateLimitedResponse",
+        "path": "fixtures/valid/device-pairing-claim-rate-limited-response.json"
+      },
+      {
+        "schema": "ConfirmPairingSessionRequest",
+        "path": "fixtures/valid/device-pairing-confirm-request.json"
+      },
+      {
+        "schema": "CancelPairingSessionRequest",
+        "path": "fixtures/valid/device-pairing-cancel-request.json"
+      },
+      {
+        "schema": "ConnectorPairingStatusResponse",
+        "path": "fixtures/valid/device-pairing-connector-status-confirmed.json"
+      },
+      {
+        "schema": "DeviceChallengeProofRequest",
+        "path": "fixtures/valid/device-pairing-proof-request.json"
+      },
+      {
+        "schema": "ConnectorTokenResponse",
+        "path": "fixtures/valid/device-auth-connector-token-response.json"
+      },
+      {
+        "schema": "DeviceAuthenticationChallengeRequest",
+        "path": "fixtures/valid/device-auth-challenge-request.json"
+      },
+      {
+        "schema": "DeviceAuthenticationChallenge",
+        "path": "fixtures/valid/device-auth-challenge-response.json"
+      },
+      {
+        "schema": "DeviceAuthenticationTokenRequest",
+        "path": "fixtures/valid/device-auth-token-request.json"
+      },
+      {
+        "schema": "RevokeDeviceRequest",
+        "path": "fixtures/valid/device-revoke-request.json"
+      },
+      {
+        "schema": "RevokeDeviceResponse",
+        "path": "fixtures/valid/device-revoke-response.json"
+      }
+    ],
+    "invalid": [
+      {
+        "schema": "CreatePairingOfferRequest",
+        "path": "fixtures/invalid/device-pairing-create-tenant-self-assertion.json"
+      },
+      {
+        "schema": "CreatePairingOfferRequest",
+        "path": "fixtures/invalid/device-pairing-create-private-key.json"
+      },
+      {
+        "schema": "CreatePairingOfferRequest",
+        "path": "fixtures/invalid/device-pairing-create-bad-public-key.json"
+      },
+      {
+        "schema": "ClaimPairingSessionRequest",
+        "path": "fixtures/invalid/device-pairing-claim-tenant-self-assertion.json"
+      },
+      {
+        "schema": "ClaimPairingSessionRequest",
+        "path": "fixtures/invalid/device-pairing-claim-code-only.json"
+      },
+      {
+        "schema": "DeviceChallengeProofRequest",
+        "path": "fixtures/invalid/device-pairing-proof-wrong-algorithm.json"
+      },
+      {
+        "schema": "ConnectorTokenResponse",
+        "path": "fixtures/invalid/device-auth-connector-token-over-ttl.json"
+      },
+      {
+        "schema": "ConnectorPairingStatusResponse",
+        "path": "fixtures/invalid/device-pairing-status-missing-challenge.json"
+      },
+      {
+        "schema": "RevokeDeviceRequest",
+        "path": "fixtures/invalid/device-revoke-extra-field.json"
+      }
+    ]
+  }
+}

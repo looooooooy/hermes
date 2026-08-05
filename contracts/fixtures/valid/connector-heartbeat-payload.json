@@ -1,0 +1,8 @@
+{
+  "connection_id": "22222222-2222-4222-8222-222222222222",
+  "sender_role": "connector",
+  "observed_at": "2026-07-30T12:00:20Z",
+  "next_outbound_sequence": 1,
+  "next_inbound_sequence": 1,
+  "session_state": "active"
+}

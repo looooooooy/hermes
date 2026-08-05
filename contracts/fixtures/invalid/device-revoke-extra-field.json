@@ -1,0 +1,5 @@
+{
+  "reason": "device_lost",
+  "expected_revision": 4,
+  "access_token": "must-not-be-accepted"
+}

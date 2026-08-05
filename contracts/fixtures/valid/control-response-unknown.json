@@ -1,0 +1,11 @@
+{
+  "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "control_transport_id": "22222222-2222-4222-8222-222222222222",
+  "operation": "session.control.renew",
+  "state": "unknown",
+  "completed_at": "2026-07-31T02:01:01Z",
+  "error": {
+    "code": 4307,
+    "reason": "effect_unknown"
+  }
+}

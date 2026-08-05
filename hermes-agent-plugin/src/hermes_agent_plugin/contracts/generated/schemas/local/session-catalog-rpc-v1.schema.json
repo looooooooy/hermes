@@ -1,0 +1,460 @@
+{
+  "$defs": {
+    "errorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": 4400
+            },
+            "message": {
+              "const": "session catalog reset required"
+            },
+            "reason": {
+              "enum": [
+                "cursor_stale",
+                "event_gap",
+                "buffer_overflow",
+                "page_revision_changed",
+                "runtime_generation_changed",
+                "transport_replaced"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "error"
+      ],
+      "type": "object"
+    },
+    "eventNotification": {
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "session.catalog.event"
+        },
+        "params": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "upsert",
+                "remove"
+              ]
+            },
+            "catalog_sequence": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "entry": {
+              "$ref": "https://contracts.hermes.local/session-catalog-entry-v1.schema.json"
+            },
+            "profile": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+              "type": "string"
+            },
+            "runtime_generation": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "subscription_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "subscription_id",
+            "profile",
+            "runtime_generation",
+            "catalog_sequence",
+            "action",
+            "entry"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "page": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "next_cursor": {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              "sessions": {
+                "minItems": 1
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "is_last": {
+                "const": true
+              }
+            },
+            "required": [
+              "is_last"
+            ]
+          },
+          "then": {
+            "properties": {
+              "next_cursor": {
+                "const": null
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "catalog_revision": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "is_last": {
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page_index": {
+          "$ref": "#/$defs/safeInteger"
+        },
+        "profile": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+          "type": "string"
+        },
+        "runtime_generation": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "sessions": {
+          "items": {
+            "$ref": "https://contracts.hermes.local/session-catalog-entry-v1.schema.json"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "snapshot_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "subscription_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "required": [
+        "subscription_id",
+        "snapshot_id",
+        "profile",
+        "runtime_generation",
+        "catalog_revision",
+        "page_index",
+        "is_last",
+        "sessions",
+        "next_cursor"
+      ],
+      "type": "object"
+    },
+    "pageRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "session.catalog.page"
+        },
+        "params": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "page_index": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "snapshot_id": {
+              "$ref": "#/$defs/uuid"
+            },
+            "subscription_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "subscription_id",
+            "snapshot_id",
+            "page_index",
+            "cursor"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "pageResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "result": {
+          "$ref": "#/$defs/page"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "resetNotification": {
+      "additionalProperties": false,
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "session.catalog.reset_required"
+        },
+        "params": {
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "enum": [
+                "cursor_stale",
+                "event_gap",
+                "buffer_overflow",
+                "page_revision_changed",
+                "runtime_generation_changed",
+                "transport_replaced"
+              ]
+            },
+            "subscription_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "subscription_id",
+            "reason"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "safeInteger": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "subscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "session.catalog.subscribe"
+        },
+        "params": {
+          "additionalProperties": false,
+          "properties": {
+            "page_size": {
+              "maximum": 128,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "profile": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+              "type": "string"
+            },
+            "runtime_generation": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "profile",
+            "runtime_generation",
+            "page_size"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "unsubscribeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "session.catalog.unsubscribe"
+        },
+        "params": {
+          "additionalProperties": false,
+          "properties": {
+            "subscription_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "subscription_id"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "unsubscribeResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "result": {
+          "additionalProperties": false,
+          "properties": {
+            "closed": {
+              "const": true
+            },
+            "subscription_id": {
+              "$ref": "#/$defs/uuid"
+            }
+          },
+          "required": [
+            "subscription_id",
+            "closed"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://contracts.hermes.local/local/session-catalog-rpc-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/subscribeRequest"
+    },
+    {
+      "$ref": "#/$defs/pageRequest"
+    },
+    {
+      "$ref": "#/$defs/unsubscribeRequest"
+    },
+    {
+      "$ref": "#/$defs/pageResponse"
+    },
+    {
+      "$ref": "#/$defs/unsubscribeResponse"
+    },
+    {
+      "$ref": "#/$defs/eventNotification"
+    },
+    {
+      "$ref": "#/$defs/resetNotification"
+    },
+    {
+      "$ref": "#/$defs/errorResponse"
+    }
+  ],
+  "title": "Hermes Session Catalog persistent Observer RPC v1"
+}

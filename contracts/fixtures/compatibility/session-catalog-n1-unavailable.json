@@ -1,0 +1,1 @@
+{"profile_version":1,"target_contract":"session_catalog_v1","current_contract_version":1,"peer_contract_version":0,"classification":"n_1","available_capabilities":["session.observe"],"unavailable_capabilities":["session.catalog.v1"],"safe_effect":"directory_unavailable_without_synthetic_sessions"}

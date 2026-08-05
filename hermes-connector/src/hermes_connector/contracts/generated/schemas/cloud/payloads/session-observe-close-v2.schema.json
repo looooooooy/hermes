@@ -1,0 +1,69 @@
+{
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-observe-close-v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "closed_at": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "observer_contract": {
+      "const": 2
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "client_unsubscribe",
+        "subscription_replaced",
+        "authorization_revoked",
+        "gateway_shutdown",
+        "reconciliation",
+        "contract_mismatch"
+      ]
+    },
+    "request_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "subscription_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "target_source": {
+      "const": "cloud_authorized_binding"
+    }
+  },
+  "required": [
+    "observer_contract",
+    "request_id",
+    "subscription_id",
+    "profile",
+    "session_key",
+    "target_source",
+    "reason",
+    "closed_at"
+  ],
+  "title": "Session Observe Close v2",
+  "type": "object"
+}

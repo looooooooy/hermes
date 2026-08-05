@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-connector"
+version = "0.1.0"
+description = "Independent local edge service between Hermes Agent and Hermes Cloud"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+    "alembic>=1.13.0,<2.0",
+    "cryptography>=45.0.0,<47.0",
+    "httpx>=0.28.0,<1.0",
+    "SQLAlchemy>=2.0.0,<3.0",
+    "websockets>=15.0,<16.0",
+]
+
+[project.scripts]
+hermes-connector = "hermes_connector.cli:main"
+
+[dependency-groups]
+dev = [
+    "build>=1.2.2,<2.0",
+    "hatchling>=1.27,<2.0",
+    "pytest>=8.4.0,<9.0",
+    "pytest-asyncio>=1.1.0,<2.0",
+    "pytest-subtests>=0.14.2,<1.0",
+    "ruff>=0.12.0,<1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hermes_connector"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/scripts",
+    "/tests",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"

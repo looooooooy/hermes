@@ -1,0 +1,772 @@
+{
+  "valid": [
+    {
+      "schema": "schemas/capability-manifest-v1.schema.json",
+      "fixture": "fixtures/valid/capability-manifest.json"
+    },
+    {
+      "schema": "schemas/local/gateway-handshake-v1.schema.json",
+      "fixture": "fixtures/valid/local-gateway-handshake.json"
+    },
+    {
+      "schema": "schemas/local/gateway-welcome-v1.schema.json",
+      "fixture": "fixtures/valid/local-gateway-welcome.json"
+    },
+    {
+      "schema": "schemas/local/gateway-discovery-v1.schema.json",
+      "fixture": "fixtures/valid/local-gateway-discovery.json"
+    },
+    {
+      "schema": "schemas/local/runtime-discovery-descriptor-v2.schema.json",
+      "fixture": "fixtures/valid/local-runtime-discovery-descriptor-v2.json"
+    },
+    {
+      "schema": "schemas/local/gateway-error-v1.schema.json",
+      "fixture": "fixtures/valid/local-gateway-error.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/valid/cloud-connector-envelope.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-hello-v1.schema.json",
+      "fixture": "fixtures/valid/connector-hello-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-welcome-v1.schema.json",
+      "fixture": "fixtures/valid/connector-welcome-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-heartbeat-v1.schema.json",
+      "fixture": "fixtures/valid/connector-heartbeat-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-snapshot-page-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-snapshot-page.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-event-upsert.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-event-remove.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-subscribe.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-subscribe-result.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-page.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-page-result.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-unsubscribe.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-unsubscribe-result.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-event.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-reset-required.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-local-error-response.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-ack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-ack-snapshot.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-ack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-ack-event.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-event-gap.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-page-gap.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-runtime-mismatch.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-stale-writer.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-contract-mismatch.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/valid/session-catalog-nack-revision-conflict.json"
+    },
+    {
+      "schema": "schemas/session-catalog-degradation-v1.schema.json",
+      "fixture": "fixtures/compatibility/session-catalog-n1-unavailable.json"
+    },
+    {
+      "schema": "schemas/session-catalog-degradation-v1.schema.json",
+      "fixture": "fixtures/degradation/session-catalog-capability-unavailable.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-snapshot-v1.schema.json",
+      "fixture": "fixtures/valid/session-snapshot-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v1.schema.json",
+      "fixture": "fixtures/valid/session-event-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-open-v1.schema.json",
+      "fixture": "fixtures/valid/session-observe-open-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-close-v1.schema.json",
+      "fixture": "fixtures/valid/session-observe-close-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-ack-v1.schema.json",
+      "fixture": "fixtures/valid/stream-ack-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-nack-v1.schema.json",
+      "fixture": "fixtures/valid/stream-nack-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-snapshot-v2.schema.json",
+      "fixture": "fixtures/valid/session-snapshot-v2-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+      "fixture": "fixtures/valid/session-event-v2-todo-upsert.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+      "fixture": "fixtures/valid/session-event-v2-subagent-upsert.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+      "fixture": "fixtures/valid/session-event-v2-tool-upsert.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+      "fixture": "fixtures/valid/session-event-v2-terminal-upsert.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-open-v2.schema.json",
+      "fixture": "fixtures/valid/session-observe-open-v2-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-close-v2.schema.json",
+      "fixture": "fixtures/valid/session-observe-close-v2-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-ack-v2.schema.json",
+      "fixture": "fixtures/valid/stream-ack-v2-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-nack-v2.schema.json",
+      "fixture": "fixtures/valid/stream-nack-v2-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-deliver-v1.schema.json",
+      "fixture": "fixtures/valid/command-deliver-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-receipt-v1.schema.json",
+      "fixture": "fixtures/valid/command-receipt-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-result-v1.schema.json",
+      "fixture": "fixtures/valid/command-result-payload.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-open.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-acquire.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-renew.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-release.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-status.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/valid/control-request-close.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-open.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-acquire.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-renew.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-release.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-status.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-close.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-failed.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/valid/control-response-unknown.json"
+    }
+  ],
+  "invalid": [
+    {
+      "schema": "schemas/capability-manifest-v1.schema.json",
+      "fixture": "fixtures/invalid/capability-unknown.json"
+    },
+    {
+      "schema": "schemas/local/gateway-handshake-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-extra-field.json"
+    },
+    {
+      "schema": "schemas/local/gateway-handshake-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-capability-overlap.json"
+    },
+    {
+      "schema": "schemas/local/gateway-discovery-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-discovery-extra-field.json"
+    },
+    {
+      "schema": "schemas/local/gateway-discovery-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-discovery-platform-field.json"
+    },
+    {
+      "schema": "schemas/local/gateway-error-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-error-unknown-code.json"
+    },
+    {
+      "schema": "schemas/local/gateway-error-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-error-reason-mismatch.json"
+    },
+    {
+      "schema": "schemas/local/gateway-error-v1.schema.json",
+      "fixture": "fixtures/invalid/local-gateway-error-detail-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/invalid/cloud-envelope-negative-sequence.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/invalid/cloud-envelope-non-utc.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/invalid/cloud-envelope-duplicate-key.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/invalid/cloud-envelope-noncanonical-uuid.json"
+    },
+    {
+      "schema": "schemas/cloud/connector-envelope-v1.schema.json",
+      "fixture": "fixtures/invalid/cloud-envelope-sequence-over-js-safe.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-hello-v1.schema.json",
+      "fixture": "fixtures/invalid/connector-hello-capability-overlap.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-hello-v1.schema.json",
+      "fixture": "fixtures/invalid/connector-hello-platform-field.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-welcome-v1.schema.json",
+      "fixture": "fixtures/invalid/connector-welcome-capability-overlap.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/connector-heartbeat-v1.schema.json",
+      "fixture": "fixtures/invalid/connector-heartbeat-bad-role.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-snapshot-page-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-snapshot-cursor-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-event-agent-id-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-remove-missing-entry.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-page-gap-conflicting.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-event-gap-conflicting.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-runtime-mismatch-conflicting.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-stale-writer-conflicting.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-contract-mismatch-conflicting.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-revision-conflict-conflicting.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-unsubscribe-closed-false.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-error-code.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-error-message.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-error-reason.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-error-extra-field.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-snapshot-page-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-snapshot-invalid-profile.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-event-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-event-invalid-profile.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-ack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-ack-invalid-profile.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-catalog-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-nack-invalid-profile.json"
+    },
+    {
+      "schema": "schemas/local/session-catalog-rpc-v1.schema.json",
+      "fixture": "fixtures/invalid/session-catalog-local-invalid-profile.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v1.schema.json",
+      "fixture": "fixtures/invalid/session-event-missing-profile.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-event-v1.schema.json",
+      "fixture": "fixtures/invalid/session-event-local-type.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-open-v1.schema.json",
+      "fixture": "fixtures/invalid/session-observe-open-missing-source.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/session-observe-close-v1.schema.json",
+      "fixture": "fixtures/invalid/session-observe-close-missing-subscription.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-ack-v1.schema.json",
+      "fixture": "fixtures/invalid/stream-ack-heartbeat-cursor.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/stream-nack-v1.schema.json",
+      "fixture": "fixtures/invalid/stream-nack-missing-expected-sequence.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-deliver-v1.schema.json",
+      "fixture": "fixtures/invalid/command-deliver-method-not-allowed.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-deliver-v1.schema.json",
+      "fixture": "fixtures/invalid/command-deliver-lease-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/command-result-v1.schema.json",
+      "fixture": "fixtures/invalid/command-result-missing-error.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/invalid/control-request-acquire-partial-runtime.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/invalid/control-request-status-lease-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-request-v1.schema.json",
+      "fixture": "fixtures/invalid/control-request-open-lease-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/invalid/control-response-status-lease-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/invalid/control-response-failed-lease-leak.json"
+    },
+    {
+      "schema": "schemas/cloud/payloads/control-response-v1.schema.json",
+      "fixture": "fixtures/invalid/control-response-acquire-missing-lease.json"
+    }
+  ],
+  "external_profiles": {
+    "connector_observer_v2": {
+      "authority": "observer-output-parity-v2.json",
+      "valid": [
+        "fixtures/valid/session-snapshot-v2-payload.json",
+        "fixtures/valid/session-event-v2-todo-upsert.json",
+        "fixtures/valid/session-event-v2-subagent-upsert.json",
+        "fixtures/valid/session-event-v2-tool-upsert.json",
+        "fixtures/valid/session-event-v2-terminal-upsert.json",
+        "fixtures/valid/session-observe-open-v2-payload.json",
+        "fixtures/valid/session-observe-close-v2-payload.json",
+        "fixtures/valid/stream-ack-v2-payload.json",
+        "fixtures/valid/stream-nack-v2-payload.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/session-event-v2-lifecycle-range.json",
+        "fixtures/invalid/session-event-v2-tool-raw-args.json",
+        "fixtures/invalid/session-event-v2-terminal-stream.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/session-snapshot-n1.json",
+        "fixtures/compatibility/session-event-n1.json"
+      ],
+      "capability_degradation": []
+    },
+    "cloud_api_observer_v2": {
+      "authority": "openapi/cloud-api-v1.json",
+      "valid": [
+        "fixtures/valid/cloud-api-observer-ticket-v2-request.json",
+        "fixtures/valid/cloud-api-observer-ticket-v2.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/cloud-api-observer-ticket-v2-request-downgrade.json",
+        "fixtures/invalid/cloud-api-observer-ticket-v2-response-downgrade.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/cloud-api-observer-ticket-request-n1.json",
+        "fixtures/compatibility/cloud-api-observer-ticket-response-n1.json"
+      ],
+      "capability_degradation": []
+    },
+    "cloud_realtime_v2": {
+      "authority": "cloud-realtime-v2.json",
+      "valid": [
+        "fixtures/valid/cloud-realtime-v2-ready.json",
+        "fixtures/valid/cloud-realtime-v2-subscribe.json",
+        "fixtures/valid/cloud-realtime-v2-subscribe-result.json",
+        "fixtures/valid/cloud-realtime-v2-event.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/cloud-realtime-v2-ready-downgrade.json",
+        "fixtures/invalid/cloud-realtime-v2-subscribe-missing-contract.json",
+        "fixtures/invalid/cloud-realtime-v2-event-invalid-profile.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/cloud-realtime-ready-n1.json"
+      ],
+      "capability_degradation": []
+    },
+    "connector_observer_v1": {
+      "authority": "message-types-v1.json",
+      "valid": [
+        "fixtures/valid/session-snapshot-payload.json",
+        "fixtures/valid/session-event-payload.json",
+        "fixtures/valid/session-observe-open-payload.json",
+        "fixtures/valid/session-observe-close-payload.json",
+        "fixtures/valid/stream-ack-payload.json",
+        "fixtures/valid/stream-nack-payload.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/session-snapshot-replay-gap.json",
+        "fixtures/invalid/session-snapshot-status-mismatch.json",
+        "fixtures/invalid/session-event-missing-profile.json",
+        "fixtures/invalid/session-event-local-type.json",
+        "fixtures/invalid/session-event-nonmergeable-range.json",
+        "fixtures/invalid/session-observe-open-missing-source.json",
+        "fixtures/invalid/session-observe-close-missing-subscription.json",
+        "fixtures/invalid/stream-ack-heartbeat-cursor.json",
+        "fixtures/invalid/stream-nack-missing-expected-sequence.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/session-snapshot-n1.json",
+        "fixtures/compatibility/session-event-n1.json"
+      ],
+      "capability_degradation": []
+    },
+    "connector_session_catalog_v1": {
+      "authority": "session-catalog-v1.json",
+      "valid": [
+        "fixtures/valid/session-catalog-snapshot-page.json",
+        "fixtures/valid/session-catalog-event-upsert.json",
+        "fixtures/valid/session-catalog-event-remove.json",
+        "fixtures/valid/session-catalog-local-subscribe.json",
+        "fixtures/valid/session-catalog-local-subscribe-result.json",
+        "fixtures/valid/session-catalog-local-page.json",
+        "fixtures/valid/session-catalog-local-page-result.json",
+        "fixtures/valid/session-catalog-local-unsubscribe.json",
+        "fixtures/valid/session-catalog-local-unsubscribe-result.json",
+        "fixtures/valid/session-catalog-local-event.json",
+        "fixtures/valid/session-catalog-local-reset-required.json",
+        "fixtures/valid/session-catalog-local-error-response.json",
+        "fixtures/valid/session-catalog-ack-snapshot.json",
+        "fixtures/valid/session-catalog-ack-event.json",
+        "fixtures/valid/session-catalog-nack-event-gap.json",
+        "fixtures/valid/session-catalog-nack-page-gap.json",
+        "fixtures/valid/session-catalog-nack-runtime-mismatch.json",
+        "fixtures/valid/session-catalog-nack-stale-writer.json",
+        "fixtures/valid/session-catalog-nack-contract-mismatch.json",
+        "fixtures/valid/session-catalog-nack-revision-conflict.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/session-catalog-snapshot-cursor-leak.json",
+        "fixtures/invalid/session-catalog-event-agent-id-leak.json",
+        "fixtures/invalid/session-catalog-remove-missing-entry.json",
+        "fixtures/invalid/session-catalog-nack-page-gap-conflicting.json",
+        "fixtures/invalid/session-catalog-nack-event-gap-conflicting.json",
+        "fixtures/invalid/session-catalog-nack-runtime-mismatch-conflicting.json",
+        "fixtures/invalid/session-catalog-nack-stale-writer-conflicting.json",
+        "fixtures/invalid/session-catalog-nack-contract-mismatch-conflicting.json",
+        "fixtures/invalid/session-catalog-nack-revision-conflict-conflicting.json",
+        "fixtures/invalid/session-catalog-local-unsubscribe-closed-false.json",
+        "fixtures/invalid/session-catalog-local-error-code.json",
+        "fixtures/invalid/session-catalog-local-error-message.json",
+        "fixtures/invalid/session-catalog-local-error-reason.json",
+        "fixtures/invalid/session-catalog-local-error-extra-field.json",
+        "fixtures/invalid/session-catalog-snapshot-invalid-profile.json",
+        "fixtures/invalid/session-catalog-event-invalid-profile.json",
+        "fixtures/invalid/session-catalog-ack-invalid-profile.json",
+        "fixtures/invalid/session-catalog-nack-invalid-profile.json",
+        "fixtures/invalid/session-catalog-local-invalid-profile.json"
+      ],
+      "semantic_valid": [
+        "fixtures/conformance/session-catalog-current-writer-snapshot.json",
+        "fixtures/conformance/session-catalog-new-generation-rollover.json",
+        "fixtures/conformance/session-catalog-stable-session-id-reuse.json",
+        "fixtures/conformance/session-catalog-event-revisions.json"
+      ],
+      "semantic_invalid": [
+        "fixtures/invalid/session-catalog-semantic-atomic-repeat-page-gap.json",
+        "fixtures/invalid/session-catalog-semantic-duplicate-same-page.json",
+        "fixtures/invalid/session-catalog-semantic-duplicate-cross-page.json",
+        "fixtures/invalid/session-catalog-semantic-page-gap.json",
+        "fixtures/invalid/session-catalog-semantic-scope-change.json",
+        "fixtures/invalid/session-catalog-semantic-revision-change.json",
+        "fixtures/invalid/session-catalog-semantic-event-gap.json",
+        "fixtures/invalid/session-catalog-semantic-late-old-generation.json",
+        "fixtures/invalid/session-catalog-semantic-late-old-generation-snapshot.json",
+        "fixtures/invalid/session-catalog-semantic-stale-writer.json",
+        "fixtures/invalid/session-catalog-semantic-payload-identity.json",
+        "fixtures/invalid/session-catalog-semantic-stable-session-id-changed.json",
+        "fixtures/invalid/session-catalog-semantic-stable-session-id-invalid.json",
+        "fixtures/invalid/session-catalog-semantic-stable-session-scope-missing.json",
+        "fixtures/invalid/session-catalog-semantic-event-first-sequence.json",
+        "fixtures/invalid/session-catalog-semantic-event-unknown-action.json",
+        "fixtures/invalid/session-catalog-semantic-event-stale-upsert.json",
+        "fixtures/invalid/session-catalog-semantic-event-remove-missing.json",
+        "fixtures/invalid/session-catalog-semantic-event-remove-revision.json",
+        "fixtures/invalid/session-catalog-semantic-input-empty.json",
+        "fixtures/invalid/session-catalog-semantic-input-scalar-operation.json",
+        "fixtures/invalid/session-catalog-semantic-input-operations-not-array.json",
+        "fixtures/invalid/session-catalog-semantic-input-state-wrong-type.json",
+        "fixtures/invalid/session-catalog-semantic-input-writer-missing.json",
+        "fixtures/invalid/session-catalog-semantic-input-unknown-op.json",
+        "fixtures/invalid/session-catalog-semantic-input-catalog-index-mismatch.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/session-catalog-n1-unavailable.json"
+      ],
+      "capability_degradation": [
+        "fixtures/degradation/session-catalog-capability-unavailable.json"
+      ]
+    },
+    "cloud_api_v1": {
+      "authority": "openapi/cloud-api-v1.json",
+      "valid": [
+        "fixtures/valid/cloud-api-status.json",
+        "fixtures/valid/cloud-api-password-login.json",
+        "fixtures/valid/cloud-api-password-login-result.json",
+        "fixtures/valid/cloud-api-logout-response.json",
+        "fixtures/valid/cloud-api-refresh-request.json",
+        "fixtures/valid/cloud-api-token.json",
+        "fixtures/valid/cloud-api-session-projection.json",
+        "fixtures/valid/cloud-api-session-page.json",
+        "fixtures/valid/cloud-api-session-catalog-only-page.json",
+        "fixtures/valid/cloud-api-session-transcript.json",
+        "fixtures/valid/cloud-api-observer-ticket-request.json",
+        "fixtures/valid/cloud-api-scoped-observer-ticket-request.json",
+        "fixtures/valid/cloud-api-control-ticket-request.json",
+        "fixtures/valid/cloud-api-observer-ticket.json",
+        "fixtures/valid/cloud-api-control-ticket.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/cloud-api-status-inconsistent.json",
+        "fixtures/invalid/cloud-api-status-auth-unavailable.json",
+        "fixtures/invalid/cloud-api-status-native-pkce.json",
+        "fixtures/invalid/cloud-api-status-extra-field.json",
+        "fixtures/invalid/cloud-api-control-ticket-missing-profile.json",
+        "fixtures/invalid/cloud-api-control-ticket-uppercase-uuid.json",
+        "fixtures/invalid/cloud-api-control-ticket-nil-uuid.json",
+        "fixtures/invalid/cloud-api-control-ticket-v7-uuid.json",
+        "fixtures/invalid/cloud-api-control-ticket-invalid-variant-uuid.json",
+        "fixtures/invalid/cloud-api-control-ticket-extra-field.json",
+        "fixtures/invalid/cloud-api-observer-ticket-response-missing-role.json",
+        "fixtures/invalid/cloud-api-session-page-limit-over-contract.json",
+        "fixtures/invalid/cloud-api-session-page-count-over-js-safe.json",
+        "fixtures/invalid/cloud-api-session-catalog-only-fabricated-transcript.json",
+        "fixtures/invalid/cloud-api-session-invalid-profile.json",
+        "fixtures/invalid/cloud-api-session-transcript-depth-over-contract.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/cloud-api-status-n1.json",
+        "fixtures/compatibility/cloud-api-observer-ticket-request-n1.json",
+        "fixtures/compatibility/cloud-api-observer-ticket-response-n1.json"
+      ],
+      "capability_degradation": [
+        "fixtures/degradation/cloud-api-auth-optional-unavailable.json"
+      ]
+    },
+    "device_pairing_v1": {
+      "authority": "device-pairing-v1.json",
+      "valid": [
+        "fixtures/valid/device-pairing-create-offer-request.json",
+        "fixtures/valid/device-pairing-create-offer-response.json",
+        "fixtures/valid/device-pairing-claim-request.json",
+        "fixtures/valid/device-pairing-owner-view.json",
+        "fixtures/valid/device-pairing-claim-unavailable-response.json",
+        "fixtures/valid/device-pairing-claim-rate-limited-response.json",
+        "fixtures/valid/device-pairing-confirm-request.json",
+        "fixtures/valid/device-pairing-cancel-request.json",
+        "fixtures/valid/device-pairing-connector-status-confirmed.json",
+        "fixtures/valid/device-pairing-proof-request.json",
+        "fixtures/valid/device-auth-connector-token-response.json",
+        "fixtures/valid/device-auth-challenge-request.json",
+        "fixtures/valid/device-auth-challenge-response.json",
+        "fixtures/valid/device-auth-token-request.json",
+        "fixtures/valid/device-revoke-request.json",
+        "fixtures/valid/device-revoke-response.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/device-pairing-create-tenant-self-assertion.json",
+        "fixtures/invalid/device-pairing-create-private-key.json",
+        "fixtures/invalid/device-pairing-create-bad-public-key.json",
+        "fixtures/invalid/device-pairing-claim-tenant-self-assertion.json",
+        "fixtures/invalid/device-pairing-claim-code-only.json",
+        "fixtures/invalid/device-pairing-proof-wrong-algorithm.json",
+        "fixtures/invalid/device-auth-connector-token-over-ttl.json",
+        "fixtures/invalid/device-pairing-status-missing-challenge.json",
+        "fixtures/invalid/device-revoke-extra-field.json"
+      ],
+      "n_1": [],
+      "capability_degradation": []
+    },
+    "cloud_realtime_v1": {
+      "authority": "cloud-realtime-v1.json",
+      "valid": [
+        "fixtures/valid/cloud-realtime-ready.json",
+        "fixtures/valid/cloud-realtime-control-ready.json",
+        "fixtures/valid/cloud-realtime-control-method.json",
+        "fixtures/valid/cloud-realtime-control-live-runtime-unavailable.json",
+        "fixtures/valid/cloud-realtime-control-method-not-allowed.json",
+        "fixtures/valid/cloud-realtime-subscribe.json",
+        "fixtures/valid/cloud-realtime-subscribe-result.json",
+        "fixtures/valid/cloud-realtime-unsubscribe.json",
+        "fixtures/valid/cloud-realtime-unsubscribe-result.json",
+        "fixtures/valid/cloud-realtime-rpc-error.json",
+        "fixtures/valid/cloud-realtime-event.json",
+        "fixtures/valid/cloud-realtime-status-running.json",
+        "fixtures/valid/cloud-realtime-status-idle.json",
+        "fixtures/valid/cloud-realtime-coalesced-replay.json"
+      ],
+      "invalid": [
+        "fixtures/invalid/cloud-realtime-ready-n1.json",
+        "fixtures/invalid/cloud-realtime-ready-capability-missing.json",
+        "fixtures/invalid/cloud-realtime-control-ready-unadvertised-error.json",
+        "fixtures/invalid/cloud-realtime-control-method-extra-field.json",
+        "fixtures/invalid/cloud-realtime-control-error-unadvertised-code.json",
+        "fixtures/invalid/cloud-realtime-subscribe-snapshot-after-head.json",
+        "fixtures/invalid/cloud-realtime-subscribe-empty-replay-gap.json",
+        "fixtures/invalid/cloud-realtime-subscribe-running-status-mismatch.json",
+        "fixtures/invalid/cloud-realtime-subscribe-running-idle-mismatch.json",
+        "fixtures/invalid/cloud-realtime-replay-session-mismatch.json",
+        "fixtures/invalid/cloud-realtime-replay-missing-session-id.json",
+        "fixtures/invalid/cloud-realtime-replay-gap.json",
+        "fixtures/invalid/cloud-realtime-replay-nonmergeable-range.json",
+        "fixtures/invalid/cloud-realtime-replay-reversed-range.json",
+        "fixtures/invalid/cloud-realtime-rpc-error-unknown-code.json",
+        "fixtures/invalid/cloud-realtime-event-internal-leak.json",
+        "fixtures/invalid/cloud-realtime-event-local-type.json",
+        "fixtures/invalid/cloud-realtime-event-payload-type.json",
+        "fixtures/invalid/cloud-realtime-event-extra-field.json",
+        "fixtures/invalid/cloud-realtime-event-type-too-long.json",
+        "fixtures/invalid/cloud-realtime-event-missing-session-id.json",
+        "fixtures/invalid/cloud-realtime-status-running-false.json",
+        "fixtures/invalid/cloud-realtime-status-idle-true.json",
+        "fixtures/invalid/cloud-realtime-status-missing-running.json"
+      ],
+      "n_1": [
+        "fixtures/compatibility/cloud-realtime-ready-n1.json",
+        "fixtures/compatibility/cloud-realtime-observer-n1-profile.json"
+      ],
+      "capability_degradation": [
+        "fixtures/degradation/cloud-realtime-idle-subscription.json",
+        "fixtures/degradation/cloud-realtime-replay-unavailable-profile.json"
+      ]
+    }
+  }
+}

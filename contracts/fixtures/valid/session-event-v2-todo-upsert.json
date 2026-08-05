@@ -1,0 +1,21 @@
+{
+  "observer_contract": 2,
+  "profile": "default",
+  "runtime_generation": "runtime-20260801-01",
+  "session_key": "session-root-1",
+  "session_id": "runtime-session-1",
+  "type": "todo.update",
+  "event_sequence": 1,
+  "payload": {
+    "turn_id": "turn-1",
+    "section_id": "todo-1",
+    "revision": 1,
+    "first_event_sequence": 1,
+    "operation": "upsert",
+    "status": "in_progress",
+    "items": [
+      {"id": "todo-item-1", "label": "Run focused tests", "status": "in_progress"},
+      {"id": "todo-item-2", "label": "Report the result", "status": "pending"}
+    ]
+  }
+}

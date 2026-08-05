@@ -1,0 +1,10 @@
+{
+  "runtime_generation": "runtime-missing-profile",
+  "session_key": "session-missing-profile",
+  "session_id": "runtime-session-missing-profile",
+  "type": "message.delta",
+  "event_sequence": 1,
+  "payload": {
+    "text": "invalid"
+  }
+}

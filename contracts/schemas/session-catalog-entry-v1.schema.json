@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/session-catalog-entry-v1.schema.json",
+  "title": "Hermes Session Catalog Entry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_key",
+    "surface",
+    "authority_revision",
+    "available_actions"
+  ],
+  "properties": {
+    "session_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "surface": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "authority_revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "available_actions": {
+      "type": "array",
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "approval.respond",
+          "clarify.respond",
+          "prompt.submit",
+          "session.interrupt",
+          "session.steer"
+        ]
+      }
+    }
+  }
+}

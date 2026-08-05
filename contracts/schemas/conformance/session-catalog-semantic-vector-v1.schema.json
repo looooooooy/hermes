@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/conformance/session-catalog-semantic-vector-v1.schema.json",
+  "title": "Hermes session catalog semantic vector v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract", "initial_state", "operations", "expected_errors"],
+  "properties": {
+    "contract": {"const": "session-catalog-semantic-v1"},
+    "initial_state": {"$ref": "#/$defs/state"},
+    "operations": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"$ref": "#/$defs/operation"}
+    },
+    "expected_errors": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+    },
+    "identifier": {"type": "string", "minLength": 1, "maxLength": 256},
+    "safeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": {"$ref": "#/$defs/profile"},
+        "current_writer_id": {"$ref": "#/$defs/identifier"},
+        "current_writer_fence": {"$ref": "#/$defs/safeInteger"},
+        "active_runtime_generation": {"$ref": "#/$defs/identifier"},
+        "retired_runtime_generations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "catalog_revision": {"$ref": "#/$defs/safeInteger"},
+        "catalog_sequence": {"$ref": "#/$defs/safeInteger"},
+        "catalog_session_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "catalog_entries": {
+          "type": "object",
+          "propertyNames": {"minLength": 1, "maxLength": 256},
+          "additionalProperties": {"$ref": "#/$defs/safeInteger"}
+        },
+        "stable_session_ids": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/uuid"}
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": ["session_key", "authority_revision"],
+      "properties": {
+        "session_key": {"$ref": "#/$defs/identifier"},
+        "authority_revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "runtime_generation", "snapshot_id", "catalog_revision", "page_index", "is_last", "sessions"],
+      "properties": {
+        "profile": {"$ref": "#/$defs/profile"},
+        "runtime_generation": {"$ref": "#/$defs/identifier"},
+        "snapshot_id": {"$ref": "#/$defs/uuid"},
+        "catalog_revision": {"$ref": "#/$defs/safeInteger"},
+        "page_index": {"$ref": "#/$defs/safeInteger"},
+        "is_last": {"type": "boolean"},
+        "sessions": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/entry"}}
+      }
+    },
+    "snapshotOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "writer_id", "writer_fence", "pages"],
+      "properties": {
+        "op": {"const": "snapshot"},
+        "writer_id": {"$ref": "#/$defs/identifier"},
+        "writer_fence": {"$ref": "#/$defs/safeInteger"},
+        "pages": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/page"}}
+      }
+    },
+    "eventOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "writer_id", "writer_fence", "profile", "runtime_generation", "catalog_sequence", "action", "entry"],
+      "properties": {
+        "op": {"const": "event"},
+        "writer_id": {"$ref": "#/$defs/identifier"},
+        "writer_fence": {"$ref": "#/$defs/safeInteger"},
+        "profile": {"$ref": "#/$defs/profile"},
+        "runtime_generation": {"$ref": "#/$defs/identifier"},
+        "catalog_sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "action": {"type": "string", "minLength": 1, "maxLength": 32},
+        "entry": {"$ref": "#/$defs/entry"}
+      }
+    },
+    "mapIdentityOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "session_key", "session_id"],
+      "properties": {
+        "op": {"const": "map_identity"},
+        "authenticated_agent_id": {"$ref": "#/$defs/uuid"},
+        "profile": {"$ref": "#/$defs/profile"},
+        "session_key": {"$ref": "#/$defs/identifier"},
+        "session_id": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "assertStateOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "equals"],
+      "properties": {
+        "op": {"const": "assert_state"},
+        "equals": {"type": "object"}
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {"$ref": "#/$defs/snapshotOperation"},
+        {"$ref": "#/$defs/eventOperation"},
+        {"$ref": "#/$defs/mapIdentityOperation"},
+        {"$ref": "#/$defs/assertStateOperation"}
+      ]
+    }
+  }
+}

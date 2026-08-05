@@ -1,0 +1,9 @@
+{
+  "request_id": "81000000-0000-4000-8000-000000000002",
+  "subscription_id": "82000000-0000-4000-8000-000000000001",
+  "profile": "default",
+  "session_key": "session-root-1",
+  "target_source": "cloud_authorized_binding",
+  "reason": "client_unsubscribe",
+  "closed_at": "2026-07-31T09:05:00Z"
+}

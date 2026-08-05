@@ -1,0 +1,6 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3, "active_runtime_generation": "runtime-new", "retired_runtime_generations": ["runtime-old"], "catalog_sequence": 0},
+  "operations": [{"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-old", "catalog_sequence": 1, "action": "remove", "entry": {"session_key": "old-root", "authority_revision": 1}}],
+  "expected_errors": ["late_old_generation"]
+}

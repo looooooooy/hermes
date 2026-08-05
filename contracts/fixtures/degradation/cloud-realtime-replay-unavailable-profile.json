@@ -1,0 +1,16 @@
+{
+  "profile_version": 1,
+  "target_contract": "cloud_realtime_v1",
+  "current_contract_version": 1,
+  "peer_contract_version": 1,
+  "classification": "capability_degradation",
+  "scenario": "replay_unavailable_idle_snapshot",
+  "available_capabilities": [
+    "session.observe"
+  ],
+  "unavailable_capabilities": [
+    "session.observe.replay"
+  ],
+  "safe_effect": "idle_snapshot_without_replay",
+  "evidence_fixture": "fixtures/degradation/cloud-realtime-idle-subscription.json"
+}

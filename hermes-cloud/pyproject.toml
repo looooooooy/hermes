@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-cloud"
+version = "0.1.0"
+description = "Hermes Cloud gateway, business API, worker and file gateway"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+    "alembic>=1.13,<2",
+    "argon2-cffi>=23.1,<26",
+    "cryptography>=46,<50",
+    "fastapi>=0.127,<1",
+    "jsonschema>=4.25,<5.0",
+    "psycopg[binary]>=3.1,<4",
+    "PyJWT[crypto]>=2.8,<3",
+    "SQLAlchemy>=2,<3",
+    "uvicorn[standard]>=0.40,<1",
+]
+
+[dependency-groups]
+dev = [
+    "build==1.5.0",
+    "hatchling==1.31.0",
+    "httpx2>=2.9,<3.0",
+    "jsonschema>=4.25,<5.0",
+    "pytest>=8.4,<9.0",
+    "pytest-asyncio>=1.1,<2.0",
+    "pytest-subtests>=0.14,<1.0",
+    "ruff>=0.12,<1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hermes_cloud"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    ".gitignore",
+    "README.md",
+    "pyproject.toml",
+    "uv.lock",
+    "src",
+    "tests",
+    "deploy/test_server",
+]
+exclude = [
+    "/deploy/test_server/release_evidence/**",
+    "/deploy/test_server/release_raw_audit/**",
+    "/deploy/test_server/integration_snapshots/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+]
+ignore-vcs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+exclude = [
+    ".frozen-releases",
+    "deploy/test_server/integration_snapshots",
+    "deploy/test_server/release_evidence",
+    "deploy/test_server/release_raw_audit",
+]

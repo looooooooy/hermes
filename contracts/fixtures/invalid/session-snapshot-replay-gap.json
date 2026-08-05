@@ -1,0 +1,28 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-gap",
+  "session_key": "session-gap",
+  "runtime_session_id": "runtime-session-gap",
+  "running": true,
+  "status": "running",
+  "event_sequence": 2,
+  "snapshot_event_sequence": 0,
+  "messages": [],
+  "inflight": {
+    "user": null,
+    "assistant": null,
+    "streaming": false,
+    "error": null
+  },
+  "replay_events": [
+    {
+      "type": "message.delta",
+      "session_id": "runtime-session-gap",
+      "session_key": "session-gap",
+      "event_sequence": 2,
+      "payload": {
+        "text": "gap"
+      }
+    }
+  ]
+}

@@ -88,7 +88,17 @@ Connector 只认识 Hermes 自有 WSS 协议。NATS、PostgreSQL、对象存储�
 
 迁移后的公开入口只保留 Hermes Remote Server。现有隧道只能在过渡期用于内部验证，正式商用切换完成后必须关闭公网 Dashboard 映射。
 
-当前 Hermes Agent 中已经存在 Observer、Control Lease、Command Ledger、Unix Socket Relay 和 WebSocket Ticket 等 Python 实现。这些能力应作为 Local Gateway v1 的实现基础，但必须先完成以下安全收口：
+当前 Plugin 已具备 Observer、Control Lease、Command Ledger 和按角色隔离的 Unix
+Socket Relay 实现，但正在运行的 Hermes Agent 0.19.0 不具备
+`gateway-extension/1` Host SPI。Plugin 因此不会发布可用的 Local、Control 或
+Observer endpoint，Connector 也不得把 Plugin 单元测试、Fake Host、fixture、历史
+Observer descriptor 或旧进程遗留文件当作生产连接。2026-08-01 的本机只读探测确认
+Host 缺少 `gateway_extension_capabilities`、`gateway_extension_spi_version` 和
+`register_gateway_extension`；Local/Control registry 为空，三类 socket 目录为空，
+Observer registry 中只有三个已死亡 PID 的旧 descriptor。该状态必须报告为
+`local_runtime_unavailable`，不得改写为 deadline 或伪造已连接。
+
+这些能力应作为 Local Gateway v1 的实现基础，但必须先完成以下安全收口：
 
 1. 将“协议保留方法”与“当前启用方法”拆分。
 2. `session.steer`、`session.redirect`、`sudo.respond`、`secret.respond`、`terminal.read.respond` 等方法在完成租约和会话绑定包装前必须返回 `method_not_available`。
@@ -142,7 +152,11 @@ flowchart LR
 - 发现 Agent Local Gateway；
 - 将 Cloud Command 转换为 Local Gateway RPC；
 - 将 Agent 状态和安全裁剪后的事件转换为 Connector Protocol；
-- Agent 不可用时仍保持 Cloud 在线，报告精确状态；
+- 只有 Plugin 发布的当前有效可信描述符和 `local.welcome` 能建立本机运行权威；
+  当前切片在权威不可用时拒绝建立 Cloud session，并以稳定
+  `local_runtime_unavailable` 报告，不能通过配置、Fake/fixture 或第二 runtime
+  维持伪在线；未来若增加“Connector Cloud 在线但 Agent 离线”的 Presence 切片，
+  必须新增不授予本机 capability 的正式协议状态；
 - 不解析 Agent SessionDB，不导入 Agent 私有 Python 模块。
 
 #### Agent Local Gateway
@@ -200,82 +214,143 @@ flowchart LR
 | 协议 | 双方 | 职责 |
 |---|---|---|
 | Cloud API v1 | H5 ↔ Remote Server | 用户业务 API 与 H5 实时事件 |
-| Connector Protocol v1 | Connector ↔ Connector Gateway | 设备连接、命令、ACK、事件和状态 |
+| Connector Protocol v1 | Connector ↔ Connector Gateway | 会话握手、心跳、游标恢复、统一 durable transport journal、持久 command lane 和 owner-control result ledger；其余业务消息仍为 reserved |
 | Local Gateway Protocol v1 | Connector ↔ Hermes Agent | 本地 Observer、Control 与能力发现 |
 
 任何一方只能依赖相邻协议，不能依赖相邻组件的内部数据库或代码实现。
 
 ### 6.1 Connector 握手
 
-Connector 建立 TLS/WSS 后发送：
+`/contracts` 是唯一跨进程权威。Connector 建立 TLS/WSS 后发送 Cloud Envelope，
+由 `message_type` 选择对应 payload Schema。当前 Hello 示例：
 
 ```json
 {
-  "type": "connector.hello",
-  "protocol_min": 1,
-  "protocol_max": 1,
-  "connector_version": "1.0.0",
-  "device_id": "dev_01...",
-  "agent_state": "ready",
-  "agent_id": "agt_01...",
-  "agent_version": "0.9.3",
-  "local_gateway_version": 1,
-  "runtime_generation": "run_01...",
-  "capabilities": [
-    "session.observe.v1",
-    "session.control.v1"
-  ],
-  "resume_cursor": 1038
+  "contract_version": 1,
+  "message_id": "22222222-2222-4222-8222-222222222222",
+  "message_type": "connector.hello",
+  "tenant_id": "tenant-test",
+  "device_id": "device-test",
+  "sequence": 0,
+  "sent_at": "2026-07-30T00:00:00Z",
+  "payload": {
+    "connector_instance_id": "11111111-1111-4111-8111-111111111111",
+    "connector_version": "1.0.0",
+    "runtime_generation": "runtime-20260730-01",
+    "required_capabilities": [
+      "session.observe"
+    ],
+    "optional_capabilities": [
+      "session.control"
+    ],
+    "resume": {
+      "mode": "fresh",
+      "next_outbound_sequence": 0,
+      "next_inbound_sequence": 0
+    }
+  }
 }
 ```
 
-Server 返回：
+恢复连接时 `resume.mode` 为 `resume`，同时提供 durable
+`previous_connection_id`、`next_outbound_sequence` 和
+`next_inbound_sequence`。Cloud 使用同一 Envelope 返回
+`connector.welcome`：
 
 ```json
 {
-  "type": "server.welcome",
-  "connection_id": "con_01...",
-  "selected_protocol": 1,
-  "required_connector_version": "1.0.0",
-  "recommended_connector_version": "1.1.0",
-  "heartbeat_interval_seconds": 20,
-  "max_frame_bytes": 262144,
-  "resume_from": 1039,
-  "feature_flags": {}
+  "contract_version": 1,
+  "message_id": "33333333-3333-4333-8333-333333333333",
+  "message_type": "connector.welcome",
+  "tenant_id": "tenant-test",
+  "device_id": "device-test",
+  "sequence": 0,
+  "sent_at": "2026-07-30T12:00:00Z",
+  "payload": {
+    "connection_id": "44444444-4444-4444-8444-444444444444",
+    "server_generation": "cloud-20260730-01",
+    "server_time": "2026-07-30T12:00:00Z",
+    "accepted_capabilities": [
+      "session.observe"
+    ],
+    "unavailable_optional_capabilities": [
+      "session.control"
+    ],
+    "resume_decision": "fresh",
+    "next_connector_sequence": 0,
+    "next_cloud_sequence": 0,
+    "heartbeat_interval_ms": 20000,
+    "max_in_flight": 64
+  }
 }
 ```
 
-`tenant_id` 和 `realm_id` 由 Server 根据设备身份注入连接上下文，不能信任 Connector 自报值。
-Agent 暂不可用时，Connector 仍发送 `connector.hello`，但将
-`agent_state` 设为 `unavailable`，Agent 版本、运行代次和 capability
-字段可以为空。
+`connector.welcome` 对连接 ID、heartbeat、window 和 resume decision
+具有权威性。当前根契约没有 `agent_state`、`agent_id`、平台字段或
+`server.welcome`；消费者不得自行添加。`drain`、`revoked` 和
+`update_required` 目前只是 Connector 内部 directive，Server signal
+映射尚未进入根契约，因此不能作为私有 wire message 发出。
 
 ### 6.2 通用消息信封
 
 ```json
 {
-  "protocol_version": 1,
-  "message_id": "msg_01...",
-  "type": "command.prompt.submit",
-  "agent_id": "agt_01...",
-  "session_id": "ses_01...",
-  "runtime_generation": "run_01...",
-  "sequence": 1039,
-  "reply_to": null,
-  "expires_at": "2026-07-28T10:05:00Z",
-  "payload_digest": "sha256:...",
+  "contract_version": 1,
+  "message_id": "55555555-5555-4555-8555-555555555555",
+  "message_type": "connector.heartbeat",
+  "tenant_id": "tenant-test",
+  "device_id": "device-test",
+  "sequence": 1,
+  "sent_at": "2026-07-30T12:00:20Z",
   "payload": {}
 }
 ```
 
 规则：
 
-1. `message_id` 全局唯一且不可重用。
-2. 同一 `message_id` 的 `payload_digest` 不同，必须拒绝并触发安全告警。
-3. 命令必须包含 `expires_at`。
-4. 控制命令必须绑定 `agent_id`、`session_id` 和 `runtime_generation`。
-5. 未知字段必须忽略；未知消息类型必须返回明确错误，不能猜测处理。
-6. 帧大小超过协商限制时立即拒绝。
+1. 根对象严格拒绝未知字段；扩展只允许进入命名空间化的 `extensions`。
+2. `message_id` 使用 canonical UUID；`sequence` 是方向内 durable next cursor
+   对应的非负整数。
+3. `tenant_id`、`device_id` 必须与认证连接上下文一致。
+4. 当前已实现的 payload 包括 `connector.hello`、`connector.welcome`、
+   `connector.heartbeat`、`command.deliver`、`command.receipt`、
+   `command.result`、`control.request`、`control.response`、
+   `session.snapshot` 和 `session.event`；command lane 只允许
+   mobile-control v1 P0 的 `prompt.submit` 与 `session.interrupt`。Connector 在
+   推进 Cloud inbound cursor 前，必须将 owner-control 请求的 canonical
+   payload、scope 和 SHA-256 digest 写入 ORM result ledger；只有从
+   `received` 原子 claim 到 `executing` 的请求可以进入 Plugin 效果。
+   `completed` 或 `effect_unknown` 响应必须先持久化，再进入统一
+   transport journal；重启只重发已持久化终态，不重复执行本地效果。
+5. `file.transfer`、`a2a.message` 和 `view.card.invalidate` 仍为
+   `reserved/effect=none`，不得触发 persistence、routing、rendering、
+   authorization 或其他业务效果。Connector 已有 command SQLite 状态机与
+   Plugin UDS 执行端口。Connector WSS 已接入下行持久处理、Plugin dispatch
+   与 receipt/result 发送。WebSocket send 不等于 durable receipt；只有 Cloud
+   authoritative transport cursor 越过某序列，才可将该 journal attempt 结算为
+   `settled`。这个 transport 结算只表示 Cloud 收到帧，不替代 Observer
+   ACK/NACK 或其他业务提交。Cloud SQLite 生产启动链已经注入共享
+   ORM command router。8101 Business API 与 8102 Connector Gateway 之间使用
+   同 UID、目录 `0700`、socket `0600` 的私有 Unix Domain Socket；控制请求不
+   进入 HTTP、数据库或 ORM 持久化。只有 Gateway 完整生产组合、私有桥启动和
+   Connector 精确连接均成立时，Connector Gateway 才提供
+   `session.control` 协商；Business 控制 WebSocket 还必须完成用户 ACL、会话
+   到 Agent/Device 的唯一 ORM 路由解析和 `control.transport.open`，随后才在
+   `gateway.ready` 广告可执行方法。任一条件失败时方法列表为空，并以
+   fail-closed 方式返回不可用。Gateway 重启、Connector 替换或断连都不得改投
+   新连接；effect 已可能开始的请求返回 `effect_unknown`。SQLite 测试服务器
+   只允许通过显式 `HERMES_SEED_OWNER_CONTROL_ENABLED=true` 建立确定性的
+   Tenant/User/Workspace/Agent/Device/session ORM 绑定；Connector token 的
+   tenant/device claims 必须与该绑定完全一致，scope 固定为
+   `connector.connect`，不得使用全局通配权限。默认关闭时仍为 observe-only。
+6. `connector.hello` 与 `connector.welcome` 不进入业务 journal；新 epoch 的
+   hello/welcome 序列处置由专用 handshake-only CAS 提交。`fresh` 是唯一
+   允许旋转 epoch 的 Cloud 恢复决定，同时适用于本地
+   `fresh_epoch_required`、runtime generation 替换或本地 authority 丢失。
+   `reset_required` 必须保持同一 epoch，以 Cloud authoritative pair 回退，
+   并按 journal 中原 `message_id`、`sequence` 和完整 frame 逐字节重放；
+   不得从旧 generic outbox 或 Observer 业务状态重建新传输身份。
+7. 帧超过 262144 bytes、非法 UTF-8、重复 JSON key 或全局结构限制时立即拒绝。
 
 ## 7. NATS 与持久化职责
 
@@ -344,6 +419,14 @@ Connector 本地数据库只保存运行所需状态：
 - `sequence_cursors`：上行和下行游标；
 - `agent_runtime`：最近 Agent endpoint、runtime generation 和 capability；
 - `connector_meta`：Schema 版本和升级状态。
+
+本地持久化采用 SQLAlchemy 2.x Declarative ORM 和 operation-scoped Session。
+Schema 升级通过 Alembic Operations 或版本化 SQLAlchemy DDL API 管理，业务仓储
+不得使用 `text()`、`exec_driver_sql()` 或手拼 SQL。SQLite 必需的 `WAL`、
+`foreign_keys`、`synchronous` 和 `busy_timeout` 只允许集中在一个受测试的连接
+策略中配置，不得扩散到 Domain、Application 或 Repository。所有 ORM 操作由
+Connector 的专用单线程执行器串行持有，Session 不得跨线程或 asyncio task 共享，
+避免数据库锁等待阻塞 Connector 的心跳和本地协议循环。
 
 敏感命令正文不得进入常规 SQLite 明文列。临时密文消费完成后立即删除。
 

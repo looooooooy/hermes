@@ -1,0 +1,37 @@
+[Unit]
+Description=Hermes Cloud explicit test environment ORM seed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes-cloud-migrate
+Group=hermes-cloud
+UMask=0077
+EnvironmentFile=/etc/hermes-cloud/test-server.env
+LoadCredential=bootstrap_dsn:/etc/hermes-cloud/secrets/bootstrap_database_dsn
+LoadCredential=initial_user_password:/etc/hermes-cloud/secrets/initial_user_password
+Environment=HERMES_BOOTSTRAP_DSN_FILE=%d/bootstrap_dsn
+Environment=HERMES_INITIAL_USER_PASSWORD_FILE=%d/initial_user_password
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/preflight.sh --seed
+ExecStart=/usr/bin/env ${HERMES_VENV}/bin/python ${HERMES_CURRENT}/deploy/test_server/scripts/seed_test_data.py --apply
+RemainAfterExit=no
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+LimitNOFILE=4096
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+StateDirectory=hermes-cloud-seed
+RuntimeDirectory=hermes-cloud-seed

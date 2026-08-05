@@ -1,0 +1,981 @@
+{
+  "$defs": {
+    "identifier": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "lifecycleStatus": {
+      "enum": [
+        "running",
+        "completed",
+        "failed",
+        "interrupted",
+        "unknown"
+      ]
+    },
+    "messageComplete": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "maxLength": 4096,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "error"
+          ]
+        },
+        "text": {
+          "maxLength": 131072,
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "type": "object"
+    },
+    "messageStart": {
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "const": "assistant"
+        }
+      },
+      "type": "object"
+    },
+    "progress": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "current",
+        "total"
+      ],
+      "type": "object"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "statusUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "running": {
+          "type": "boolean"
+        },
+        "status": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 131072,
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "running"
+      ],
+      "type": "object"
+    },
+    "subagentDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "operation": {
+          "const": "delete"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "subagent_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "subagent_id",
+        "revision",
+        "first_event_sequence",
+        "operation"
+      ],
+      "type": "object"
+    },
+    "subagentUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "api_calls": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_ms": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "goal": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "parent_subagent_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "$ref": "#/$defs/progress"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "waiting",
+            "running",
+            "completed",
+            "failed",
+            "interrupted"
+          ]
+        },
+        "subagent_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "summary": {
+          "maxLength": 4096,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_counts": {
+          "$ref": "#/$defs/tokenCounts"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "subagent_id",
+        "revision",
+        "first_event_sequence",
+        "operation",
+        "parent_subagent_id",
+        "name",
+        "goal",
+        "summary",
+        "status"
+      ],
+      "type": "object"
+    },
+    "terminalDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "operation": {
+          "const": "delete"
+        },
+        "process_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "process_id",
+        "revision",
+        "first_event_sequence",
+        "operation"
+      ],
+      "type": "object"
+    },
+    "terminalOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "process_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stream": {
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        "text": {
+          "maxLength": 131072,
+          "type": "string"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "process_id",
+        "stream",
+        "text"
+      ],
+      "type": "object"
+    },
+    "terminalUpsert": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "exit_code": {
+                "const": 0
+              }
+            },
+            "required": [
+              "exit_code"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "exit_code": {
+                "not": {
+                  "const": 0
+                }
+              }
+            },
+            "required": [
+              "exit_code"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "running",
+                  "interrupted",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "exit_code"
+              ]
+            }
+          }
+        }
+      ],
+      "properties": {
+        "duration_ms": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exit_code": {
+          "maximum": 2147483647,
+          "minimum": -2147483648,
+          "type": "integer"
+        },
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "process_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "status": {
+          "$ref": "#/$defs/lifecycleStatus"
+        },
+        "summary": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "process_id",
+        "revision",
+        "first_event_sequence",
+        "operation",
+        "status"
+      ],
+      "type": "object"
+    },
+    "textDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 131072,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "todoDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "operation": {
+          "const": "delete"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "section_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "section_id",
+        "revision",
+        "first_event_sequence",
+        "operation"
+      ],
+      "type": "object"
+    },
+    "todoItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "status"
+      ],
+      "type": "object"
+    },
+    "todoUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/todoItem"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "section_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "cancelled"
+          ]
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "section_id",
+        "revision",
+        "first_event_sequence",
+        "operation",
+        "status",
+        "items"
+      ],
+      "type": "object"
+    },
+    "tokenCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasoning": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "reasoning"
+      ],
+      "type": "object"
+    },
+    "toolDelete": {
+      "additionalProperties": false,
+      "properties": {
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "operation": {
+          "const": "delete"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "tool_call_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "tool_call_id",
+        "revision",
+        "first_event_sequence",
+        "operation"
+      ],
+      "type": "object"
+    },
+    "toolOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 131072,
+          "type": "string"
+        },
+        "tool_call_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tool_name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "tool_call_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "toolUpsert": {
+      "additionalProperties": false,
+      "properties": {
+        "call_label": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "duration_ms": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "first_event_sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation": {
+          "const": "upsert"
+        },
+        "revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "status": {
+          "$ref": "#/$defs/lifecycleStatus"
+        },
+        "summary": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "tool_call_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "turn_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "required": [
+        "turn_id",
+        "tool_call_id",
+        "revision",
+        "first_event_sequence",
+        "operation",
+        "status",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "message.start"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/messageStart"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "message.delta",
+              "reasoning.delta",
+              "thinking.delta"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/textDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "message.complete"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/messageComplete"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "agent.terminal.output"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/terminalOutput"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "status.update"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/statusUpdate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.output.delta"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/toolOutput"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "todo.update"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/todoUpsert"
+              },
+              {
+                "$ref": "#/$defs/todoDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "subagent.update"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/subagentUpsert"
+              },
+              {
+                "$ref": "#/$defs/subagentDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.update"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/toolUpsert"
+              },
+              {
+                "$ref": "#/$defs/toolDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "terminal.update"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/terminalUpsert"
+              },
+              {
+                "$ref": "#/$defs/terminalDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "message.start",
+              "message.complete",
+              "todo.update",
+              "subagent.update",
+              "tool.update",
+              "terminal.update"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "event_sequence_start"
+          ]
+        }
+      }
+    }
+  ],
+  "properties": {
+    "event_sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "event_sequence_start": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "observer_contract": {
+      "const": 2
+    },
+    "payload": {
+      "maxProperties": 1024,
+      "type": "object"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "runtime_generation": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "message.start",
+        "message.delta",
+        "message.complete",
+        "agent.terminal.output",
+        "reasoning.delta",
+        "status.update",
+        "thinking.delta",
+        "tool.output.delta",
+        "todo.update",
+        "subagent.update",
+        "tool.update",
+        "terminal.update"
+      ]
+    }
+  },
+  "required": [
+    "observer_contract",
+    "profile",
+    "runtime_generation",
+    "session_key",
+    "session_id",
+    "type",
+    "event_sequence",
+    "payload"
+  ],
+  "title": "Hermes Connector Session Event Payload v2",
+  "type": "object"
+}

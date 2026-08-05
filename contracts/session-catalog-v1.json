@@ -1,0 +1,92 @@
+{
+  "contract_version": 1,
+  "capability": "session.catalog.v1",
+  "authority": "Hermes Host SPI v1 SessionCatalog DTOs",
+  "local_rpc_methods": {
+    "subscribe": "session.catalog.subscribe",
+    "page": "session.catalog.page",
+    "unsubscribe": "session.catalog.unsubscribe",
+    "event": "session.catalog.event",
+    "reset_required": "session.catalog.reset_required"
+  },
+  "cloud_message_types": {
+    "snapshot_page": "session.catalog.snapshot.page",
+    "event": "session.catalog.event",
+    "ack": "session.catalog.ack",
+    "nack": "session.catalog.nack"
+  },
+  "page_size_maximum": 128,
+  "host_cursor_scope": "local_only_never_cloud",
+  "local_transport": "persistent_observer_role_uds_not_local_gateway_handshake",
+  "state_machine": [
+    "disconnected",
+    "subscribing",
+    "staging_pages",
+    "snapshot_committed",
+    "live"
+  ],
+  "event_buffer_maximum": 1024,
+  "frame_maximum_utf8_bytes": 262144,
+  "event_order": "first_is_snapshot_catalog_revision_plus_one_then_contiguous",
+  "remove_representation": "action_remove_with_complete_host_entry",
+  "identity_mapping": {
+    "profile": "host_profile",
+    "session_key": "host_durable_session_key",
+    "runtime_generation": "host_runtime_generation",
+    "agent_id": "cloud_resolves_from_authenticated_pairing_never_payload"
+  },
+  "snapshot_rules": {
+    "snapshot_id": "connector_generated_canonical_uuid",
+    "first_page_index": 0,
+    "page_order": "strictly_contiguous",
+    "visibility": "atomic_only_after_is_last_and_all_prior_pages_exist",
+    "replacement_scope": "authenticated_agent_plus_profile_retiring_all_older_generations",
+    "superseded_snapshot": "discard"
+  },
+  "event_rules": {
+    "catalog_sequence": "exact_host_session_catalog_event_sequence",
+    "entry_scope": "entry_inherits_outer_profile_and_runtime_generation_no_duplicate_fields",
+    "upsert": "replace_same_session_key_only_at_equal_or_newer_authority_revision",
+    "remove": "delete_same_session_key_only_when_stored_authority_revision_exactly_matches_entry",
+    "without_committed_snapshot": "reject_and_require_new_full_snapshot"
+  },
+  "acknowledgement": "cloud_orm_commit_then_exact_business_ack_before_outbox_cleanup",
+  "writer_fencing": "one_current_pairing_bound_connector_writer_per_agent_with_monotonic_fence",
+  "pairing_boundary": "pairing_authorizes_cloud_identity_but_never_proves_local_runtime_binding",
+  "public_projection_identity": {
+    "stable_session_id": "cloud_generated_rfc4122_uuid_persisted_by_orm_for_authenticated_agent_profile_host_session_key",
+    "host_session_key": "lineage_root_id_exact_host_session_key",
+    "control_resolution": "stable_session_id_to_authenticated_agent_profile_host_session_key_before_ticket_or_command"
+  },
+  "local_snapshot_race": {
+    "listener_order": "register_listener_before_first_page",
+    "event_visibility": "buffer_until_final_page_response_write_succeeds",
+    "buffer_overflow": "close_subscription_and_reset_required",
+    "cursor_stale": "close_subscription_and_reset_required",
+    "page_revision_change": "close_subscription_and_reset_required"
+  },
+  "cloud_snapshot_semantics": {
+    "page_scope": "all_pages_same_snapshot_profile_generation_revision",
+    "session_key_uniqueness": "across_entire_snapshot",
+    "late_old_generation": "reject_with_runtime_mismatch_nack",
+    "stale_writer": "reject_with_stale_writer_nack"
+  },
+  "recovery": {
+    "local_disconnect": "new_subscription_and_full_snapshot",
+    "runtime_generation_change": "new_snapshot_id_and_full_snapshot",
+    "cloud_reconnect": "resume_durable_pages_or_new_full_snapshot",
+    "event_gap": "discard_staging_and_require_new_full_snapshot",
+    "page_gap": "discard_staging_and_require_new_full_snapshot"
+  },
+  "semantic_conformance": {
+    "vector_schema": "schemas/conformance/session-catalog-semantic-vector-v1.schema.json",
+    "validator": "tools/session_catalog_conformance.py",
+    "invalid_input_result": "invalid_vector",
+    "operation_commit": "only_when_current_operation_has_no_errors"
+  },
+  "forbidden_payload_identity": [
+    "agent_id",
+    "tenant_id",
+    "device_id"
+  ]
+}

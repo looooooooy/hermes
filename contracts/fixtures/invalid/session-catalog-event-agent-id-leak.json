@@ -1,0 +1,13 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-20260803-01",
+  "catalog_sequence": 8,
+  "action": "upsert",
+  "agent_id": "22222222-2222-4222-8222-222222222222",
+  "entry": {
+    "session_key": "durable-session-real",
+    "surface": "gateway",
+    "authority_revision": 4,
+    "available_actions": []
+  }
+}

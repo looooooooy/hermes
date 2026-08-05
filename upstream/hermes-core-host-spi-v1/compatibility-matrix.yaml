@@ -1,0 +1,84 @@
+schema_version: 1
+contract: gateway-extension/1
+stage: 3
+
+upstream_targets:
+  - distribution: hermes-agent
+    version: 0.19.0
+    commit: 14db1a99e21e5523ee61f10f5c3300a5087e8449
+    repository: https://github.com/NousResearch/hermes-agent.git
+    patch_status: focused_verified_exact_commit
+    host_context_contract: available_after_patch
+    extension_lifecycle: available_after_patch
+    production_extension_teardown:
+      tui_desktop_serve: loop_active_finally_exactly_once
+      messaging_gateway: loop_active_finally_exactly_once
+      cli: audit_complete_not_yet_process_owned
+      acp: audit_complete_not_yet_process_owned
+      cron_worker: covered_by_gateway_after_cooperative_thread_drain
+    retained_artifact_status: current_stage3_provenance_verified
+    artifact_provenance: stage3_patch_and_replayed_source_members_verified
+    session_authority_registry: available_internal_after_patch
+    observer_session_bridge: available_internal_after_patch
+    display_safe_event_v1: available_internal_after_patch
+    audit_safe_v1: available_only_when_validated_sink_injected
+    owner_action_router: available_after_patch
+    session_catalog: available_after_patch
+    pending_interaction_registry: available_after_patch
+    output_parity_v2: available_after_patch_with_real_surface_producers
+    composition_root_injection: available_after_patch
+    local_endpoint_transport: local_gateway_observer_control_roles_available_after_patch
+    endpoint_test_seam: explicit_injected_registrar_only
+    signed_plugin_store: ed25519_canonical_manifest_fail_closed
+    plugin_store_trust: explicit_read_only_trust_store_required
+    plugin_store_installation: immutable_content_addressed_slot_no_agent_venv_install
+    plugin_store_precedence: explicit_store_wins_same_key_pip_entrypoint
+    plugin_store_activation: after_register_and_all_endpoint_installs_only
+    plugin_store_rollback: reverse_retryable_and_version_floor_enforced
+    production_agent_control: available_with_surface_constraints
+    cli_turn_identity: scheduler_ack_id_is_real_agent_turn_output_and_interrupt_cas_identity
+    tui_prompt_admission: accepted_only_after_real_agent_admission_or_authoritative_enqueue
+    tui_prompt_admission_deadline: bounded_effect_unknown
+    tui_accepted_queue_failure: same_turn_id_terminalized_before_idle_with_close_fence
+    tui_close_drain_ownership: atomic_single_owner_and_terminal_callbacks_outside_locks
+    tui_queued_dispatch_failure: exactly_once_turn_terminal_and_admission_cleanup
+    terminal_lifecycle: authoritative_process_callbacks_monotonic_generation_fenced
+    terminal_kill_confirmation: effect_unknown_and_running_until_verified_exit_or_watcher_terminal
+    terminal_pid_identity: tri_state_ours_gone_or_reused_unreadable
+    terminal_unknown_probe: survivor_not_dead_evidence
+    terminal_close_semantics: ui_tab_close_only_not_business_terminal
+    surface_action_support:
+      cli: main_loop_bound_prompt_turn_generation_acked_interrupt_steer_approval_clarify
+      tui_desktop: prompt_turn_generation_acked_interrupt_steer_approval_clarify
+      messaging_gateway: turn_generation_acked_interrupt_steer_only
+      acp: turn_generation_acked_interrupt_steer_only_due_existing_peer_controller
+      cron_worker: turn_generation_acked_interrupt_steer_only
+    owner_registration_revision_slot: available_for_all_production_callers
+    owner_revision_source: authoritative_session_registry_tombstone
+    caller_registration_binding: immutable_identity_callbacks_snapshots_and_output
+    tui_compression_registration: common_choke_point_rebind_fail_closed
+
+upgrade_policy:
+  exact_commit_required: true
+  clean_source_required: true
+  apply_to_new_isolated_archive_only: true
+  live_repository_mutation: forbidden
+  patch_digest_required: true
+  artifact_digest_required: true
+  retained_artifacts: [wheel, sdist]
+  reverse_apply_postcheck_required: true
+  core_regression_gate_required: true
+  tui_close_queue_regression_gate_required: true
+  uv_all_dev_locked_check_required: true
+  verification_imports_required: [pytest, rich]
+  replay_platforms: [macos, linux]
+  windows_replay_support: unavailable
+  on_commit_mismatch: stop
+  on_patch_conflict: stop
+  on_test_failure: stop_and_remove_partial_target
+
+spi_policy:
+  v1_breaking_changes: forbidden
+  new_optional_capabilities: allowed
+  breaking_change_requires: gateway-extension/2
+  concurrent_v1_v2_transition: required

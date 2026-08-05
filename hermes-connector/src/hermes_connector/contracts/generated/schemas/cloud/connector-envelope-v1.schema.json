@@ -1,0 +1,102 @@
+{
+  "$id": "https://contracts.hermes.local/v1/cloud/connector-envelope.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": 1
+    },
+    "device_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "idempotency_key": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "message_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "message_type": {
+      "enum": [
+        "connector.hello",
+        "connector.welcome",
+        "connector.heartbeat",
+        "command.deliver",
+        "command.receipt",
+        "command.result",
+        "control.request",
+        "control.response",
+        "session.catalog.snapshot.page",
+        "session.catalog.event",
+        "session.catalog.ack",
+        "session.catalog.nack",
+        "session.snapshot",
+        "session.event",
+        "session.observe.open",
+        "session.observe.close",
+        "stream.ack",
+        "stream.nack",
+        "session.snapshot.v2",
+        "session.event.v2",
+        "session.observe.open.v2",
+        "session.observe.close.v2",
+        "stream.ack.v2",
+        "stream.nack.v2",
+        "file.transfer",
+        "a2a.message",
+        "view.card.invalidate"
+      ]
+    },
+    "payload": {
+      "maxProperties": 1024,
+      "type": "object"
+    },
+    "sent_at": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "tenant_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "traceparent": {
+      "maxLength": 128,
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "contract_version",
+    "message_id",
+    "message_type",
+    "tenant_id",
+    "device_id",
+    "sequence",
+    "sent_at",
+    "payload"
+  ],
+  "title": "Hermes Connector Cloud Envelope v1",
+  "type": "object"
+}

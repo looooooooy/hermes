@@ -1,0 +1,11 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-20260731-01",
+  "session_key": "session-root-1",
+  "session_id": "runtime-session-1",
+  "type": "message.delta",
+  "event_sequence": 6,
+  "payload": {
+    "text": "Fixture live delta"
+  }
+}

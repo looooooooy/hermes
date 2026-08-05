@@ -1,0 +1,11 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-local-type",
+  "session_key": "session-local-type",
+  "session_id": "runtime-session-local-type",
+  "type": "assistant.delta",
+  "event_sequence": 1,
+  "payload": {
+    "text": "invalid"
+  }
+}

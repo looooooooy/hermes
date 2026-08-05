@@ -1,0 +1,4 @@
+{
+  "refresh_token": "fixture-refresh-token-not-a-secret",
+  "provider": "basic"
+}

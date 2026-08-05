@@ -1,0 +1,31 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "subscription_id": "subscription-1",
+    "session_key": "session-root-1",
+    "runtime_session_id": "runtime-session-1",
+    "running": true,
+    "status": "running",
+    "event_sequence": 1,
+    "snapshot_event_sequence": 0,
+    "messages": [],
+    "inflight": {
+      "user": null,
+      "assistant": null,
+      "streaming": true,
+      "error": null
+    },
+    "replay_events": [
+      {
+        "type": "message.delta",
+        "session_id": "runtime-session-1",
+        "session_key": "different-session-root",
+        "event_sequence": 1,
+        "payload": {
+          "text": "Fixture delta"
+        }
+      }
+    ]
+  }
+}

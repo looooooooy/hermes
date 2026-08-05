@@ -1,0 +1,8 @@
+{
+  "gateway_running": true,
+  "gateway_state": "degraded",
+  "auth_required": false,
+  "auth_providers": [],
+  "auth_flows": [],
+  "overall": "degraded"
+}

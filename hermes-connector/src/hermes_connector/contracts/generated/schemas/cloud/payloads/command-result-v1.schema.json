@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "canonical_uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "control_role_required",
+            "control_contract_unsupported",
+            "live_runtime_unavailable",
+            "controller_conflict",
+            "lease_required",
+            "lease_expired",
+            "lease_mismatch",
+            "request_id_payload_conflict",
+            "pending_request_conflict",
+            "method_not_allowed",
+            "command_unknown",
+            "revision_conflict",
+            "session_binding_mismatch",
+            "invalid_pending_response",
+            "owner_adapter_unavailable",
+            "relay_overloaded",
+            "internal_temporary"
+          ]
+        },
+        "message": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "type": "object"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "utc_instant": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    }
+  },
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/command-result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "required": [
+            "result"
+          ]
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "error"
+          ]
+        },
+        "required": [
+          "result"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "client_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "client_request_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "command_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "completed_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "connector_instance_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    },
+    "method": {
+      "enum": [
+        "prompt.submit",
+        "session.interrupt"
+      ]
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "type": "string"
+    },
+    "result": {
+      "maxProperties": 32,
+      "type": "object"
+    },
+    "revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    }
+  },
+  "required": [
+    "command_id",
+    "connector_instance_id",
+    "client_instance_id",
+    "session_key",
+    "profile",
+    "client_request_id",
+    "method",
+    "state",
+    "completed_at",
+    "revision"
+  ],
+  "title": "Hermes Command Result Payload v1",
+  "type": "object"
+}

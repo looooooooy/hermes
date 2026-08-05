@@ -1,0 +1,1 @@
+"""PostgreSQL platform adapter."""

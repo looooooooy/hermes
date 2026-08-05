@@ -1,0 +1,14 @@
+{
+  "observer_contract": 2,
+  "profile": "default",
+  "runtime_generation": "runtime-20260801-01",
+  "session_key": "session-root-1",
+  "session_id": "runtime-session-1",
+  "type": "tool.update",
+  "event_sequence": 3,
+  "payload": {
+    "turn_id": "turn-1", "tool_call_id": "tool-1", "revision": 1,
+    "first_event_sequence": 3, "operation": "upsert", "status": "running",
+    "name": "Contract tests", "raw_args": {"command": "must-not-cross"}
+  }
+}

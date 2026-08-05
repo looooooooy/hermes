@@ -1,0 +1,653 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hermes.local/cloud/device-pairing-v1.schema.json",
+  "title": "Hermes Device Pairing v1 Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract",
+    "version",
+    "openapi_authority",
+    "authentication_subjects",
+    "authority",
+    "state_machine",
+    "ttl_seconds",
+    "limits",
+    "secrets",
+    "proof_of_possession",
+    "connector_token",
+    "connector_wss_lifecycle_close",
+    "controller_invariant",
+    "idempotency",
+    "revocation",
+    "errors",
+    "fixtures"
+  ],
+  "properties": {
+    "contract": {
+      "const": "hermes.device-pairing"
+    },
+    "version": {
+      "const": 1
+    },
+    "openapi_authority": {
+      "const": "openapi/cloud-api-v1.json"
+    },
+    "authentication_subjects": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "connector_bootstrap",
+          "pairing_offer",
+          "owner",
+          "device_bootstrap",
+          "device_proof"
+        ]
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]{2,63}$"
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connector_offer",
+        "owner_binding",
+        "owner_claim_lookup",
+        "owner_review"
+      ],
+      "properties": {
+        "connector_offer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "trust",
+            "forbidden_self_asserted_fields",
+            "authorization_effect"
+          ],
+          "properties": {
+            "trust": {
+              "const": "tenant_neutral"
+            },
+            "forbidden_self_asserted_fields": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              }
+            },
+            "authorization_effect": {
+              "const": "none"
+            }
+          }
+        },
+        "owner_binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "principal_derived_fields",
+            "owner_selected_fields",
+            "server_generated_fields",
+            "confirmation_requires_fingerprint_match"
+          ],
+          "properties": {
+            "principal_derived_fields": {
+              "$ref": "#/$defs/fieldNames"
+            },
+            "owner_selected_fields": {
+              "$ref": "#/$defs/fieldNames"
+            },
+            "server_generated_fields": {
+              "$ref": "#/$defs/fieldNames"
+            },
+            "confirmation_requires_fingerprint_match": {
+              "const": true
+            }
+          }
+        },
+        "owner_claim_lookup": {
+          "type": "object",
+          "additionalProperties": false,
+            "required": [
+              "lookup_input",
+              "lookup_operation",
+              "unauthenticated_lookup",
+              "offer_id_required_from_owner",
+              "unknown_or_unavailable_response",
+              "unknown_or_wrong_code_offer_effect",
+              "correct_code_transition",
+              "idempotent_replay"
+          ],
+          "properties": {
+            "lookup_input": {
+              "const": "pairing_code_request_body_only"
+            },
+            "lookup_operation": {
+              "const": "atomic_pairing_code_digest_match"
+            },
+            "unauthenticated_lookup": {
+              "const": false
+            },
+              "offer_id_required_from_owner": {
+                "const": false
+              },
+              "unknown_or_unavailable_response": {
+                "const": "PAIRING_CLAIM_UNAVAILABLE"
+              },
+              "unknown_or_wrong_code_offer_effect": {
+                "const": "none"
+              },
+              "correct_code_transition": {
+                "const": "atomic_offer_digest_compare_and_swap"
+              },
+              "idempotent_replay": {
+                "const": "same_key_same_digest_replays_prior_result"
+              }
+            }
+        },
+        "owner_review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "connector_supplied_untrusted_fields",
+            "server_derived_fields",
+            "trust"
+          ],
+          "properties": {
+            "connector_supplied_untrusted_fields": {
+              "$ref": "#/$defs/fieldNames"
+            },
+            "server_derived_fields": {
+              "$ref": "#/$defs/fieldNames"
+            },
+            "trust": {
+              "const": "display_only_not_authorization"
+            }
+          }
+        }
+      }
+    },
+    "state_machine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offer",
+        "session",
+        "activation_states",
+        "credential_activation_rule"
+      ],
+      "properties": {
+        "offer": {
+          "$ref": "#/$defs/stateGraph"
+        },
+        "session": {
+          "$ref": "#/$defs/stateGraph"
+        },
+        "activation_states": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "credential_activation_rule": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "ttl_seconds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairing_session",
+        "pairing_expiry_origin",
+        "claim_or_confirm_extends_pairing",
+        "challenge_must_not_outlive_pairing",
+        "device_challenge",
+        "connector_token_min",
+        "connector_token_max"
+      ],
+      "properties": {
+        "pairing_session": {
+          "const": 300
+        },
+        "pairing_expiry_origin": {
+          "const": "offer_created_at"
+        },
+        "claim_or_confirm_extends_pairing": {
+          "const": false
+        },
+        "challenge_must_not_outlive_pairing": {
+          "const": true
+        },
+        "device_challenge": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        },
+        "connector_token_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "connector_token_max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failed_code_lookup_window_seconds",
+        "max_failed_code_lookups_per_owner_principal",
+        "failed_code_lookup_principal_fields",
+        "failed_code_lookup_effect",
+        "failed_code_lookup_offer_effect",
+        "pairing_code_entropy_bits",
+        "offer_secret_entropy_bits",
+        "max_device_name_utf8_bytes"
+      ],
+      "properties": {
+        "failed_code_lookup_window_seconds": {
+          "const": 300
+        },
+        "max_failed_code_lookups_per_owner_principal": {
+          "const": 5
+        },
+        "failed_code_lookup_principal_fields": {
+          "const": [
+            "tenant_id",
+            "user_id"
+          ]
+        },
+        "failed_code_lookup_effect": {
+          "const": "block_principal_claims_until_window_expires"
+        },
+        "failed_code_lookup_offer_effect": {
+          "const": "none"
+        },
+        "pairing_code_entropy_bits": {
+          "type": "integer",
+          "minimum": 40
+        },
+        "offer_secret_entropy_bits": {
+          "type": "integer",
+          "minimum": 256
+        },
+        "max_device_name_utf8_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/secretClassification"
+      }
+    },
+    "proof_of_possession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "private_key_location",
+        "challenge_storage",
+        "challenge_single_use",
+        "signing_payload_prefix",
+        "signature_input",
+        "required_for_initial_activation",
+        "required_for_every_connector_token",
+        "additional_authentication"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "private_key_location": {
+          "const": "connector_os_secure_store_only"
+        },
+        "challenge_storage": {
+          "const": "sha256_digest_only"
+        },
+        "challenge_single_use": {
+          "const": true
+        },
+        "signing_payload_prefix": {
+          "const": "hermes-device-auth-v1\\0"
+        },
+        "signature_input": {
+          "const": "base64url_decoded_signing_payload_bytes"
+        },
+        "required_for_initial_activation": {
+          "const": true
+        },
+        "required_for_every_connector_token": {
+          "const": true
+        },
+        "additional_authentication": {
+          "const": "pairing_offer_secret"
+        }
+      }
+    },
+    "connector_token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required_binding_claims",
+        "revocation_check",
+        "blocked_device_states",
+        "blocked_credential_states",
+        "gateway_trusts_hello_authority_fields"
+      ],
+      "properties": {
+        "required_binding_claims": {
+          "$ref": "#/$defs/fieldNames"
+        },
+        "revocation_check": {
+          "const": "on_issue_and_every_gateway_connection"
+        },
+        "blocked_device_states": {
+          "$ref": "#/$defs/stateNames"
+        },
+        "blocked_credential_states": {
+          "$ref": "#/$defs/stateNames"
+        },
+        "gateway_trusts_hello_authority_fields": {
+          "const": false
+        }
+      }
+    },
+    "connector_wss_lifecycle_close": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_close_code",
+        "matching",
+        "reasons",
+        "unknown_close_effect",
+        "envelope_message_type"
+      ],
+      "properties": {
+        "policy_close_code": {
+          "const": 1008
+        },
+        "matching": {
+          "const": "code_and_exact_reason"
+        },
+        "reasons": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "revoked",
+            "suspended"
+          ],
+          "properties": {
+            "revoked": {
+              "const": "device_authorization_revoked"
+            },
+            "suspended": {
+              "const": "device_authorization_suspended"
+            }
+          }
+        },
+        "unknown_close_effect": {
+          "const": "disconnect_and_reconnect_without_lifecycle_change"
+        },
+        "envelope_message_type": {
+          "const": "forbidden"
+        }
+      }
+    },
+    "controller_invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authoritative_agent_runtime_count",
+        "pairing_acquires_control",
+        "controller_cardinality",
+        "control_scope_semantics"
+      ],
+      "properties": {
+        "authoritative_agent_runtime_count": {
+          "const": 1
+        },
+        "pairing_acquires_control": {
+          "const": false
+        },
+        "controller_cardinality": {
+          "const": "at_most_one_per_realtime_session"
+        },
+        "control_scope_semantics": {
+          "const": "permission_to_request_control_not_control_ownership"
+        }
+      }
+    },
+    "idempotency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "request_digest",
+        "same_key_same_digest",
+        "same_key_different_digest",
+        "bearer_secret_plaintext_persistence"
+      ],
+      "properties": {
+        "header": {
+          "const": "Idempotency-Key"
+        },
+        "request_digest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "same_key_same_digest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "same_key_different_digest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bearer_secret_plaintext_persistence": {
+          "const": "forbidden"
+        }
+      }
+    },
+    "revocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner_endpoint",
+        "effects",
+        "automatic_repairing"
+      ],
+      "properties": {
+        "owner_endpoint": {
+          "const": "/api/devices/{device_id}/revoke"
+        },
+        "effects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,127}$"
+          }
+        },
+        "automatic_repairing": {
+          "const": false
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "integer",
+        "enum": [
+          400,
+          401,
+          403,
+          404,
+          409,
+          410,
+          429
+        ]
+      },
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid",
+        "invalid"
+      ],
+      "properties": {
+        "valid": {
+          "$ref": "#/$defs/fixtureList"
+        },
+        "invalid": {
+          "$ref": "#/$defs/fixtureList"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fieldNames": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      }
+    },
+    "stateNames": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}$"
+      }
+    },
+    "stateGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial",
+        "transitions"
+      ],
+      "properties": {
+        "initial": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "transitions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            }
+          },
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        }
+      }
+    },
+    "secretClassification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log",
+        "trace",
+        "diagnostic",
+        "persistence",
+        "transport",
+        "generation"
+      ],
+      "properties": {
+        "log": {
+          "const": "forbidden"
+        },
+        "trace": {
+          "const": "forbidden"
+        },
+        "diagnostic": {
+          "const": "forbidden"
+        },
+        "persistence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "transport": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "alone_authorizes_activation": {
+          "type": "boolean"
+        },
+        "idempotency_replay": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "fixtureList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema",
+          "path"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9]{2,127}$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^fixtures/(valid|invalid)/[a-z0-9-]+\\.json$"
+          }
+        }
+      }
+    }
+  }
+}

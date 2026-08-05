@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "event",
+  "params": {
+    "type": "gateway.ready",
+    "payload": {
+      "observer_contract": 1,
+      "control_contract": 1,
+      "connection_role": "control",
+      "control_available_methods": [],
+      "control_error_codes": {
+        "live_runtime_unavailable": 4202,
+        "method_not_allowed": 4209,
+        "secret_required": 4216
+      }
+    }
+  }
+}

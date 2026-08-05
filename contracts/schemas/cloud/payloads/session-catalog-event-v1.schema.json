@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-catalog-event-v1.schema.json",
+  "title": "Hermes Session Catalog Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "runtime_generation",
+    "catalog_sequence",
+    "action",
+    "entry"
+  ],
+  "properties": {
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "catalog_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "action": {
+      "enum": [
+        "upsert",
+        "remove"
+      ]
+    },
+    "entry": {
+      "$ref": "https://contracts.hermes.local/session-catalog-entry-v1.schema.json"
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

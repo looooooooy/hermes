@@ -1,0 +1,42 @@
+[Unit]
+Description=Hermes Cloud test server business API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hermes-cloud
+Group=hermes-cloud
+UMask=0077
+EnvironmentFile=/etc/hermes-cloud/test-server.env
+LoadCredential=database_dsn:/etc/hermes-cloud/secrets/runtime_database_dsn
+LoadCredential=signing_secret:/etc/hermes-cloud/secrets/business_api_signing_secret
+Environment=HERMES_RUNTIME_DSN_FILE=%d/database_dsn
+Environment=HERMES_SIGNING_SECRET_FILE=%d/signing_secret
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/preflight.sh --runtime
+ExecStart=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/run_asgi.sh hermes_cloud.entrypoints.business_api.bootstrap:app ${HERMES_BUSINESS_API_BIND} ${HERMES_BUSINESS_API_PORT}
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+StateDirectory=hermes-cloud
+RuntimeDirectory=hermes-cloud
+
+[Install]
+WantedBy=multi-user.target

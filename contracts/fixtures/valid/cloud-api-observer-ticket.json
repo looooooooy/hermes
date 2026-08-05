@@ -1,0 +1,5 @@
+{
+  "ticket": "fixture-ticket-value-not-a-secret-00000001",
+  "ttl_seconds": 30,
+  "connection_role": "observer"
+}

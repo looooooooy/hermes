@@ -1,0 +1,102 @@
+{
+  "$id": "https://contracts.hermes.local/cloud/payloads/stream-nack-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "connector_sequence": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "event_sequence": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "expected_event_sequence": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "observer_message_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "observer_message_type": {
+      "enum": [
+        "session.snapshot",
+        "session.event"
+      ],
+      "type": "string"
+    },
+    "payload_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "event_gap",
+        "projection_conflict",
+        "runtime_binding_mismatch"
+      ],
+      "type": "string"
+    },
+    "recovery": {
+      "enum": [
+        "send_snapshot",
+        "stop_stream"
+      ],
+      "type": "string"
+    },
+    "rejected_at": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "runtime_generation": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "runtime_session_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "observer_message_id",
+    "payload_digest",
+    "connector_sequence",
+    "observer_message_type",
+    "profile",
+    "session_key",
+    "runtime_generation",
+    "runtime_session_id",
+    "event_sequence",
+    "reason",
+    "expected_event_sequence",
+    "recovery",
+    "rejected_at"
+  ],
+  "title": "Observer Stream Recovery NACK v1",
+  "type": "object"
+}

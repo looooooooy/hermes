@@ -1,0 +1,35 @@
+[Unit]
+Description=Hermes Cloud explicit short-lived Connector test token mint
+
+[Service]
+Type=oneshot
+User=hermes-cloud
+Group=hermes-cloud
+UMask=0077
+EnvironmentFile=/etc/hermes-cloud/test-server.env
+LoadCredential=connector_signing_secret:/etc/hermes-cloud/secrets/connector_signing_secret
+LoadCredential=runtime_dsn:/etc/hermes-cloud/secrets/runtime_database_dsn
+Environment=HERMES_CONNECTOR_SIGNING_SECRET_FILE=%d/connector_signing_secret
+Environment=HERMES_RUNTIME_DSN_FILE=%d/runtime_dsn
+WorkingDirectory=/
+ExecStartPre=/usr/bin/env bash ${HERMES_CURRENT}/deploy/test_server/scripts/preflight.sh --connector-token
+ExecStart=/usr/bin/env ${HERMES_VENV}/bin/python ${HERMES_CURRENT}/deploy/test_server/scripts/mint_connector_token.py --apply --output ${HERMES_CONNECTOR_TOKEN_OUTPUT}
+RemainAfterExit=no
+TimeoutStartSec=30s
+TimeoutStopSec=10s
+LimitNOFILE=1024
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+StateDirectory=hermes-cloud-connector-token
+RuntimeDirectory=hermes-cloud-connector-token

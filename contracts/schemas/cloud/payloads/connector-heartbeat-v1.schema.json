@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/connector-heartbeat.schema.json",
+  "title": "Hermes Connector Heartbeat Payload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "connection_id",
+    "sender_role",
+    "observed_at",
+    "next_outbound_sequence",
+    "next_inbound_sequence",
+    "session_state"
+  ],
+  "properties": {
+    "connection_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sender_role": {
+      "enum": [
+        "connector",
+        "cloud"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "next_outbound_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_inbound_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "session_state": {
+      "enum": [
+        "active",
+        "reconciling",
+        "draining"
+      ]
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

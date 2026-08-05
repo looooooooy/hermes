@@ -1,0 +1,23 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {
+    "profile": "default",
+    "current_writer_id": "connector-a",
+    "current_writer_fence": 3,
+    "active_runtime_generation": "runtime-a",
+    "catalog_sequence": 7,
+    "catalog_entries": {"root-a": 1},
+    "catalog_session_keys": []
+  },
+  "operations": [{
+    "op": "event",
+    "writer_id": "connector-a",
+    "writer_fence": 3,
+    "profile": "default",
+    "runtime_generation": "runtime-a",
+    "catalog_sequence": 8,
+    "action": "remove",
+    "entry": {"session_key": "root-a", "authority_revision": 1}
+  }],
+  "expected_errors": ["catalog_index_mismatch"]
+}

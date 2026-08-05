@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "legacy_distribution": "hermes-mobile-gateway",
+  "canonical_distribution": "hermes-agent-plugin",
+  "strategy": "host-stopped-in-place-transaction",
+  "requires_host_stopped": true,
+  "atomic_host_activation": false,
+  "bundle_dependency_policy": "trusted-locked-bundle-preinstalls-runtime-dependencies",
+  "wheel_install_mode": "offline-no-deps",
+  "artifact_digest_role": "integrity-check-only-not-signature-verification",
+  "receipt_statuses": [
+    "prepared",
+    "in_progress",
+    "completed",
+    "legacy_restored",
+    "rolled_back",
+    "recovery_failed",
+    "rollback_failed_canonical_restored"
+  ],
+  "invoked_by": [
+    "external-signed-installer",
+    "connector-updater"
+  ],
+  "included_in_plugin_wheel": false,
+  "shared_import_packages": [],
+  "steps": [
+    "preflight-wheel-metadata-and-installed-legacy-version",
+    "validate-legacy-dependencies-entry-point-and-runtime-imports",
+    "cache-both-wheels-and-record-sha256",
+    "persist-prepared-receipt-before-destructive-change",
+    "uninstall-legacy-distribution-before-installing-canonical",
+    "install-canonical-distribution-offline-without-dependency-resolution",
+    "run-pip-check",
+    "validate-canonical-entry-point-ownership-and-runtime-imports"
+  ],
+  "rollback_steps": [
+    "revalidate-cached-wheel-sha256-and-metadata",
+    "uninstall-partial-canonical-distribution",
+    "reinstall-legacy-distribution",
+    "run-pip-check",
+    "validate-restored-legacy-entry-point-ownership-and-runtime-imports"
+  ]
+}

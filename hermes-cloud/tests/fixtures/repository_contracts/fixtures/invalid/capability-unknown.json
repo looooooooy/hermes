@@ -1,0 +1,7 @@
+{
+  "contract_version": 1,
+  "runtime_generation": "runtime-20260730-01",
+  "capabilities": [
+    "arbitrary.shell"
+  ]
+}

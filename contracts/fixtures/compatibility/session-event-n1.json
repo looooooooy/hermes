@@ -1,0 +1,11 @@
+{
+  "profile": "default",
+  "runtime_generation": "runtime-n1",
+  "session_key": "session-n1",
+  "session_id": "runtime-session-n1",
+  "type": "message.start",
+  "event_sequence": 1,
+  "payload": {
+    "role": "assistant"
+  }
+}

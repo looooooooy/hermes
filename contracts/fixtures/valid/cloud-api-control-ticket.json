@@ -1,0 +1,5 @@
+{
+  "ticket": "opaque-single-use-control-ticket-value",
+  "ttl_seconds": 60,
+  "connection_role": "control"
+}

@@ -1,0 +1,13 @@
+{
+  "command_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "message_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "connector_instance_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "client_instance_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "session_key": "durable-root-1",
+  "profile": "default",
+  "client_request_id": "req-client-01",
+  "method": "prompt.submit",
+  "state": "delivered",
+  "stored_at": "2026-07-30T08:00:01Z",
+  "revision": 1
+}

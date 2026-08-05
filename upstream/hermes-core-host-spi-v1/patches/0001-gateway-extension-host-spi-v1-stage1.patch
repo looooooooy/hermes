@@ -1,0 +1,1975 @@
+diff --git a/hermes_cli/extension_host_v1.py b/hermes_cli/extension_host_v1.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a81cd97ad4dcac44edcacd879958a72a262f9cd1
+--- /dev/null
++++ b/hermes_cli/extension_host_v1.py
+@@ -0,0 +1,451 @@
++"""Stable public contract for gateway extensions hosted by Hermes Core.
++
++This module is intentionally implementation-free.  Plugins may depend on the
++DTOs and protocols below, but never receive private Agent, SessionDB, runner,
++queue, transport, port, or authentication objects through this boundary.
++Session and command identifiers are sensitive and therefore redacted by default
++from public DTO representations alongside payload content.
++"""
++
++from __future__ import annotations
++
++import copy
++import json
++import unicodedata
++from collections.abc import Mapping
++from dataclasses import dataclass, field
++from enum import Enum
++from types import MappingProxyType
++from typing import Any, Literal, Protocol
++
++GATEWAY_EXTENSION_SPI_VERSION: Literal[1] = 1
++GATEWAY_EXTENSION_CAPABILITIES_V1 = frozenset(
++    {
++        "audit.safe.v1",
++        "extension.lifecycle.v1",
++        "runtime.descriptor.v1",
++        "session.observe.v1",
++        "session.owner-actions.v1",
++    }
++)
++OWNER_ACTION_METHODS_V1 = frozenset(
++    {
++        "approval.respond",
++        "clarify.respond",
++        "prompt.submit",
++        "session.interrupt",
++        "session.steer",
++    }
++)
++
++
++class HostSpiError(RuntimeError):
++    """Base class for fail-closed, operator-safe Host SPI errors."""
++
++
++class HostSpiVersionError(HostSpiError):
++    def __init__(self, *, expected: int, observed: object) -> None:
++        observed_label = str(observed) if type(observed) is int else "invalid"
++        super().__init__(
++            "gateway extension SPI version mismatch: "
++            f"expected {expected}, observed {observed_label}"
++        )
++
++
++class HostSpiCapabilityError(HostSpiError):
++    def __init__(self, missing: object) -> None:
++        if isinstance(missing, (set, frozenset, list, tuple)):
++            names = sorted(
++                item
++                for item in missing
++                if isinstance(item, str) and item and item == item.strip()
++            )
++        else:
++            names = []
++        label = ", ".join(names) if names else "invalid capability declaration"
++        super().__init__(f"gateway extension capabilities unavailable: {label}")
++        self.missing = frozenset(names)
++
++
++class HostSpiUnavailableError(HostSpiError):
++    def __init__(self) -> None:
++        super().__init__("gateway extension host is unavailable")
++
++
++class HostSpiRegistrationError(HostSpiError):
++    """Raised when an extension violates the installation contract."""
++
++
++def _required_text(value: object, field_name: str, *, max_length: int = 256) -> str:
++    if (
++        not isinstance(value, str)
++        or not value
++        or value != value.strip()
++        or len(value) > max_length
++        or any(unicodedata.category(character) == "Cc" for character in value)
++    ):
++        raise ValueError(f"{field_name} must be canonical text")
++    return value
++
++
++def _freeze_json_value(value: Any) -> Any:
++    if isinstance(value, Mapping):
++        return MappingProxyType(
++            {
++                key: _freeze_json_value(item)
++                for key, item in value.items()
++            }
++        )
++    if isinstance(value, (list, tuple)):
++        return tuple(_freeze_json_value(item) for item in value)
++    return value
++
++
++def _frozen_json_mapping(value: object, field_name: str) -> Mapping[str, Any]:
++    if not isinstance(value, Mapping):
++        raise TypeError(f"{field_name} must be an object")
++    copied = copy.deepcopy(dict(value))
++    if any(
++        not isinstance(key, str)
++        or not key
++        or key != key.strip()
++        or any(unicodedata.category(character) == "Cc" for character in key)
++        for key in copied
++    ):
++        raise ValueError(f"{field_name} keys must be canonical text")
++    try:
++        json.dumps(
++            copied,
++            ensure_ascii=False,
++            sort_keys=True,
++            separators=(",", ":"),
++            allow_nan=False,
++        )
++    except (TypeError, ValueError) as error:
++        raise ValueError(f"{field_name} must be canonical JSON") from error
++    return _freeze_json_value(copied)
++
++
++def _capability_versions(value: object) -> Mapping[str, int]:
++    if not isinstance(value, Mapping):
++        raise TypeError("capabilities must be an object")
++    copied = dict(value)
++    if any(
++        not isinstance(name, str)
++        or not name
++        or name != name.strip()
++        or any(unicodedata.category(character) == "Cc" for character in name)
++        for name in copied
++    ):
++        raise ValueError("capability names must be canonical text")
++    if any(type(version) is not int or version < 0 for version in copied.values()):
++        raise ValueError("capability versions must be non-negative integers")
++    return MappingProxyType(dict(copied))
++
++
++@dataclass(frozen=True)
++class RuntimeDescriptor:
++    profile: str
++    runtime_generation: str
++    host_bundle_id: str
++    state: Literal["ready", "unavailable"]
++    capabilities: Mapping[str, int] = field(default_factory=dict)
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.runtime_generation, "runtime_generation")
++        _required_text(self.host_bundle_id, "host_bundle_id")
++        if self.state not in {"ready", "unavailable"}:
++            raise ValueError("state must be ready or unavailable")
++        object.__setattr__(self, "capabilities", _capability_versions(self.capabilities))
++
++
++@dataclass(frozen=True, repr=False)
++class ObserverRequest:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    observer_contract: Literal[1, 2] = 1
++    required_capabilities: frozenset[str] = field(default_factory=frozenset)
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.durable_session_key, "durable_session_key")
++        _required_text(self.runtime_generation, "runtime_generation")
++        if self.observer_contract not in {1, 2}:
++            raise ValueError("observer_contract must be 1 or 2")
++        capabilities = frozenset(self.required_capabilities)
++        if any(
++            not isinstance(capability, str)
++            or not capability
++            or capability != capability.strip()
++            or any(
++                unicodedata.category(character) == "Cc"
++                for character in capability
++            )
++            for capability in capabilities
++        ):
++            raise ValueError("required_capabilities must be canonical text")
++        object.__setattr__(self, "required_capabilities", capabilities)
++
++    def __repr__(self) -> str:
++        return (
++            "ObserverRequest("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, "
++            f"observer_contract={self.observer_contract!r}, "
++            f"required_capabilities={self.required_capabilities!r})"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class ObserverEvent:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    sequence: int
++    event_type: str
++    payload: Mapping[str, Any]
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.durable_session_key, "durable_session_key")
++        _required_text(self.runtime_generation, "runtime_generation")
++        if type(self.sequence) is not int or self.sequence < 0:
++            raise ValueError("sequence must be a non-negative integer")
++        _required_text(self.event_type, "event_type")
++        object.__setattr__(self, "payload", _frozen_json_mapping(self.payload, "payload"))
++
++    def __repr__(self) -> str:
++        return (
++            "ObserverEvent("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, sequence={self.sequence!r}, "
++            f"event_type={self.event_type!r}, payload=[REDACTED])"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class ControlScope:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.durable_session_key, "durable_session_key")
++        _required_text(self.runtime_generation, "runtime_generation")
++
++    def __repr__(self) -> str:
++        return (
++            "ControlScope("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r})"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class ControlSnapshot:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    control_revision: int
++    payload: Mapping[str, Any] = field(default_factory=dict)
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.durable_session_key, "durable_session_key")
++        _required_text(self.runtime_generation, "runtime_generation")
++        if type(self.control_revision) is not int or self.control_revision < 0:
++            raise ValueError("control_revision must be a non-negative integer")
++        object.__setattr__(self, "payload", _frozen_json_mapping(self.payload, "payload"))
++
++    def __repr__(self) -> str:
++        return (
++            "ControlSnapshot("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, "
++            f"control_revision={self.control_revision!r}, payload=[REDACTED])"
++        )
++
++
++class OwnerActionStatus(str, Enum):
++    ACCEPTED = "accepted"
++    REJECTED = "rejected"
++    EFFECT_UNKNOWN = "effect_unknown"
++
++
++@dataclass(frozen=True, repr=False)
++class OwnerActionRequest:
++    profile: str
++    durable_session_key: str
++    runtime_generation: str
++    command_id: str
++    method: str
++    payload: Mapping[str, Any]
++
++    def __post_init__(self) -> None:
++        _required_text(self.profile, "profile")
++        _required_text(self.durable_session_key, "durable_session_key")
++        _required_text(self.runtime_generation, "runtime_generation")
++        _required_text(self.command_id, "command_id")
++        method = _required_text(self.method, "method")
++        if method not in OWNER_ACTION_METHODS_V1:
++            raise ValueError("owner action method is unavailable")
++        object.__setattr__(self, "payload", _frozen_json_mapping(self.payload, "payload"))
++
++    def __repr__(self) -> str:
++        return (
++            "OwnerActionRequest("
++            f"profile={self.profile!r}, durable_session_key=[REDACTED], "
++            f"runtime_generation={self.runtime_generation!r}, command_id=[REDACTED], "
++            f"method={self.method!r}, payload=[REDACTED])"
++        )
++
++
++@dataclass(frozen=True, repr=False)
++class OwnerActionResult:
++    status: OwnerActionStatus
++    payload: Mapping[str, Any] = field(default_factory=dict)
++
++    def __post_init__(self) -> None:
++        try:
++            status = OwnerActionStatus(self.status)
++        except (TypeError, ValueError) as error:
++            raise ValueError("invalid owner action status") from error
++        object.__setattr__(self, "status", status)
++        object.__setattr__(self, "payload", _frozen_json_mapping(self.payload, "payload"))
++
++    def __repr__(self) -> str:
++        return f"OwnerActionResult(status={self.status.value!r}, payload=[REDACTED])"
++
++
++@dataclass(frozen=True, repr=False)
++class SafeAuditEvent:
++    name: str
++    profile: str
++    runtime_generation: str
++    attributes: Mapping[str, Any] = field(default_factory=dict)
++
++    def __post_init__(self) -> None:
++        _required_text(self.name, "name")
++        _required_text(self.profile, "profile")
++        _required_text(self.runtime_generation, "runtime_generation")
++        object.__setattr__(
++            self,
++            "attributes",
++            _frozen_json_mapping(self.attributes, "attributes"),
++        )
++
++    def __repr__(self) -> str:
++        return (
++            "SafeAuditEvent("
++            f"name={self.name!r}, profile={self.profile!r}, "
++            f"runtime_generation={self.runtime_generation!r}, attributes=[REDACTED])"
++        )
++
++
++class Registration(Protocol):
++    def close(self) -> None: ...
++
++
++class PreparedObserver(Protocol):
++    @property
++    def snapshot(self) -> object: ...
++
++    @property
++    def activation_deadline_monotonic(self) -> float: ...
++
++    def activate(self) -> Registration: ...
++
++    def close(self) -> None: ...
++
++
++class EndpointDescriptor(Protocol):
++    @property
++    def connection_role(self) -> str: ...
++
++
++class EventSink(Protocol):
++    def __call__(self, event: ObserverEvent) -> None: ...
++
++
++class RuntimeListener(Protocol):
++    def __call__(self, descriptor: RuntimeDescriptor) -> None: ...
++
++
++class GatewayExtensionV1(Protocol):
++    def install(self, host: GatewayExtensionHostV1) -> Registration: ...
++
++
++class GatewayExtensionHostV1(Protocol):
++    host_api_version: Literal[1]
++
++    def runtime_descriptor(self) -> RuntimeDescriptor: ...
++
++    def register_local_endpoint(self, endpoint: EndpointDescriptor) -> Registration: ...
++
++    def prepare_observer(
++        self,
++        request: ObserverRequest,
++        sink: EventSink,
++    ) -> PreparedObserver: ...
++
++    def control_snapshot(self, scope: ControlScope) -> ControlSnapshot: ...
++
++    def invoke_owner_action(self, request: OwnerActionRequest) -> OwnerActionResult: ...
++
++    def add_runtime_listener(self, listener: RuntimeListener) -> Registration: ...
++
++    def audit(self, event: SafeAuditEvent) -> None: ...
++
++
++class GatewayExtensionContextV1(Protocol):
++    @property
++    def gateway_extension_spi_version(self) -> Literal[1]: ...
++
++    @property
++    def gateway_extension_capabilities(self) -> frozenset[str]: ...
++
++    def register_gateway_extension(
++        self,
++        extension: GatewayExtensionV1,
++        *,
++        spi_version: Literal[1],
++    ) -> Registration: ...
++
++
++@dataclass(frozen=True)
++class ExtensionShutdownFailure:
++    plugin_key: str
++    error_type: str
++
++
++__all__ = [
++    "GATEWAY_EXTENSION_CAPABILITIES_V1",
++    "GATEWAY_EXTENSION_SPI_VERSION",
++    "OWNER_ACTION_METHODS_V1",
++    "ControlScope",
++    "ControlSnapshot",
++    "EndpointDescriptor",
++    "EventSink",
++    "ExtensionShutdownFailure",
++    "GatewayExtensionContextV1",
++    "GatewayExtensionHostV1",
++    "GatewayExtensionV1",
++    "HostSpiCapabilityError",
++    "HostSpiError",
++    "HostSpiRegistrationError",
++    "HostSpiUnavailableError",
++    "HostSpiVersionError",
++    "ObserverEvent",
++    "ObserverRequest",
++    "OwnerActionRequest",
++    "OwnerActionResult",
++    "OwnerActionStatus",
++    "PreparedObserver",
++    "Registration",
++    "RuntimeDescriptor",
++    "RuntimeListener",
++    "SafeAuditEvent",
++]
+diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
+index 8dd02a1bdf5ec52382f305048718242abe02360e..b57e8a80b34200227b7fcf8eebfdb2981cb8dc55 100644
+--- a/hermes_cli/plugins.py
++++ b/hermes_cli/plugins.py
+@@ -42,13 +42,27 @@ import os
+ import sys
+ import threading
+ import types
++from collections.abc import Collection, Mapping
+ from dataclasses import dataclass, field
++from enum import Enum
+ from pathlib import Path
+-from typing import Any, Callable, Dict, List, Optional, Set, Union
++from typing import AbstractSet, Any, Callable, Dict, List, Optional, Set, Union
+ 
+ from hermes_constants import get_hermes_home
+ from utils import env_var_enabled, fast_safe_load
+ from hermes_cli.config import cfg_get
++from hermes_cli.extension_host_v1 import (
++    GATEWAY_EXTENSION_CAPABILITIES_V1,
++    GATEWAY_EXTENSION_SPI_VERSION,
++    ExtensionShutdownFailure,
++    GatewayExtensionHostV1,
++    GatewayExtensionV1,
++    HostSpiCapabilityError,
++    HostSpiRegistrationError,
++    HostSpiUnavailableError,
++    HostSpiVersionError,
++    Registration,
++)
+ from hermes_cli.middleware import OBSERVER_SCHEMA_VERSION, VALID_MIDDLEWARE
+ 
+ 
+@@ -330,6 +344,57 @@ class LoadedPlugin:
+     # imported) loader. The module loads on first real use via the
+     # platform_registry; see PluginManager._register_deferred_platform.
+     deferred: bool = False
++    # Process-level extension registrations installed by this plugin. The
++    # manager owns their lifecycle; the list remains useful for introspection.
++    extension_registrations: List[Registration] = field(default_factory=list)
++    extension_error: Optional[str] = None
++
++
++class _ExtensionLifecycleState(str, Enum):
++    OPEN = "open"
++    CLOSING = "closing"
++    CLOSED = "closed"
++
++
++class _ManagedExtensionRegistration:
++    """Idempotent registration wrapper that remains retryable after failure."""
++
++    def __init__(self, registration: Registration) -> None:
++        self._registration = registration
++        self._condition = threading.Condition(threading.RLock())
++        self._state = _ExtensionLifecycleState.OPEN
++        self._closing_thread: int | None = None
++
++    @property
++    def closed(self) -> bool:
++        with self._condition:
++            return self._state is _ExtensionLifecycleState.CLOSED
++
++    def close(self) -> None:
++        current_thread = threading.get_ident()
++        with self._condition:
++            while self._state is _ExtensionLifecycleState.CLOSING:
++                if self._closing_thread == current_thread:
++                    raise HostSpiRegistrationError(
++                        "gateway extension lifecycle re-entry is unavailable"
++                    )
++                self._condition.wait()
++            if self._state is _ExtensionLifecycleState.CLOSED:
++                return
++            self._state = _ExtensionLifecycleState.CLOSING
++            self._closing_thread = current_thread
++        try:
++            self._registration.close()
++        except BaseException:
++            with self._condition:
++                self._state = _ExtensionLifecycleState.OPEN
++                self._closing_thread = None
++                self._condition.notify_all()
++            raise
++        with self._condition:
++            self._state = _ExtensionLifecycleState.CLOSED
++            self._closing_thread = None
++            self._condition.notify_all()
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -346,6 +411,31 @@ class PluginContext:
+         self._llm: Any = None
+         self._subagent_lifecycle: Any = None
+ 
++    # -- gateway extension host SPI ----------------------------------------
++
++    @property
++    def gateway_extension_spi_version(self) -> int:
++        """Return the frozen public gateway-extension SPI version."""
++        return GATEWAY_EXTENSION_SPI_VERSION
++
++    @property
++    def gateway_extension_capabilities(self) -> AbstractSet[str]:
++        """Return capabilities explicitly supplied by the Core composition root."""
++        return self._manager._gateway_extension_capabilities
++
++    def register_gateway_extension(
++        self,
++        extension: GatewayExtensionV1,
++        *,
++        spi_version: int,
++    ) -> Registration:
++        """Install and manager-own a process-level gateway extension."""
++        return self._manager._register_gateway_extension(
++            self.manifest.key or self.manifest.name,
++            extension,
++            spi_version=spi_version,
++        )
++
+     # -- host-owned LLM access ----------------------------------------------
+ 
+     @property
+@@ -1267,7 +1357,12 @@ class PluginContext:
+ class PluginManager:
+     """Central manager that discovers, loads, and invokes plugins."""
+ 
+-    def __init__(self) -> None:
++    def __init__(
++        self,
++        *,
++        gateway_extension_host: Optional[GatewayExtensionHostV1] = None,
++        gateway_extension_capabilities: Optional[Collection[str]] = None,
++    ) -> None:
+         self._plugins: Dict[str, LoadedPlugin] = {}
+         self._hooks: Dict[str, List[Callable]] = {}
+         self._middleware: Dict[str, List[Callable]] = {}
+@@ -1290,6 +1385,55 @@ class PluginManager:
+         # ``re.Pattern``, or a constraint dict); ``callback`` is an async
+         # function with the slack_bolt signature ``(ack, body, action)``.
+         self._slack_action_handlers: List[tuple] = []
++        self._gateway_extension_host = gateway_extension_host
++        self._gateway_extension_capabilities = (
++            self._validate_gateway_extension_capabilities(
++                gateway_extension_capabilities
++            )
++        )
++        self._extension_registrations: Dict[
++            str, List[_ManagedExtensionRegistration]
++        ] = {}
++        self._extension_lock = threading.RLock()
++        self._extension_condition = threading.Condition(self._extension_lock)
++        self._extension_state = _ExtensionLifecycleState.OPEN
++        self._extension_closing_thread: int | None = None
++        self._extension_plugin_states: Dict[str, _ExtensionLifecycleState] = {}
++        self._extension_plugin_closing_threads: Dict[str, int] = {}
++        self._extension_active_installs: Dict[str, int] = {}
++        self._extension_install_threads: Dict[str, Dict[int, int]] = {}
++
++    @staticmethod
++    def _validate_gateway_extension_capabilities(
++        declared: Optional[Collection[str]],
++    ) -> frozenset[str]:
++        if declared is None:
++            return frozenset()
++        if isinstance(declared, (str, bytes, bytearray, Mapping)) or not isinstance(
++            declared, Collection
++        ):
++            raise TypeError(
++                "gateway extension capabilities must be a collection of strings"
++            )
++        try:
++            capabilities = frozenset(declared)
++        except TypeError as error:
++            raise TypeError(
++                "gateway extension capabilities must be a collection of strings"
++            ) from error
++        if any(
++            not isinstance(capability, str)
++            or not capability
++            or capability != capability.strip()
++            or not capability.isprintable()
++            for capability in capabilities
++        ):
++            raise ValueError(
++                "gateway extension capabilities must be canonical text"
++            )
++        if not capabilities.issubset(GATEWAY_EXTENSION_CAPABILITIES_V1):
++            raise ValueError("gateway extension capabilities contain unknown names")
++        return capabilities
+ 
+     # -----------------------------------------------------------------------
+     # Public
+@@ -1309,6 +1453,15 @@ class PluginManager:
+             self._discovered = True
+             return
+         if force:
++            failures = self.shutdown_extensions()
++            if failures:
++                logger.warning(
++                    "Plugin force reload deferred: %d gateway extension "
++                    "registration(s) could not close",
++                    len(failures),
++                )
++                return
++            self._reopen_extension_lifecycle()
+             self._plugins.clear()
+             self._hooks.clear()
+             self._middleware.clear()
+@@ -1333,6 +1486,304 @@ class PluginManager:
+             self._discovered = False
+             raise
+ 
++    @property
++    def pending_extension_shutdowns(self) -> frozenset[str]:
++        """Plugin keys with at least one registration still needing close."""
++        with self._extension_lock:
++            return frozenset(
++                plugin_key
++                for plugin_key, registrations in self._extension_registrations.items()
++                if registrations
++            )
++
++    def _reopen_extension_lifecycle(self) -> None:
++        with self._extension_condition:
++            if (
++                self._extension_state is _ExtensionLifecycleState.CLOSING
++                or any(
++                    state is _ExtensionLifecycleState.CLOSING
++                    for state in self._extension_plugin_states.values()
++                )
++                or self._extension_registrations
++                or self._extension_active_installs
++            ):
++                raise HostSpiRegistrationError(
++                    "gateway extension lifecycle cannot reopen before drain"
++                )
++            self._extension_state = _ExtensionLifecycleState.OPEN
++            self._extension_closing_thread = None
++            self._extension_plugin_states.clear()
++            self._extension_plugin_closing_threads.clear()
++            self._extension_condition.notify_all()
++
++    def _open_plugin_extension_lifecycle(self, plugin_key: str) -> None:
++        with self._extension_condition:
++            if self._extension_state is not _ExtensionLifecycleState.OPEN:
++                raise HostSpiUnavailableError()
++            state = self._extension_plugin_states.get(
++                plugin_key, _ExtensionLifecycleState.OPEN
++            )
++            if state is _ExtensionLifecycleState.CLOSING:
++                raise HostSpiUnavailableError()
++            if state is _ExtensionLifecycleState.CLOSED:
++                if (
++                    self._extension_registrations.get(plugin_key)
++                    or self._extension_active_installs.get(plugin_key, 0)
++                ):
++                    raise HostSpiRegistrationError(
++                        "gateway extension lifecycle cannot reopen before drain"
++                    )
++                self._extension_plugin_states[plugin_key] = (
++                    _ExtensionLifecycleState.OPEN
++                )
++
++    def _finish_extension_install_locked(
++        self,
++        plugin_key: str,
++        thread_id: int,
++    ) -> None:
++        active = self._extension_active_installs.get(plugin_key, 0) - 1
++        if active > 0:
++            self._extension_active_installs[plugin_key] = active
++        else:
++            self._extension_active_installs.pop(plugin_key, None)
++        thread_counts = self._extension_install_threads.get(plugin_key, {})
++        thread_active = thread_counts.get(thread_id, 0) - 1
++        if thread_active > 0:
++            thread_counts[thread_id] = thread_active
++        else:
++            thread_counts.pop(thread_id, None)
++        if not thread_counts:
++            self._extension_install_threads.pop(plugin_key, None)
++        self._extension_condition.notify_all()
++
++    def _register_gateway_extension(
++        self,
++        plugin_key: str,
++        extension: GatewayExtensionV1,
++        *,
++        spi_version: int,
++    ) -> Registration:
++        if type(spi_version) is not int or spi_version != GATEWAY_EXTENSION_SPI_VERSION:
++            raise HostSpiVersionError(
++                expected=GATEWAY_EXTENSION_SPI_VERSION,
++                observed=spi_version,
++            )
++        missing = (
++            GATEWAY_EXTENSION_CAPABILITIES_V1
++            - self._gateway_extension_capabilities
++        )
++        if missing:
++            raise HostSpiCapabilityError(missing)
++        host = self._gateway_extension_host
++        if host is None:
++            raise HostSpiUnavailableError()
++        observed_host_version = getattr(host, "host_api_version", None)
++        if (
++            type(observed_host_version) is not int
++            or observed_host_version != GATEWAY_EXTENSION_SPI_VERSION
++        ):
++            raise HostSpiVersionError(
++                expected=GATEWAY_EXTENSION_SPI_VERSION,
++                observed=observed_host_version,
++            )
++        install = getattr(extension, "install", None)
++        if not callable(install):
++            raise HostSpiRegistrationError(
++                "gateway extension must provide install(host)"
++            )
++        thread_id = threading.get_ident()
++        with self._extension_condition:
++            plugin_state = self._extension_plugin_states.get(
++                plugin_key, _ExtensionLifecycleState.OPEN
++            )
++            if (
++                self._extension_state is not _ExtensionLifecycleState.OPEN
++                or plugin_state is not _ExtensionLifecycleState.OPEN
++            ):
++                raise HostSpiUnavailableError()
++            self._extension_active_installs[plugin_key] = (
++                self._extension_active_installs.get(plugin_key, 0) + 1
++            )
++            thread_counts = self._extension_install_threads.setdefault(
++                plugin_key, {}
++            )
++            thread_counts[thread_id] = thread_counts.get(thread_id, 0) + 1
++        try:
++            try:
++                registration = install(host)
++            except Exception as error:
++                raise HostSpiRegistrationError(
++                    "gateway extension installation failed"
++                ) from error
++            if not callable(getattr(registration, "close", None)):
++                raise HostSpiRegistrationError(
++                    "gateway extension install() must return a Registration"
++                )
++            managed = _ManagedExtensionRegistration(registration)
++            with self._extension_condition:
++                self._extension_registrations.setdefault(plugin_key, []).append(
++                    managed
++                )
++            return managed
++        finally:
++            with self._extension_condition:
++                self._finish_extension_install_locked(plugin_key, thread_id)
++
++    def shutdown_extensions(
++        self,
++        plugin_key: Optional[str] = None,
++    ) -> tuple[ExtensionShutdownFailure, ...]:
++        """Close managed registrations in reverse order without skipping failures.
++
++        Failed registrations stay in the store so a later drain can retry.
++        Error messages from plugin resources are not copied into the public
++        result or logs because they may contain payloads or credentials.
++        """
++        current_thread = threading.get_ident()
++        with self._extension_condition:
++            if plugin_key is None:
++                if any(
++                    current_thread in thread_counts
++                    for thread_counts in self._extension_install_threads.values()
++                ):
++                    raise HostSpiRegistrationError(
++                        "gateway extension lifecycle re-entry is unavailable"
++                    )
++                while (
++                    self._extension_state is _ExtensionLifecycleState.CLOSING
++                    or any(
++                        state is _ExtensionLifecycleState.CLOSING
++                        for state in self._extension_plugin_states.values()
++                    )
++                ):
++                    if (
++                        self._extension_closing_thread == current_thread
++                        or current_thread
++                        in self._extension_plugin_closing_threads.values()
++                    ):
++                        raise HostSpiRegistrationError(
++                            "gateway extension lifecycle re-entry is unavailable"
++                        )
++                    self._extension_condition.wait()
++                if self._extension_state is _ExtensionLifecycleState.CLOSED:
++                    return ()
++                self._extension_state = _ExtensionLifecycleState.CLOSING
++                self._extension_closing_thread = current_thread
++                while self._extension_active_installs:
++                    self._extension_condition.wait()
++                keys = list(reversed(self._extension_registrations))
++            else:
++                if current_thread in self._extension_install_threads.get(
++                    plugin_key, {}
++                ):
++                    raise HostSpiRegistrationError(
++                        "gateway extension lifecycle re-entry is unavailable"
++                    )
++                while (
++                    self._extension_state is _ExtensionLifecycleState.CLOSING
++                    or self._extension_plugin_states.get(
++                        plugin_key, _ExtensionLifecycleState.OPEN
++                    )
++                    is _ExtensionLifecycleState.CLOSING
++                ):
++                    if (
++                        self._extension_closing_thread == current_thread
++                        or self._extension_plugin_closing_threads.get(plugin_key)
++                        == current_thread
++                    ):
++                        raise HostSpiRegistrationError(
++                            "gateway extension lifecycle re-entry is unavailable"
++                        )
++                    self._extension_condition.wait()
++                if (
++                    self._extension_state is _ExtensionLifecycleState.CLOSED
++                    or self._extension_plugin_states.get(
++                        plugin_key, _ExtensionLifecycleState.OPEN
++                    )
++                    is _ExtensionLifecycleState.CLOSED
++                ):
++                    return ()
++                self._extension_plugin_states[plugin_key] = (
++                    _ExtensionLifecycleState.CLOSING
++                )
++                self._extension_plugin_closing_threads[plugin_key] = current_thread
++                while self._extension_active_installs.get(plugin_key, 0):
++                    self._extension_condition.wait()
++                keys = [plugin_key]
++            work = {
++                key: list(reversed(self._extension_registrations.get(key, [])))
++                for key in keys
++            }
++
++        failures: List[ExtensionShutdownFailure] = []
++        for key in keys:
++            for registration in work[key]:
++                try:
++                    registration.close()
++                except BaseException as error:
++                    failures.append(
++                        ExtensionShutdownFailure(
++                            plugin_key=key,
++                            error_type=type(error).__name__,
++                        )
++                    )
++                    logger.warning(
++                        "Gateway extension close failed for plugin '%s' (%s); "
++                        "registration retained for retry",
++                        key,
++                        type(error).__name__,
++                    )
++                    continue
++                with self._extension_condition:
++                    current = self._extension_registrations.get(key, [])
++                    if registration in current:
++                        current.remove(registration)
++                    if not current:
++                        self._extension_registrations.pop(key, None)
++
++            loaded = self._plugins.get(key)
++            if loaded is not None:
++                with self._extension_condition:
++                    loaded.extension_registrations = list(
++                        self._extension_registrations.get(key, [])
++                    )
++                loaded.extension_error = (
++                    "extension shutdown failed"
++                    if any(failure.plugin_key == key for failure in failures)
++                    else None
++                )
++        failed_keys = {failure.plugin_key for failure in failures}
++        with self._extension_condition:
++            for key in keys:
++                self._extension_plugin_states[key] = (
++                    _ExtensionLifecycleState.OPEN
++                    if key in failed_keys
++                    else _ExtensionLifecycleState.CLOSED
++                )
++                self._extension_plugin_closing_threads.pop(key, None)
++            if plugin_key is None:
++                self._extension_state = (
++                    _ExtensionLifecycleState.OPEN
++                    if failures
++                    else _ExtensionLifecycleState.CLOSED
++                )
++                self._extension_closing_thread = None
++            self._extension_condition.notify_all()
++        return tuple(failures)
++
++    def unload_plugin(
++        self,
++        plugin_key: str,
++    ) -> tuple[ExtensionShutdownFailure, ...]:
++        """Disable one loaded plugin's process extension lifecycle."""
++        failures = self.shutdown_extensions(plugin_key)
++        if not failures and plugin_key in self._plugins:
++            loaded = self._plugins[plugin_key]
++            loaded.enabled = False
++            loaded.error = "unloaded"
++        return failures
++
+     def _discover_and_load_inner(self) -> None:
+         """The actual discovery sweep — see :meth:`discover_and_load`."""
+         manifests: List[PluginManifest] = []
+@@ -1808,39 +2259,63 @@ class PluginManager:
+                 _mw_counts_before = {
+                     kind: len(cbs) for kind, cbs in self._middleware.items()
+                 }
+-                register_fn(ctx)
+-                loaded.tools_registered = [
+-                    t for t in self._plugin_tool_names
+-                    if t not in _tools_before
+-                ]
+-                loaded.hooks_registered = [
+-                    h
+-                    for h, cbs in self._hooks.items()
+-                    if len(cbs) > _hook_counts_before.get(h, 0)
+-                ]
+-                loaded.middleware_registered = [
+-                    kind
+-                    for kind, cbs in self._middleware.items()
+-                    if len(cbs) > _mw_counts_before.get(kind, 0)
+-                ]
+-                loaded.commands_registered = [
+-                    c for c in self._plugin_commands
+-                    if self._plugin_commands[c].get("plugin") == manifest.name
+-                ]
+-                loaded.enabled = True
+-                logger.debug(
+-                    "  registered: %d tool(s), %d hook(s), %d middleware, %d slash command(s), %d CLI command(s)",
+-                    len(loaded.tools_registered),
+-                    len(loaded.hooks_registered),
+-                    len(loaded.middleware_registered),
+-                    len(loaded.commands_registered),
+-                    sum(
+-                        1 for c in self._cli_commands
+-                        if self._cli_commands[c].get("plugin") == manifest.name
+-                    ),
+-                )
++                self._open_plugin_extension_lifecycle(_plugin_id)
++                registration_committed = False
++                try:
++                    register_fn(ctx)
++                    loaded.tools_registered = [
++                        t for t in self._plugin_tool_names
++                        if t not in _tools_before
++                    ]
++                    loaded.hooks_registered = [
++                        h
++                        for h, cbs in self._hooks.items()
++                        if len(cbs) > _hook_counts_before.get(h, 0)
++                    ]
++                    loaded.middleware_registered = [
++                        kind
++                        for kind, cbs in self._middleware.items()
++                        if len(cbs) > _mw_counts_before.get(kind, 0)
++                    ]
++                    loaded.commands_registered = [
++                        c for c in self._plugin_commands
++                        if self._plugin_commands[c].get("plugin") == manifest.name
++                    ]
++                    with self._extension_lock:
++                        loaded.extension_registrations = list(
++                            self._extension_registrations.get(_plugin_id, [])
++                        )
++                    loaded.enabled = True
++                    logger.debug(
++                        "  registered: %d tool(s), %d hook(s), %d middleware, %d slash command(s), %d CLI command(s)",
++                        len(loaded.tools_registered),
++                        len(loaded.hooks_registered),
++                        len(loaded.middleware_registered),
++                        len(loaded.commands_registered),
++                        sum(
++                            1 for c in self._cli_commands
++                            if self._cli_commands[c].get("plugin") == manifest.name
++                        ),
++                    )
++                    registration_committed = True
++                finally:
++                    if not registration_committed:
++                        rollback_failures = self.shutdown_extensions(_plugin_id)
++                        with self._extension_lock:
++                            loaded.extension_registrations = list(
++                                self._extension_registrations.get(_plugin_id, [])
++                            )
++                        if rollback_failures:
++                            loaded.extension_error = "extension rollback failed"
+ 
+-        except Exception as exc:
++        except BaseException as exc:
++            if not isinstance(exc, Exception):
++                loaded.error = "plugin loading interrupted"
++                logger.warning(
++                    "Plugin '%s' loading interrupted after extension rollback",
++                    manifest.name,
++                )
++                raise
+             loaded.error = str(exc)
+             logger.warning(
+                 "Failed to load plugin '%s': %s",
+diff --git a/tests/hermes_cli/test_extension_host_v1_contract.py b/tests/hermes_cli/test_extension_host_v1_contract.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eace68695b5bd7d75cb52e1a5465887fdd975cbc
+--- /dev/null
++++ b/tests/hermes_cli/test_extension_host_v1_contract.py
+@@ -0,0 +1,206 @@
++"""Behavior contract for the public Gateway Extension Host SPI v1."""
++
++from dataclasses import FrozenInstanceError
++
++import pytest
++
++from hermes_cli.extension_host_v1 import (
++    GATEWAY_EXTENSION_CAPABILITIES_V1,
++    GATEWAY_EXTENSION_SPI_VERSION,
++    ControlScope,
++    ControlSnapshot,
++    HostSpiCapabilityError,
++    HostSpiUnavailableError,
++    HostSpiVersionError,
++    ObserverEvent,
++    ObserverRequest,
++    OwnerActionRequest,
++    OwnerActionResult,
++    OwnerActionStatus,
++    RuntimeDescriptor,
++    SafeAuditEvent,
++)
++
++
++def test_v1_identity_and_required_context_capabilities_are_stable() -> None:
++    assert GATEWAY_EXTENSION_SPI_VERSION == 1
++    assert GATEWAY_EXTENSION_CAPABILITIES_V1 == frozenset(
++        {
++            "audit.safe.v1",
++            "extension.lifecycle.v1",
++            "runtime.descriptor.v1",
++            "session.observe.v1",
++            "session.owner-actions.v1",
++        }
++    )
++
++
++def test_runtime_and_scope_dtos_are_frozen_and_canonical() -> None:
++    descriptor = RuntimeDescriptor(
++        profile="default",
++        runtime_generation="generation-1",
++        host_bundle_id="ai.hermes.agent",
++        state="ready",
++        capabilities={"prompt.submit": 1, "session.observe.output-parity.v1": 1},
++    )
++    scope = ControlScope(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++    )
++
++    assert descriptor.capabilities["prompt.submit"] == 1
++    assert scope.durable_session_key == "session-1"
++    with pytest.raises(FrozenInstanceError):
++        descriptor.state = "unavailable"  # type: ignore[misc]
++    with pytest.raises(TypeError):
++        descriptor.capabilities["prompt.submit"] = 2  # type: ignore[index]
++    with pytest.raises(ValueError, match="profile must be canonical text"):
++        RuntimeDescriptor(
++            profile=" default",
++            runtime_generation="generation-1",
++            host_bundle_id="ai.hermes.agent",
++            state="ready",
++        )
++    with pytest.raises(ValueError, match="capability versions"):
++        RuntimeDescriptor(
++            profile="default",
++            runtime_generation="generation-1",
++            host_bundle_id="ai.hermes.agent",
++            state="ready",
++            capabilities={"prompt.submit": True},
++        )
++
++
++def test_observer_contract_is_snapshot_first_and_payload_repr_is_redacted() -> None:
++    request = ObserverRequest(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        observer_contract=2,
++        required_capabilities=frozenset({"session.observe.output-parity.v1"}),
++    )
++    event = ObserverEvent(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        sequence=4,
++        event_type="message.delta",
++        payload={"token": "must-not-appear", "parts": [{"text": "private"}]},
++    )
++
++    assert request.observer_contract == 2
++    assert event.payload["parts"][0]["text"] == "private"
++    assert "session-1" not in repr(request)
++    assert "session-1" not in repr(event)
++    assert "must-not-appear" not in repr(event)
++    assert "private" not in repr(event)
++    with pytest.raises(TypeError):
++        event.payload["parts"][0]["text"] = "changed"  # type: ignore[index]
++    with pytest.raises(ValueError, match="sequence must be a non-negative integer"):
++        ObserverEvent(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++            sequence=-1,
++            event_type="message.delta",
++            payload={},
++        )
++
++
++def test_owner_action_and_control_payloads_never_leak_through_repr() -> None:
++    request = OwnerActionRequest(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        command_id="command-1",
++        method="approval.respond",
++        payload={"approval": "secret-approval-body"},
++    )
++    result = OwnerActionResult(
++        status=OwnerActionStatus.EFFECT_UNKNOWN,
++        payload={"tool_output": "secret-tool-output"},
++    )
++    snapshot = ControlSnapshot(
++        profile="default",
++        durable_session_key="session-1",
++        runtime_generation="generation-1",
++        control_revision=3,
++        payload={"pending_approval": "secret-pending-body"},
++    )
++    audit = SafeAuditEvent(
++        name="extension.install.failed",
++        profile="default",
++        runtime_generation="generation-1",
++        attributes={"token": "secret-token"},
++    )
++
++    combined_repr = repr((request, result, snapshot, audit))
++    assert "session-1" not in combined_repr
++    assert "command-1" not in combined_repr
++    assert "secret-approval-body" not in combined_repr
++    assert "secret-tool-output" not in combined_repr
++    assert "secret-pending-body" not in combined_repr
++    assert "secret-token" not in combined_repr
++    assert result.status is OwnerActionStatus.EFFECT_UNKNOWN
++    with pytest.raises(ValueError, match="owner action method is unavailable"):
++        OwnerActionRequest(
++            profile="default",
++            durable_session_key="session-1",
++            runtime_generation="generation-1",
++            command_id="command-2",
++            method="tool.dispatch",
++            payload={},
++        )
++
++
++def test_public_errors_have_stable_non_sensitive_messages() -> None:
++    assert str(HostSpiVersionError(expected=1, observed=2)) == (
++        "gateway extension SPI version mismatch: expected 1, observed 2"
++    )
++    assert str(HostSpiCapabilityError({"session.observe.v1"})) == (
++        "gateway extension capabilities unavailable: session.observe.v1"
++    )
++    assert str(HostSpiUnavailableError()) == "gateway extension host is unavailable"
++
++
++def test_scope_repr_hides_session_identifier_and_canonical_text_rejects_controls() -> None:
++    scope = ControlScope(
++        profile="default",
++        durable_session_key="sensitive-session-id",
++        runtime_generation="generation-1",
++    )
++    assert "sensitive-session-id" not in repr(scope)
++
++    for control_text in ("line\nbreak", "nul\x00byte", "delete\x7fbyte"):
++        with pytest.raises(ValueError, match="canonical text"):
++            RuntimeDescriptor(
++                profile=control_text,
++                runtime_generation="generation-1",
++                host_bundle_id="ai.hermes.agent",
++                state="ready",
++            )
++        with pytest.raises(ValueError, match="required_capabilities"):
++            ObserverRequest(
++                profile="default",
++                durable_session_key="session-1",
++                runtime_generation="generation-1",
++                required_capabilities=frozenset({control_text}),
++            )
++        with pytest.raises(ValueError, match="command_id"):
++            OwnerActionRequest(
++                profile="default",
++                durable_session_key="session-1",
++                runtime_generation="generation-1",
++                command_id=control_text,
++                method="approval.respond",
++                payload={},
++            )
++        with pytest.raises(ValueError, match="capability names"):
++            RuntimeDescriptor(
++                profile="default",
++                runtime_generation="generation-1",
++                host_bundle_id="ai.hermes.agent",
++                state="ready",
++                capabilities={control_text: 1},
++            )
+diff --git a/tests/hermes_cli/test_gateway_extension_registration.py b/tests/hermes_cli/test_gateway_extension_registration.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..7759f3394b6ce6feb6fe7ee4bba91df82ed22f2a
+--- /dev/null
++++ b/tests/hermes_cli/test_gateway_extension_registration.py
+@@ -0,0 +1,690 @@
++"""Real entry-point discovery tests for gateway extension lifecycle v1."""
++
++from __future__ import annotations
++
++import builtins
++import importlib
++import textwrap
++import threading
++from pathlib import Path
++
++import pytest
++import yaml
++
++from hermes_cli.extension_host_v1 import (
++    GATEWAY_EXTENSION_CAPABILITIES_V1,
++    HostSpiCapabilityError,
++    HostSpiRegistrationError,
++    HostSpiUnavailableError,
++)
++from hermes_cli.plugins import PluginContext, PluginManager, PluginManifest
++
++
++class _CloseRegistration:
++    def __init__(
++        self,
++        label: str,
++        events: list[str],
++        *,
++        failures: int = 0,
++    ) -> None:
++        self.label = label
++        self.events = events
++        self.failures = failures
++        self.closed = False
++
++    def close(self) -> None:
++        self.events.append(f"close:{self.label}")
++        if self.failures:
++            self.failures -= 1
++            raise RuntimeError(f"close failed: {self.label}")
++        self.closed = True
++
++
++class _RecordingHost:
++    host_api_version = 1
++
++    def __init__(
++        self,
++        *,
++        close_failures: dict[str, int] | None = None,
++        install_failures: set[str] | None = None,
++    ) -> None:
++        self.events: list[str] = []
++        self.close_failures = close_failures or {}
++        self.install_failures = install_failures or set()
++
++    def install(self, label: str) -> _CloseRegistration:
++        self.events.append(f"install:{label}")
++        if label in self.install_failures:
++            raise RuntimeError(f"install failed: {label}")
++        return _CloseRegistration(
++            label,
++            self.events,
++            failures=self.close_failures.get(label, 0),
++        )
++
++
++def _write_entrypoint(
++    site: Path,
++    *,
++    name: str,
++    module_name: str,
++    source: str,
++) -> None:
++    site.mkdir(parents=True, exist_ok=True)
++    (site / f"{module_name}.py").write_text(textwrap.dedent(source), encoding="utf-8")
++    dist_info = site / f"{module_name}-1.0.dist-info"
++    dist_info.mkdir()
++    (dist_info / "METADATA").write_text(
++        f"Metadata-Version: 2.1\nName: {module_name}\nVersion: 1.0\n",
++        encoding="utf-8",
++    )
++    (dist_info / "entry_points.txt").write_text(
++        f"[hermes_agent.plugins]\n{name} = {module_name}\n",
++        encoding="utf-8",
++    )
++
++
++def _manager_with_entrypoints(
++    tmp_path: Path,
++    monkeypatch,
++    host: _RecordingHost | None,
++    plugins: dict[str, str],
++    *,
++    capabilities=frozenset(GATEWAY_EXTENSION_CAPABILITIES_V1),
++) -> PluginManager:
++    site = tmp_path / "site"
++    for index, (name, source) in enumerate(plugins.items()):
++        _write_entrypoint(
++            site,
++            name=name,
++            module_name=f"stage1_entrypoint_{index}_{tmp_path.name.replace('-', '_')}",
++            source=source,
++        )
++    monkeypatch.syspath_prepend(str(site))
++    importlib.invalidate_caches()
++
++    hermes_home = tmp_path / "hermes-home"
++    hermes_home.mkdir()
++    (hermes_home / "config.yaml").write_text(
++        yaml.safe_dump({"plugins": {"enabled": list(plugins)}}),
++        encoding="utf-8",
++    )
++    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
++    monkeypatch.delenv("HERMES_ENABLE_PROJECT_PLUGINS", raising=False)
++    empty_bundled = tmp_path / "empty-bundled"
++    empty_bundled.mkdir()
++    monkeypatch.setattr(
++        "hermes_cli.plugins.get_bundled_plugins_dir",
++        lambda: empty_bundled,
++    )
++    return PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=capabilities,
++    )
++
++
++def _plugin_source(register_lines: str) -> str:
++    body = textwrap.indent(register_lines, "    ")
++    return f"""
++class Extension:
++    def __init__(self, label):
++        self.label = label
++
++    def install(self, host):
++        return host.install(self.label)
++
++def register(ctx):
++{body}
++    """
++
++
++def test_context_exposes_read_only_v1_identity_and_capabilities() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++    )
++    context = PluginContext(PluginManifest(name="contract"), manager)
++
++    assert context.gateway_extension_spi_version == 1
++    assert context.gateway_extension_capabilities == GATEWAY_EXTENSION_CAPABILITIES_V1
++    try:
++        context.gateway_extension_spi_version = 2  # type: ignore[misc]
++    except AttributeError:
++        pass
++    else:
++        raise AssertionError("gateway_extension_spi_version must be read-only")
++
++
++def test_real_entrypoint_installs_and_shutdown_closes_once_in_reverse_order(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost()
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "extension-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('first'), spi_version=1)\n"
++                "ctx.register_gateway_extension(Extension('second'), spi_version=1)"
++            )
++        },
++    )
++
++    manager.discover_and_load()
++    loaded = manager._plugins["extension-plugin"]
++    assert loaded.enabled is True
++    assert len(loaded.extension_registrations) == 2
++    assert host.events == ["install:first", "install:second"]
++
++    assert manager.shutdown_extensions() == ()
++    assert manager.shutdown_extensions() == ()
++    assert host.events == [
++        "install:first",
++        "install:second",
++        "close:second",
++        "close:first",
++    ]
++
++
++def test_register_failure_rolls_back_prior_extensions_and_does_not_block_next_plugin(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost()
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "broken-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('broken-first'), spi_version=1)\n"
++                "ctx.register_gateway_extension(Extension('broken-second'), spi_version=1)\n"
++                "raise RuntimeError('registration failed')"
++            ),
++            "healthy-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('healthy'), spi_version=1)"
++            ),
++        },
++    )
++
++    manager.discover_and_load()
++
++    assert manager._plugins["broken-plugin"].enabled is False
++    assert manager._plugins["broken-plugin"].error == "registration failed"
++    assert manager._plugins["healthy-plugin"].enabled is True
++    assert "install:healthy" in host.events
++    assert [event for event in host.events if "broken" in event] == [
++        "install:broken-first",
++        "install:broken-second",
++        "close:broken-second",
++        "close:broken-first",
++    ]
++
++
++def test_install_failure_rolls_back_prior_extensions(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost(install_failures={"second"})
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "broken-install": _plugin_source(
++                "ctx.register_gateway_extension(Extension('first'), spi_version=1)\n"
++                "ctx.register_gateway_extension(Extension('second'), spi_version=1)"
++            )
++        },
++    )
++
++    manager.discover_and_load()
++
++    assert manager._plugins["broken-install"].enabled is False
++    assert manager._plugins["broken-install"].error == (
++        "gateway extension installation failed"
++    )
++    assert host.events == ["install:first", "install:second", "close:first"]
++
++
++def test_install_failure_does_not_expose_plugin_exception_text(
++    tmp_path: Path,
++    monkeypatch,
++    caplog,
++) -> None:
++    secret = "credential-must-not-appear"
++    host = _RecordingHost(install_failures={secret})
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "safe-error-plugin": _plugin_source(
++                f"ctx.register_gateway_extension(Extension({secret!r}), spi_version=1)"
++            )
++        },
++    )
++
++    manager.discover_and_load()
++
++    assert manager._plugins["safe-error-plugin"].error == (
++        "gateway extension installation failed"
++    )
++    assert secret not in caplog.text
++
++
++def test_failed_install_rollback_retains_a_close_failure_for_later_drain(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost(
++        close_failures={"first": 1},
++        install_failures={"second"},
++    )
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "broken-install": _plugin_source(
++                "ctx.register_gateway_extension(Extension('first'), spi_version=1)\n"
++                "ctx.register_gateway_extension(Extension('second'), spi_version=1)"
++            )
++        },
++    )
++
++    manager.discover_and_load()
++
++    assert host.events == ["install:first", "install:second", "close:first"]
++    assert manager.pending_extension_shutdowns == frozenset({"broken-install"})
++    assert manager._plugins["broken-install"].extension_error == (
++        "extension rollback failed"
++    )
++
++    assert manager.shutdown_extensions() == ()
++    assert host.events[-1] == "close:first"
++    assert manager.pending_extension_shutdowns == frozenset()
++
++
++def test_close_failure_is_retained_for_retry_while_other_plugins_continue(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost(close_failures={"first": 1})
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "first-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('first'), spi_version=1)"
++            ),
++            "second-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('second'), spi_version=1)"
++            ),
++        },
++    )
++    manager.discover_and_load()
++
++    failures = manager.shutdown_extensions()
++
++    assert len(failures) == 1
++    assert failures[0].plugin_key == "first-plugin"
++    assert host.events[-2:] == ["close:second", "close:first"]
++    assert manager.pending_extension_shutdowns == frozenset({"first-plugin"})
++
++    assert manager.shutdown_extensions() == ()
++    assert host.events[-1] == "close:first"
++    assert manager.pending_extension_shutdowns == frozenset()
++
++
++def test_force_reload_closes_before_reinstall_and_disable_closes_without_reinstall(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost()
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "reload-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('reload'), spi_version=1)"
++            )
++        },
++    )
++    manager.discover_and_load()
++
++    manager.discover_and_load(force=True)
++    assert host.events == ["install:reload", "close:reload", "install:reload"]
++
++    home = Path(manager._plugins["reload-plugin"].manifest.path or tmp_path)
++    del home  # the entry-point path is not the config path
++    config_path = tmp_path / "hermes-home" / "config.yaml"
++    config_path.write_text(
++        yaml.safe_dump(
++            {"plugins": {"enabled": [], "disabled": ["reload-plugin"]}}
++        ),
++        encoding="utf-8",
++    )
++    manager.discover_and_load(force=True)
++
++    assert host.events == [
++        "install:reload",
++        "close:reload",
++        "install:reload",
++        "close:reload",
++    ]
++    assert manager._plugins["reload-plugin"].enabled is False
++    assert manager._plugins["reload-plugin"].error == "disabled via config"
++
++
++def test_force_reload_fails_closed_when_old_registration_cannot_close(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    host = _RecordingHost(close_failures={"reload": 1})
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "reload-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('reload'), spi_version=1)"
++            )
++        },
++    )
++    manager.discover_and_load()
++
++    manager.discover_and_load(force=True)
++
++    assert host.events == ["install:reload", "close:reload"]
++    assert manager._plugins["reload-plugin"].enabled is True
++    assert manager.pending_extension_shutdowns == frozenset({"reload-plugin"})
++
++    manager.discover_and_load(force=True)
++    assert host.events == [
++        "install:reload",
++        "close:reload",
++        "close:reload",
++        "install:reload",
++    ]
++
++
++def test_missing_host_wrong_version_and_missing_capability_fail_closed_per_plugin(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    source = _plugin_source(
++        "ctx.register_gateway_extension(Extension('never'), spi_version=1)"
++    )
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        None,
++        {"unavailable-plugin": source},
++    )
++    manager.discover_and_load()
++    assert manager._plugins["unavailable-plugin"].enabled is False
++    assert manager._plugins["unavailable-plugin"].error == (
++        "gateway extension host is unavailable"
++    )
++
++    version_context = PluginContext(
++        PluginManifest(name="wrong-version"),
++        PluginManager(
++            gateway_extension_host=_RecordingHost(),
++            gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++        ),
++    )
++    try:
++        version_context.register_gateway_extension(object(), spi_version=2)
++    except Exception as error:
++        assert str(error) == (
++            "gateway extension SPI version mismatch: expected 1, observed 2"
++        )
++    else:
++        raise AssertionError("wrong SPI version must fail closed")
++
++    capability_context = PluginContext(
++        PluginManifest(name="missing-capability"),
++        PluginManager(
++            gateway_extension_host=_RecordingHost(),
++            gateway_extension_capabilities={"extension.lifecycle.v1"},
++        ),
++    )
++    try:
++        capability_context.register_gateway_extension(object(), spi_version=1)
++    except Exception as error:
++        assert "gateway extension capabilities unavailable" in str(error)
++        assert "session.observe.v1" in str(error)
++    else:
++        raise AssertionError("missing context capability must fail closed")
++
++
++def test_capabilities_default_empty_and_reject_invalid_or_unknown_declarations() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(gateway_extension_host=host)
++    context = PluginContext(PluginManifest(name="default-empty"), manager)
++
++    assert context.gateway_extension_capabilities == frozenset()
++    with pytest.raises(HostSpiCapabilityError):
++        context.register_gateway_extension(object(), spi_version=1)
++
++    invalid_declarations = (
++        "extension.lifecycle.v1",
++        {"unknown.capability.v1"},
++        ["extension.lifecycle.v1", 7],
++    )
++    for declaration in invalid_declarations:
++        with pytest.raises((TypeError, ValueError)):
++            PluginManager(
++                gateway_extension_host=host,
++                gateway_extension_capabilities=declaration,  # type: ignore[arg-type]
++            )
++
++
++def test_concurrent_install_is_included_in_the_same_drain() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++    )
++    context = PluginContext(PluginManifest(name="concurrent"), manager)
++    install_started = threading.Event()
++    release_install = threading.Event()
++    drain_entered = threading.Event()
++    register_errors: list[BaseException] = []
++    drain_results: list[tuple] = []
++
++    class BlockingExtension:
++        def install(self, _host):
++            host.events.append("install:late-start")
++            install_started.set()
++            if not release_install.wait(timeout=5):
++                raise RuntimeError("test install release timed out")
++            host.events.append("install:late-finish")
++            return _CloseRegistration("late", host.events)
++
++    def register() -> None:
++        try:
++            context.register_gateway_extension(BlockingExtension(), spi_version=1)
++        except BaseException as error:
++            register_errors.append(error)
++
++    def drain() -> None:
++        drain_entered.set()
++        drain_results.append(manager.shutdown_extensions())
++
++    register_thread = threading.Thread(target=register)
++    drain_thread = threading.Thread(target=drain)
++    register_thread.start()
++    assert install_started.wait(timeout=5)
++    drain_thread.start()
++    assert drain_entered.wait(timeout=5)
++    release_install.set()
++    register_thread.join(timeout=5)
++    drain_thread.join(timeout=5)
++
++    assert not register_thread.is_alive()
++    assert not drain_thread.is_alive()
++    assert register_errors == []
++    assert drain_results == [()]
++    assert manager.pending_extension_shutdowns == frozenset()
++    assert host.events == [
++        "install:late-start",
++        "install:late-finish",
++        "close:late",
++    ]
++
++
++def test_install_is_rejected_while_drain_is_closing() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++    )
++    context = PluginContext(PluginManifest(name="closing-gate"), manager)
++    close_started = threading.Event()
++    release_close = threading.Event()
++    drain_results: list[tuple] = []
++
++    class BlockingRegistration:
++        def close(self) -> None:
++            host.events.append("close:first")
++            close_started.set()
++            if not release_close.wait(timeout=5):
++                raise RuntimeError("test close release timed out")
++
++    class FirstExtension:
++        def install(self, _host):
++            host.events.append("install:first")
++            return BlockingRegistration()
++
++    class LateExtension:
++        def install(self, _host):
++            host.events.append("install:late")
++            return _CloseRegistration("late", host.events)
++
++    context.register_gateway_extension(FirstExtension(), spi_version=1)
++    drain_thread = threading.Thread(
++        target=lambda: drain_results.append(manager.shutdown_extensions())
++    )
++    drain_thread.start()
++    assert close_started.wait(timeout=5)
++    observed: BaseException | None = None
++    try:
++        context.register_gateway_extension(LateExtension(), spi_version=1)
++    except BaseException as error:
++        observed = error
++    finally:
++        release_close.set()
++        drain_thread.join(timeout=5)
++
++    assert isinstance(observed, HostSpiUnavailableError)
++    assert not drain_thread.is_alive()
++    assert drain_results == [()]
++    assert manager.pending_extension_shutdowns == frozenset()
++    assert "install:late" not in host.events
++
++
++def test_same_thread_install_and_close_reentry_fail_closed_and_remain_retryable() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++    )
++    install_context = PluginContext(PluginManifest(name="install-reentry"), manager)
++
++    class ReentrantInstall:
++        def install(self, _host):
++            manager.shutdown_extensions()
++            return _CloseRegistration("never", host.events)
++
++    with pytest.raises(HostSpiRegistrationError):
++        install_context.register_gateway_extension(ReentrantInstall(), spi_version=1)
++    assert manager.pending_extension_shutdowns == frozenset()
++
++    close_context = PluginContext(PluginManifest(name="close-reentry"), manager)
++
++    class ReentrantRegistration:
++        def __init__(self) -> None:
++            self.reenter = True
++
++        def close(self) -> None:
++            host.events.append("close:reentrant")
++            if self.reenter:
++                self.reenter = False
++                manager.shutdown_extensions()
++
++    class ReentrantClose:
++        def install(self, _host):
++            return ReentrantRegistration()
++
++    close_context.register_gateway_extension(ReentrantClose(), spi_version=1)
++    first_failures = manager.shutdown_extensions()
++    assert len(first_failures) == 1
++    assert first_failures[0].plugin_key == "close-reentry"
++    assert manager.pending_extension_shutdowns == frozenset({"close-reentry"})
++
++    assert manager.shutdown_extensions() == ()
++    assert manager.pending_extension_shutdowns == frozenset()
++    assert host.events[-2:] == ["close:reentrant", "close:reentrant"]
++
++
++def test_plugin_base_exception_rolls_back_extension_and_is_rethrown_unchanged(
++    tmp_path: Path,
++    monkeypatch,
++) -> None:
++    fatal = KeyboardInterrupt("fatal-sentinel")
++    monkeypatch.setattr(builtins, "_stage1_fatal", fatal, raising=False)
++    host = _RecordingHost()
++    manager = _manager_with_entrypoints(
++        tmp_path,
++        monkeypatch,
++        host,
++        {
++            "fatal-plugin": _plugin_source(
++                "ctx.register_gateway_extension(Extension('fatal'), spi_version=1)\n"
++                "raise __import__('builtins')._stage1_fatal"
++            )
++        },
++    )
++
++    with pytest.raises(KeyboardInterrupt) as captured:
++        manager.discover_and_load()
++
++    assert captured.value is fatal
++    assert host.events == ["install:fatal", "close:fatal"]
++    assert manager.pending_extension_shutdowns == frozenset()
++
++
++def test_registration_validation_base_exception_releases_install_gate() -> None:
++    host = _RecordingHost()
++    manager = PluginManager(
++        gateway_extension_host=host,
++        gateway_extension_capabilities=GATEWAY_EXTENSION_CAPABILITIES_V1,
++    )
++    context = PluginContext(PluginManifest(name="validation-fatal"), manager)
++    fatal = KeyboardInterrupt("registration-validation-fatal")
++
++    class ExplosiveRegistration:
++        @property
++        def close(self):
++            raise fatal
++
++    class Extension:
++        def install(self, _host):
++            return ExplosiveRegistration()
++
++    with pytest.raises(KeyboardInterrupt) as captured:
++        context.register_gateway_extension(Extension(), spi_version=1)
++
++    assert captured.value is fatal
++    assert manager.shutdown_extensions() == ()
++    assert manager.pending_extension_shutdowns == frozenset()

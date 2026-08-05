@@ -1,0 +1,26 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "subscription_id": "subscription-1",
+    "session_key": "session-root-1",
+    "runtime_session_id": "runtime-session-1",
+    "running": true,
+    "status": "running",
+    "event_sequence": 4,
+    "snapshot_event_sequence": 4,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Fixture snapshot"
+      }
+    ],
+    "inflight": {
+      "user": null,
+      "assistant": null,
+      "streaming": false,
+      "error": null
+    },
+    "replay_events": []
+  }
+}

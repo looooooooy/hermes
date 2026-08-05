@@ -1,0 +1,135 @@
+{
+  "$id": "https://contracts.hermes.local/cloud/payloads/session-catalog-ack-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "not": {
+        "required": [
+          "catalog_sequence"
+        ]
+      },
+      "properties": {
+        "ack_kind": {
+          "const": "snapshot_committed"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "catalog_revision",
+        "page_index",
+        "is_last"
+      ]
+    },
+    {
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "snapshot_id"
+            ]
+          },
+          {
+            "required": [
+              "catalog_revision"
+            ]
+          },
+          {
+            "required": [
+              "page_index"
+            ]
+          },
+          {
+            "required": [
+              "is_last"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "ack_kind": {
+          "const": "event_applied"
+        }
+      },
+      "required": [
+        "catalog_sequence"
+      ]
+    }
+  ],
+  "properties": {
+    "ack_kind": {
+      "enum": [
+        "snapshot_committed",
+        "event_applied"
+      ]
+    },
+    "acked_connector_sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "acked_message_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "acked_payload_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "catalog_revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "catalog_sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "is_last": {
+      "const": true
+    },
+    "page_index": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "runtime_generation": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "snapshot_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile",
+    "runtime_generation",
+    "acked_message_id",
+    "acked_payload_digest",
+    "acked_connector_sequence",
+    "ack_kind"
+  ],
+  "title": "Hermes Session Catalog business ACK v1",
+  "type": "object"
+}

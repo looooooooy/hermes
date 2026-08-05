@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/public/session-event-v2.schema.json",
+  "title": "Hermes Public Session Event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "observer_contract",
+    "profile",
+    "runtime_generation",
+    "session_id",
+    "type",
+    "event_sequence",
+    "payload"
+  ],
+  "properties": {
+    "observer_contract": {
+      "const": 2
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^(?![\\s\\S]*[^A-Za-z0-9_.-])[A-Za-z0-9_.-]+$"
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "type": {
+      "enum": [
+        "message.start",
+        "message.delta",
+        "message.complete",
+        "agent.terminal.output",
+        "reasoning.delta",
+        "status.update",
+        "thinking.delta",
+        "tool.output.delta",
+        "todo.update",
+        "subagent.update",
+        "tool.update",
+        "terminal.update"
+      ]
+    },
+    "event_sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "event_sequence_start": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 1024
+    },
+    "extensions": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "message.start"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/messageStart"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "message.delta",
+              "reasoning.delta",
+              "thinking.delta"
+            ]
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/textDelta"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "message.complete"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/messageComplete"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "agent.terminal.output"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/terminalOutput"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "status.update"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/statusUpdate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.output.delta"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/toolOutput"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "todo.update"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/todoUpsert"
+              },
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/todoDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "subagent.update"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/subagentUpsert"
+              },
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/subagentDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.update"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/toolUpsert"
+              },
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/toolDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "terminal.update"
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "oneOf": [
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/terminalUpsert"
+              },
+              {
+                "$ref": "https://contracts.hermes.local/cloud/payloads/session-event-v2.schema.json#/$defs/terminalDelete"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "message.start",
+              "message.complete",
+              "todo.update",
+              "subagent.update",
+              "tool.update",
+              "terminal.update"
+            ]
+          }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "not": {
+          "required": ["event_sequence_start"]
+        }
+      }
+    }
+  ]
+}

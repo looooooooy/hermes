@@ -1,0 +1,176 @@
+{
+  "base_observer_contract": 1,
+  "capability": "session.observe.output-parity.v1",
+  "contract": "observer-output-parity",
+  "dedupe": {
+    "entity_revision": "exactly_previous_plus_one",
+    "same_identity_different_digest": "conflict",
+    "same_identity_same_digest": "idempotent",
+    "stale_revision": "reject_then_resnapshot",
+    "transport_identity": [
+      "runtime_generation",
+      "runtime_session_id",
+      "event_sequence"
+    ]
+  },
+  "delete": {
+    "requires_existing_entity": true,
+    "requires_terminal": true,
+    "snapshot_omission": "authoritative_delete",
+    "subagent_requires_leaf": true,
+    "tombstone_retention": "until_next_authoritative_snapshot"
+  },
+  "entity_identity": {
+    "subagent": [
+      "turn_id",
+      "subagent_id"
+    ],
+    "terminal": [
+      "turn_id",
+      "process_id"
+    ],
+    "todo": [
+      "turn_id",
+      "section_id"
+    ],
+    "tool": [
+      "turn_id",
+      "tool_call_id"
+    ]
+  },
+  "event_constraints": {
+    "event_sequence_start": "mergeable_base_events_only",
+    "first_event_sequence": "less_than_or_equal_to_event_sequence",
+    "initial_revision": 1,
+    "progress": "current_less_than_or_equal_to_total",
+    "terminal_exit_code": {
+      "completed": "required_zero",
+      "failed": "required_nonzero",
+      "running_interrupted_unknown": "omitted"
+    },
+    "todo_item_ids": "unique_within_section"
+  },
+  "event_types": [
+    "message.start",
+    "message.delta",
+    "message.complete",
+    "agent.terminal.output",
+    "reasoning.delta",
+    "status.update",
+    "thinking.delta",
+    "tool.output.delta",
+    "todo.update",
+    "subagent.update",
+    "tool.update",
+    "terminal.update"
+  ],
+  "limits": {
+    "max_array_items": 1024,
+    "max_display_text_code_points": 4096,
+    "max_frame_bytes": 262144,
+    "max_id_code_points": 256,
+    "max_name_code_points": 160,
+    "max_nesting_depth": 32,
+    "max_object_fields": 1024,
+    "max_safe_integer": 9007199254740991,
+    "max_subagents": 128,
+    "max_terminals": 128,
+    "max_todo_items_per_section": 256,
+    "max_todo_sections": 64,
+    "max_tools": 128
+  },
+  "negotiation": {
+    "activation": "both_host_and_cloud_accept",
+    "cloud_selection": "accepted_capabilities",
+    "connector_offer": "required_capabilities_or_optional_capabilities",
+    "midstream_change": "close_then_renegotiate",
+    "unavailable": "v1_only"
+  },
+  "non_mergeable_lifecycle_event_types": [
+    "todo.update",
+    "subagent.update",
+    "tool.update",
+    "terminal.update"
+  ],
+  "ordering": {
+    "existing_todo_items": "retain_order",
+    "new_todo_items": "append",
+    "stable_projection": [
+      "first_event_sequence",
+      "entity_id"
+    ],
+    "todo_items": "authoritative_array_order",
+    "transport": "event_sequence"
+  },
+  "runtime_rollover": "discard_then_resnapshot",
+  "safe_defaults": {
+    "optional_metadata": "omit",
+    "subagent_goal": "",
+    "subagent_name": "Subagent",
+    "todo_label": "Task"
+  },
+  "security": {
+    "credentials": "forbidden",
+    "display_safe_text_only": true,
+    "full_approval_payload": "forbidden",
+    "logs": "identity_revision_sequence_digest_only",
+    "raw_args": "forbidden",
+    "raw_reasoning": "forbidden",
+    "raw_terminal_output": "forbidden",
+    "raw_tool_output": "forbidden",
+    "token_counts": "nonnegative_aggregate_only",
+    "token_values": "forbidden",
+    "unsafe_required_text": "use_safe_default_not_raw_fallback"
+  },
+  "snapshot": {
+    "collections": [
+      "todo_sections",
+      "subagents",
+      "tools",
+      "terminals"
+    ],
+    "install": "atomic_replace",
+    "invalid_projection": "reject_whole_snapshot",
+    "replay_ends_at": "event_sequence",
+    "replay_item_schema": "schemas/cloud/payloads/session-event-v2.schema.json",
+    "replay_starts_at": "snapshot_event_sequence + 1"
+  },
+  "subagent_tree": {
+    "array_order": "irrelevant",
+    "cycle": "reject",
+    "identity_scope": [
+      "turn_id",
+      "subagent_id"
+    ],
+    "live_parent_requirement": "already_present",
+    "max_depth": 8,
+    "max_nodes": 128,
+    "orphan": "reject",
+    "parent_order_in_snapshot": "irrelevant",
+    "parent_turn": "same_turn",
+    "self_parent": "reject"
+  },
+  "terminal_statuses": {
+    "rule": "absorbing_status_higher_revision_may_only_enrich_safe_metadata",
+    "subagent": [
+      "completed",
+      "failed",
+      "interrupted"
+    ],
+    "terminal": [
+      "completed",
+      "failed",
+      "interrupted"
+    ],
+    "todo_item": [
+      "completed",
+      "cancelled"
+    ],
+    "tool": [
+      "completed",
+      "failed",
+      "interrupted"
+    ]
+  },
+  "version": 2
+}

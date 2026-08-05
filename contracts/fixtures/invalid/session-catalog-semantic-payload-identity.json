@@ -1,0 +1,6 @@
+{
+  "contract": "session-catalog-semantic-v1",
+  "initial_state": {"profile": "default", "current_writer_id": "connector-a", "current_writer_fence": 3, "active_runtime_generation": "runtime-a", "catalog_sequence": 0},
+  "operations": [{"op": "event", "writer_id": "connector-a", "writer_fence": 3, "profile": "default", "runtime_generation": "runtime-a", "catalog_sequence": 1, "action": "upsert", "entry": {"session_key": "root-a", "authority_revision": 1, "metadata": {"agent_id": "self-asserted"}}}],
+  "expected_errors": ["self_asserted_identity"]
+}

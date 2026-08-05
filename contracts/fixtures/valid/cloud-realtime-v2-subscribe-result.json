@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "observer_contract": 2,
+    "subscription_id": "subscription-1",
+    "profile": "default",
+    "runtime_generation": "runtime-20260801-01",
+    "session_id": "88888888-8888-4888-8888-888888888888",
+    "running": true,
+    "status": "running",
+    "event_sequence": 4,
+    "snapshot_event_sequence": 4,
+    "messages": [{"role": "assistant", "content": "Display-safe snapshot"}],
+    "inflight": {"user": null, "assistant": null, "streaming": false, "error": null},
+    "todo_sections": [{"turn_id": "turn-1", "section_id": "todo-1", "revision": 1, "first_event_sequence": 1, "status": "in_progress", "items": [{"id": "todo-item-1", "label": "Run focused tests", "status": "in_progress"}]}],
+    "subagents": [{"turn_id": "turn-1", "subagent_id": "subagent-1", "revision": 1, "first_event_sequence": 2, "parent_subagent_id": null, "name": "Test runner", "goal": "Run checks", "summary": null, "status": "running"}],
+    "tools": [{"turn_id": "turn-1", "tool_call_id": "tool-1", "revision": 1, "first_event_sequence": 3, "status": "running", "name": "Contract tests"}],
+    "terminals": [{"turn_id": "turn-1", "process_id": "process-1", "revision": 1, "first_event_sequence": 4, "status": "running"}],
+    "replay_events": []
+  }
+}

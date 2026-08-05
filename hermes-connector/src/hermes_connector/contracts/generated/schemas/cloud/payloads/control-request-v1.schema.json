@@ -1,0 +1,578 @@
+{
+  "$defs": {
+    "acquire_body": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "type": "object"
+    },
+    "approval_body": {
+      "additionalProperties": false,
+      "properties": {
+        "choice": {
+          "enum": [
+            "allow_once",
+            "allow_session",
+            "allow_always",
+            "deny"
+          ]
+        },
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "required": [
+        "lease_id",
+        "client_request_id",
+        "request_id",
+        "choice"
+      ],
+      "type": "object"
+    },
+    "canonical_uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "clarify_body": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "choice_id"
+          ]
+        },
+        {
+          "required": [
+            "other_text"
+          ]
+        }
+      ],
+      "properties": {
+        "choice_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "other_text": {
+          "$ref": "#/$defs/nonblank_text"
+        },
+        "request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "required": [
+        "lease_id",
+        "client_request_id",
+        "request_id"
+      ],
+      "type": "object"
+    },
+    "command_status_body": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "method": {
+          "enum": [
+            "prompt.submit",
+            "session.interrupt",
+            "session.steer",
+            "approval.respond",
+            "clarify.respond"
+          ]
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "required": [
+        "method",
+        "client_request_id"
+      ],
+      "type": "object"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "type": "object"
+      },
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9][a-z0-9-]*)+$"
+      },
+      "type": "object"
+    },
+    "lease_body": {
+      "additionalProperties": false,
+      "properties": {
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "required": [
+        "lease_id"
+      ],
+      "type": "object"
+    },
+    "lease_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "leased_command_body": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "required": [
+        "lease_id",
+        "client_request_id"
+      ],
+      "type": "object"
+    },
+    "nonblank_text": {
+      "maxLength": 131072,
+      "minLength": 1,
+      "pattern": "\\S",
+      "type": "string"
+    },
+    "profile": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "type": "string"
+    },
+    "prompt_body": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "client_turn_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        },
+        "text": {
+          "$ref": "#/$defs/nonblank_text"
+        }
+      },
+      "required": [
+        "lease_id",
+        "client_request_id",
+        "client_turn_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "request_identifier": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "runtime_identifier": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_key": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+    },
+    "status_body": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        }
+      },
+      "type": "object"
+    },
+    "steer_body": {
+      "additionalProperties": false,
+      "properties": {
+        "client_request_id": {
+          "$ref": "#/$defs/request_identifier"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/lease_id"
+        },
+        "runtime_session_id": {
+          "$ref": "#/$defs/runtime_identifier"
+        },
+        "text": {
+          "$ref": "#/$defs/nonblank_text"
+        }
+      },
+      "required": [
+        "lease_id",
+        "client_request_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "transport_close_body": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "client_requested",
+            "client_disconnected",
+            "gateway_shutdown",
+            "protocol_error"
+          ]
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "transport_open_body": {
+      "additionalProperties": false,
+      "properties": {
+        "client_instance_id": {
+          "$ref": "#/$defs/canonical_uuid"
+        },
+        "principal_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "profile": {
+          "$ref": "#/$defs/profile"
+        },
+        "session_key": {
+          "$ref": "#/$defs/session_key"
+        }
+      },
+      "required": [
+        "principal_id",
+        "client_instance_id",
+        "session_key",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "utc_instant": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    }
+  },
+  "$id": "https://contracts.hermes.local/v1/cloud/payloads/control-request.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "control.transport.open"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/transport_open_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.acquire"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/acquire_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.renew"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/lease_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.release"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/lease_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.control.status"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/status_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.command.status"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/command_status_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "prompt.submit"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/prompt_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.interrupt"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/leased_command_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "session.steer"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/steer_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "approval.respond"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/approval_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "clarify.respond"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/clarify_body"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "control.transport.close"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/transport_close_body"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "body": {
+      "type": "object"
+    },
+    "control_transport_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    },
+    "expires_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    },
+    "issued_at": {
+      "$ref": "#/$defs/utc_instant"
+    },
+    "operation": {
+      "enum": [
+        "control.transport.open",
+        "session.control.acquire",
+        "session.control.renew",
+        "session.control.release",
+        "session.control.status",
+        "session.command.status",
+        "prompt.submit",
+        "session.interrupt",
+        "session.steer",
+        "approval.respond",
+        "clarify.respond",
+        "control.transport.close"
+      ]
+    },
+    "request_id": {
+      "$ref": "#/$defs/canonical_uuid"
+    }
+  },
+  "required": [
+    "request_id",
+    "control_transport_id",
+    "operation",
+    "issued_at",
+    "expires_at",
+    "body"
+  ],
+  "title": "Hermes Owner Control Request Payload v1",
+  "type": "object"
+}

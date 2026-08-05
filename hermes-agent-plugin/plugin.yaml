@@ -1,0 +1,25 @@
+name: hermes-agent-plugin
+version: 0.1.0
+description: Hermes Agent extension for observer and explicit-control connections.
+entry_point: hermes_agent_plugin:register
+requires_host_spi: "gateway-extension/1"
+known_incompatible_hermes: ">=0.19,<0.21"
+hermes_agent_plugin:
+  control_contract: contracts/generated/mobile-control-v1.json
+  observer_output_parity_contract: contracts/generated/observer-output-parity-v2.json
+  observer_event_schema: contracts/generated/schemas/cloud/payloads/session-event-v2.schema.json
+  observer_snapshot_schema: contracts/generated/schemas/cloud/payloads/session-snapshot-v2.schema.json
+  session_catalog_contract: contracts/generated/session-catalog-v1.json
+  session_catalog_rpc_schema: contracts/generated/schemas/local/session-catalog-rpc-v1.schema.json
+  session_catalog_entry_schema: contracts/generated/schemas/session-catalog-entry-v1.schema.json
+  local_gateway_paths:
+    require_distinct_directories: true
+    local_gateway_registry_directory: HERMES_LOCAL_GATEWAY_REGISTRY_DIR
+    local_gateway_socket_directory: HERMES_LOCAL_GATEWAY_SOCKET_DIR
+    control_registry_directory: HERMES_CONTROL_REGISTRY_DIR
+    control_socket_directory: HERMES_CONTROL_SOCKET_DIR
+    observer_registry_directory: HERMES_OBSERVER_REGISTRY_DIR
+    observer_socket_directory: HERMES_OBSERVER_SOCKET_DIR
+  connection_roles:
+    - observer
+    - control

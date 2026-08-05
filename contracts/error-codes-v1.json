@@ -1,0 +1,55 @@
+{
+  "contract_version": 1,
+  "errors": [
+    {
+      "code": 4300,
+      "name": "contract_unsupported",
+      "retryable": false
+    },
+    {
+      "code": 4301,
+      "name": "invalid_envelope",
+      "retryable": false
+    },
+    {
+      "code": 4302,
+      "name": "frame_too_large",
+      "retryable": false
+    },
+    {
+      "code": 4303,
+      "name": "invalid_utf8",
+      "retryable": false
+    },
+    {
+      "code": 4304,
+      "name": "capability_not_available",
+      "retryable": false
+    },
+    {
+      "code": 4305,
+      "name": "overloaded",
+      "retryable": true
+    },
+    {
+      "code": 4306,
+      "name": "deadline_exceeded_before_effect",
+      "retryable": true
+    },
+    {
+      "code": 4307,
+      "name": "effect_unknown",
+      "retryable": false
+    },
+    {
+      "code": 4308,
+      "name": "idempotency_conflict",
+      "retryable": false
+    },
+    {
+      "code": 4309,
+      "name": "authorization_denied",
+      "retryable": false
+    }
+  ]
+}

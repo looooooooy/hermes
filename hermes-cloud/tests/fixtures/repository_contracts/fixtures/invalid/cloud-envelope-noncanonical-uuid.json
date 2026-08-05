@@ -1,0 +1,10 @@
+{
+  "contract_version": 1,
+  "message_id": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+  "message_type": "connector.hello",
+  "tenant_id": "tenant-test",
+  "device_id": "device-test",
+  "sequence": 0,
+  "sent_at": "2026-07-30T00:00:00Z",
+  "payload": {}
+}
