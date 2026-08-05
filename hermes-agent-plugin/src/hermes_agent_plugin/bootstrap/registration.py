@@ -31,8 +31,12 @@ class HermesHostCompatibilityError(RuntimeError):
     """Raised when Hermes does not expose the required public Host SPI."""
 
 
-def register(context: Any) -> None:
-    """Register the process-level extension with Hermes Agent."""
+def register(context: Any) -> HermesAgentPluginExtension:
+    """Register the process-level extension with Hermes Agent.
+
+    The extension instance is returned so the runtime binding layer can expose
+    health and lifecycle state without reaching into Hermes Agent internals.
+    """
     validation = validate_host_context(context)
     if not validation.compatible:
         if validation.missing_required_capabilities:
@@ -52,13 +56,15 @@ def register(context: Any) -> None:
             PUBLIC_HOST_CONTRACT_UNAVAILABLE_MESSAGE
         ) from error
     endpoint_opener = configure_platform_adapters()
+    extension = HermesAgentPluginExtension(
+        host_spi_factories=host_spi_factories,
+        endpoint_opener=endpoint_opener,
+    )
     register_extension(
-        HermesAgentPluginExtension(
-            host_spi_factories=host_spi_factories,
-            endpoint_opener=endpoint_opener,
-        ),
+        extension,
         spi_version=HOST_SPI_VERSION,
     )
+    return extension
 
 
 __all__ = [
