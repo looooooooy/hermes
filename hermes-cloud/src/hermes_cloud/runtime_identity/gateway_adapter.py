@@ -33,8 +33,10 @@ class RuntimeIdentityGatewayAdapter:
         self,
         payload: Mapping[str, Any],
     ) -> RuntimeBindingResponse:
-        handshake = RuntimeHandshake.from_mapping(payload)
-        result = self._service.verify_and_register(handshake)
+        handshake = RuntimeHandshake.from_payload(payload)
+        result = self._service.verify_and_register(
+            handshake.as_identity_payload()
+        )
         return RuntimeBindingResponse(
             status="active" if result.accepted else "rejected",
             runtime_id=handshake.runtime_id,
