@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from .apply_and_verify import PatchBundleError
-from .generate_stage3_stabilization_patch import generate
+from .generate_stage3_stabilization_patch import GeneratedStabilization, generate
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -19,9 +19,22 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_generated(generated: GeneratedStabilization) -> None:
+    print("--- BEGIN GENERATED STABILIZATION PATCH ---")
+    print(generated.patch, end="" if generated.patch.endswith("\n") else "\n")
+    print("--- END GENERATED STABILIZATION PATCH ---")
+    print(
+        json.dumps(
+            {"source_provenance": generated.source_provenance},
+            sort_keys=True,
+        )
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     bundle_root = Path(__file__).resolve().parent.parent
+    generated: GeneratedStabilization | None = None
     try:
         generated = generate(bundle_root, args.source.resolve())
         patch_path = bundle_root / "patches/0004-stage3-stabilization.patch"
@@ -48,6 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         tarfile.TarError,
         PatchBundleError,
     ) as error:
+        if generated is not None:
+            _print_generated(generated)
         print(json.dumps({"error": str(error), "ok": False}, sort_keys=True))
         return 2
 
