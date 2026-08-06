@@ -116,7 +116,12 @@ jobs:
               stage=bundle.stage,
               final_patch_digest=patches[-1].sha256,
           )
-          root = Path(tempfile.mkdtemp(prefix="artifact-diagnostic-"))
+          root = Path(
+              tempfile.mkdtemp(
+                  prefix="artifact-diagnostic-",
+                  dir=bundle.root.parent,
+              )
+          ).resolve(strict=True)
           try:
               build_root = _prepare_build_tree(
                   bundle,
