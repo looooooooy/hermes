@@ -50,6 +50,7 @@ jobs:
         run: |
           python -m ruff check \
             "$BUNDLE_ROOT/tools/rebuild_locked_artifacts.py" \
+            "$BUNDLE_ROOT/tools/rebuild_locked_artifacts_verbose.py" \
             "$BUNDLE_ROOT/tests/test_rebuild_locked_artifacts.py" \
             hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py
       - name: Test artifact rebuild gate
@@ -76,7 +77,7 @@ jobs:
       - name: Rebuild locked Core artifacts
         run: |
           cd "$BUNDLE_ROOT"
-          PYTHONPATH=. python -m tools.rebuild_locked_artifacts \
+          PYTHONPATH=. python -m tools.rebuild_locked_artifacts_verbose \
             --source "$RUNNER_TEMP/hermes-agent-upstream"
       - name: Verify bundle tooling and retained artifact contracts
         run: |
