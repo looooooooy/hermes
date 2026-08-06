@@ -45,7 +45,7 @@ jobs:
             pytest==8.4.2 \
             ruff==0.16.1 \
             uv==0.12.0
-          test "$(uv --version)" = "uv 0.12.0"
+          uv --version | grep -E '^uv 0\.12\.0([[:space:]]|$)'
       - name: Lint rebuild and wheel contract gates
         run: |
           python -m ruff check \
