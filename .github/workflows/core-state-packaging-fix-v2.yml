@@ -67,8 +67,13 @@ jobs:
           generated = generate(bundle_root, upstream)
           if "diff --git a/pyproject.toml b/pyproject.toml" not in generated.patch:
               raise SystemExit("generated stabilization does not patch pyproject.toml")
-          if "pyproject.toml" not in generated.source_provenance:
-              raise SystemExit("generated stabilization omits pyproject provenance")
+          generated_sources = dict(generated.source_provenance)
+          try:
+              pyproject_digest = generated_sources.pop("pyproject.toml")
+          except KeyError as error:
+              raise SystemExit(
+                  "generated stabilization omits pyproject provenance"
+              ) from error
           patch_path.write_text(generated.patch, encoding="utf-8")
           patch_digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
 
@@ -79,12 +84,22 @@ jobs:
           sources = {
               item["path"]: item["sha256"]
               for item in provenance["source_files"]
+              if item["path"] != "pyproject.toml"
           }
-          sources.update(generated.source_provenance)
+          sources.update(generated_sources)
           provenance["source_files"] = [
               {"path": path, "sha256": digest}
               for path, digest in sorted(sources.items())
           ]
+          lock["artifact_build_provenance"] = {
+              "schema_version": 1,
+              "source_files": [
+                  {
+                      "path": "pyproject.toml",
+                      "sha256": pyproject_digest,
+                  }
+              ],
+          }
           lock_path.write_text(
               json.dumps(lock, indent=2) + "\n",
               encoding="utf-8",
