@@ -31,10 +31,6 @@ def _indent(line: str) -> str:
     return line[: len(line) - len(line.lstrip(" "))]
 
 
-def _is_name(node: ast.AST, value: str) -> bool:
-    return isinstance(node, ast.Name) and node.id == value
-
-
 def _is_attribute(node: ast.AST, value: str) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == value
 
@@ -51,26 +47,48 @@ def _replace_node(
     return "".join(lines)
 
 
-def _plugin_shutdown_assignment(tree: ast.AST) -> ast.Assign | None:
-    for node in ast.walk(tree):
+def _assignment_target(node: ast.AST) -> ast.AST | None:
+    if isinstance(node, ast.Assign) and len(node.targets) == 1:
+        return node.targets[0]
+    if isinstance(node, ast.AnnAssign):
+        return node.target
+    return None
+
+
+def _assignment_value(node: ast.AST) -> ast.AST | None:
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        return node.value
+    return None
+
+
+def _plugin_shutdown_assignment(tree: ast.AST) -> ast.AST | None:
+    shutdown = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "shutdown_extensions"
+        ),
+        None,
+    )
+    if shutdown is None:
+        return None
+    matches: list[ast.AST] = []
+    for node in ast.walk(shutdown):
+        target = _assignment_target(node)
+        value = _assignment_value(node)
         if (
-            not isinstance(node, ast.Assign)
-            or len(node.targets) != 1
-            or not _is_name(node.targets[0], "keys")
-            or not isinstance(node.value, ast.Call)
-            or not _is_name(node.value.func, "list")
-            or len(node.value.args) != 1
+            not isinstance(target, ast.Name)
+            or target.id != "keys"
+            or value is None
         ):
             continue
-        reversed_call = node.value.args[0]
-        if (
-            isinstance(reversed_call, ast.Call)
-            and _is_name(reversed_call.func, "reversed")
-            and len(reversed_call.args) == 1
-            and _is_attribute(reversed_call.args[0], "_extension_registrations")
+        if any(
+            _is_attribute(child, "_extension_registrations")
+            for child in ast.walk(value)
         ):
-            return node
-    return None
+            matches.append(node)
+    return matches[0] if len(matches) == 1 else None
 
 
 def _stabilize_plugins(path: Path) -> None:
