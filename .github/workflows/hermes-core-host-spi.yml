@@ -9,12 +9,18 @@ on:
       - "upstream/hermes-core-host-spi-v1/**"
       - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/**"
       - "hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py"
+      - "hermes-connector/src/hermes_connector/__init__.py"
+      - "hermes-connector/src/hermes_connector/application/__init__.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/__init__.py"
       - ".github/workflows/hermes-core-host-spi.yml"
   pull_request:
     paths:
       - "upstream/hermes-core-host-spi-v1/**"
       - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/**"
       - "hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py"
+      - "hermes-connector/src/hermes_connector/__init__.py"
+      - "hermes-connector/src/hermes_connector/application/__init__.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/__init__.py"
       - ".github/workflows/hermes-core-host-spi.yml"
 
 permissions:
@@ -54,7 +60,10 @@ jobs:
             "$BUNDLE_ROOT/tools/rebuild_locked_artifacts.py" \
             "$BUNDLE_ROOT/tools/rebuild_locked_artifacts_verbose.py" \
             "$BUNDLE_ROOT/tests/test_rebuild_locked_artifacts.py" \
-            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py
+            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py \
+            hermes-connector/src/hermes_connector/__init__.py \
+            hermes-connector/src/hermes_connector/application/__init__.py \
+            hermes-connector/src/hermes_connector/bootstrap/__init__.py
       - name: Test artifact rebuild gate
         run: |
           cd "$BUNDLE_ROOT"

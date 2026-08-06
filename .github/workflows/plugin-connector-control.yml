@@ -50,10 +50,17 @@ jobs:
             pytest==8.4.2 \
             pytest-asyncio==1.1.0 \
             ruff==0.16.1
-      - name: Lint new integration test
-        run: python -m ruff check tests/e2e/test_plugin_connector_owner_action_flow.py
-      - name: Test real Plugin Connector control path
+      - name: Lint control and package boundaries
+        run: |
+          python -m ruff check \
+            hermes-connector/src/hermes_connector/__init__.py \
+            hermes-connector/src/hermes_connector/application/__init__.py \
+            hermes-connector/src/hermes_connector/bootstrap/__init__.py \
+            hermes-connector/tests/unit/architecture/test_lazy_package_exports.py \
+            tests/e2e/test_plugin_connector_owner_action_flow.py
+      - name: Test package boundary and real control path
         run: |
           python -m pytest -q \
+            hermes-connector/tests/unit/architecture/test_lazy_package_exports.py \
             tests/e2e/test_plugin_connector_owner_control.py \
             tests/e2e/test_plugin_connector_owner_action_flow.py
