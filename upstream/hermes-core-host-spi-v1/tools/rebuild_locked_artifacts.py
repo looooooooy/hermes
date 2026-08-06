@@ -288,15 +288,14 @@ def _canonicalize_sdist(generated: Path, *, source_date_epoch: int) -> None:
     try:
         with gzip.open(source, "rb") as compressed:
             tar_payload = compressed.read()
-        with temporary.open("wb") as raw_output:
-            with gzip.GzipFile(
-                filename="",
-                mode="wb",
-                compresslevel=9,
-                fileobj=raw_output,
-                mtime=source_date_epoch,
-            ) as canonical:
-                canonical.write(tar_payload)
+        with temporary.open("wb") as raw_output, gzip.GzipFile(
+            filename="",
+            mode="wb",
+            compresslevel=9,
+            fileobj=raw_output,
+            mtime=source_date_epoch,
+        ) as canonical:
+            canonical.write(tar_payload)
         temporary.replace(source)
     except (EOFError, gzip.BadGzipFile, OSError) as error:
         raise PatchBundleError("artifact sdist canonicalization failed") from error
