@@ -22,7 +22,7 @@
     },
     {
       "path": "patches/0004-stage3-stabilization.patch",
-      "sha256": "3369ae9f2890c8962a8c196163d9cc7331f0e56d4a3558ba92ff5aaa7d5f7d28"
+      "sha256": "1deea315d478da9ad20a618bdd3be87df6dc17f58561dec15bd76b0f934b1ed5"
     }
   ],
   "artifacts": [
@@ -37,7 +37,7 @@
   ],
   "artifact_provenance": {
     "schema_version": 1,
-    "stage3_patch_sha256": "3369ae9f2890c8962a8c196163d9cc7331f0e56d4a3558ba92ff5aaa7d5f7d28",
+    "stage3_patch_sha256": "1deea315d478da9ad20a618bdd3be87df6dc17f58561dec15bd76b0f934b1ed5",
     "source_files": [
       {
         "path": "gateway/run.py",
