@@ -1,10 +1,21 @@
 diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
+index 713b3bc7d50a8de7f60a09dad9a6a93d9294ed91..29475062a478af15219202afa08e4708a16b1436 100644
 --- a/hermes_cli/plugins.py
 +++ b/hermes_cli/plugins.py
-@@ -1730,4 +1730,14 @@ class PluginManager:
+@@ -1689,16 +1689,16 @@ class PluginManager:
+                 self._extension_closing_thread = current_thread
                  while self._extension_active_installs:
                      self._extension_condition.wait()
--                keys = list(reversed(self._extension_registrations))
+-                keys = list(
+-                    reversed(
+-                        dict.fromkeys(
+-                            [
+-                                *self._extension_registrations,
+-                                *self._loaded_plugin_store_keys,
+-                                *self._active_plugin_store_keys,
+-                            ]
+-                        )
+-                    )
 +                registered_keys = set(self._extension_registrations)
 +                keys = [
 +                    key
@@ -15,12 +26,14 @@ diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
 +                    key
 +                    for key in reversed(self._extension_registrations)
 +                    if key not in self._plugins
-+                )
+                 )
              else:
+                 if current_thread in self._extension_install_threads.get(
 diff --git a/tools/process_registry.py b/tools/process_registry.py
+index 0dfa331a37177ea52d3ff2d3ed2b09483366ffcb..45f4a665e8fcf813f7518c06ec1db38a14c5bb03 100644
 --- a/tools/process_registry.py
 +++ b/tools/process_registry.py
-@@ -650,11 +650,16 @@ class ProcessRegistry:
+@@ -700,14 +700,20 @@ class ProcessRegistry:
          except (OSError, PermissionError):
              try:
                  os.kill(pid, signal.SIGTERM)
@@ -41,3 +54,6 @@ diff --git a/tools/process_registry.py b/tools/process_registry.py
                  time.sleep(0.05)
 -            return cls._host_pid_identity(pid, expected_start) == "gone_or_reused"
 +            return False
+ 
+         # Snapshot the whole tree (children before parent) and SIGTERM each.
+         try:
