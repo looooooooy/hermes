@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import gzip
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -12,7 +14,7 @@ import tarfile
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .apply_and_verify import PatchBundle, PatchBundleError
 
@@ -27,6 +29,8 @@ _EXPECTED_BUILD_COMMAND = (
     "--no-create-gitignore",
 )
 _EXPECTED_BUILD_ENVIRONMENT = {"HERMES_NIX_BUILD": "1"}
+_MAX_SDIST_MEMBERS = 20_000
+_MAX_SDIST_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -279,6 +283,89 @@ def _verify_source_provenance(
             raise PatchBundleError("patched source provenance mismatch")
 
 
+def _safe_sdist_member_name(value: str) -> str:
+    if not value or "\\" in value or "\x00" in value:
+        raise PatchBundleError("artifact sdist member path is invalid")
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts or value.startswith("./"):
+        raise PatchBundleError("artifact sdist member path is invalid")
+    normalized = path.as_posix()
+    if normalized in {"", "."}:
+        raise PatchBundleError("artifact sdist member path is invalid")
+    return normalized
+
+
+def _safe_sdist_link_name(value: str) -> str:
+    if not value:
+        return ""
+    if "\\" in value or "\x00" in value:
+        raise PatchBundleError("artifact sdist link path is invalid")
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise PatchBundleError("artifact sdist link path is invalid")
+    return path.as_posix()
+
+
+def _canonical_tar_payload(source: Path, *, source_date_epoch: int) -> bytes:
+    output = io.BytesIO()
+    try:
+        with tarfile.open(source, mode="r:gz") as archive:
+            members = archive.getmembers()
+            if not 1 <= len(members) <= _MAX_SDIST_MEMBERS:
+                raise PatchBundleError("artifact sdist member count is invalid")
+            seen: set[str] = set()
+            normalized: list[tuple[str, tarfile.TarInfo]] = []
+            total_size = 0
+            for member in members:
+                name = _safe_sdist_member_name(member.name)
+                if name in seen:
+                    raise PatchBundleError("artifact sdist member path is duplicated")
+                seen.add(name)
+                if not (
+                    member.isfile()
+                    or member.isdir()
+                    or member.issym()
+                    or member.islnk()
+                ):
+                    raise PatchBundleError("artifact sdist member type is unsupported")
+                if member.isfile():
+                    total_size += member.size
+                    if total_size > _MAX_SDIST_UNCOMPRESSED_BYTES:
+                        raise PatchBundleError("artifact sdist content is too large")
+                normalized.append((name, member))
+
+            with tarfile.open(
+                fileobj=output,
+                mode="w",
+                format=tarfile.PAX_FORMAT,
+            ) as canonical:
+                for name, member in sorted(normalized, key=lambda item: item[0]):
+                    value = copy.copy(member)
+                    value.name = name
+                    value.mtime = source_date_epoch
+                    value.uid = 0
+                    value.gid = 0
+                    value.uname = ""
+                    value.gname = ""
+                    value.pax_headers = {}
+                    value.linkname = _safe_sdist_link_name(value.linkname)
+                    if member.isfile():
+                        extracted = archive.extractfile(member)
+                        if extracted is None:
+                            raise PatchBundleError("artifact sdist content is unavailable")
+                        content = extracted.read(member.size + 1)
+                        if len(content) != member.size:
+                            raise PatchBundleError("artifact sdist content size is invalid")
+                        canonical.addfile(value, io.BytesIO(content))
+                    else:
+                        canonical.addfile(value)
+    except PatchBundleError:
+        raise
+    except (EOFError, gzip.BadGzipFile, OSError, tarfile.TarError) as error:
+        raise PatchBundleError("artifact sdist canonicalization failed") from error
+    return output.getvalue()
+
+
 def _canonicalize_sdist(generated: Path, *, source_date_epoch: int) -> None:
     candidates = tuple(sorted(generated.glob("*.tar.gz")))
     if len(candidates) != 1:
@@ -286,8 +373,10 @@ def _canonicalize_sdist(generated: Path, *, source_date_epoch: int) -> None:
     source = candidates[0]
     temporary = source.with_name(f".{source.name}.canonical")
     try:
-        with gzip.open(source, "rb") as compressed:
-            tar_payload = compressed.read()
+        tar_payload = _canonical_tar_payload(
+            source,
+            source_date_epoch=source_date_epoch,
+        )
         with temporary.open("wb") as raw_output, gzip.GzipFile(
             filename="",
             mode="wb",
@@ -297,7 +386,9 @@ def _canonicalize_sdist(generated: Path, *, source_date_epoch: int) -> None:
         ) as canonical:
             canonical.write(tar_payload)
         temporary.replace(source)
-    except (EOFError, gzip.BadGzipFile, OSError) as error:
+    except PatchBundleError:
+        raise
+    except OSError as error:
         raise PatchBundleError("artifact sdist canonicalization failed") from error
     finally:
         temporary.unlink(missing_ok=True)
