@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from tools.apply_and_verify import PatchBundleError
 from tools.rebuild_locked_artifacts import rebuild_locked_artifacts
 
