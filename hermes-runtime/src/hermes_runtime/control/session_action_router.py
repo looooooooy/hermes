@@ -1,21 +1,11 @@
-"""Runtime session action router.
-
-Routes validated runtime actions to session-owned handlers.
-The router intentionally does not invoke models directly.
-"""
+"""Routes validated Runtime actions to Runtime-owned session controllers."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
 
-
-class SessionActionHandler(Protocol):
-    def interrupt(self) -> None: ...
-
-    def resume(self) -> None: ...
-
-    def approve(self, payload: dict[str, Any]) -> None: ...
+from .session_authority import SessionController
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +14,7 @@ class SessionActionRequest:
     action: str
     runtime_generation: str
     session_id: str
-    payload: dict[str, Any]
+    payload: Mapping[str, object]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,18 +26,26 @@ class SessionActionResult:
 
 
 class SessionActionRouter:
-    """Dispatch control actions to an already bound runtime session."""
+    """Dispatch an allowed action without bypassing the session authority."""
 
     def dispatch(
         self,
         request: SessionActionRequest,
-        session: SessionActionHandler,
+        session: SessionController,
     ) -> SessionActionResult:
         if request.action == "interrupt":
             session.interrupt()
         elif request.action == "resume":
             session.resume()
         elif request.action == "approve":
+            pending_request_id = request.payload.get("pending_request_id")
+            if not isinstance(pending_request_id, str) or not pending_request_id:
+                return SessionActionResult(
+                    command_id=request.command_id,
+                    action=request.action,
+                    state="rejected",
+                    detail="pending_request_id_required",
+                )
             session.approve(request.payload)
         else:
             return SessionActionResult(

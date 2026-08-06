@@ -1,13 +1,9 @@
-"""Control extension bridge into Hermes runtime execution boundary.
-
-The adapter intentionally does not execute model calls directly.
-It converts external control actions into runtime events.
-"""
+"""Control-extension bridge into the Runtime event boundary."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from .event_queue import RuntimeEventQueue
 from .runtime_event import RuntimeEvent
@@ -24,13 +20,7 @@ class ControlActionRequest:
 
 
 class ControlExtensionAdapter:
-    """Adapter used by connector/control extensions.
-
-    Boundary rule:
-    connector -> adapter -> runtime event queue -> agent runtime
-
-    No direct Agent invocation is allowed here.
-    """
+    """Validate session binding and enqueue an internal Runtime event."""
 
     def __init__(
         self,
@@ -42,19 +32,18 @@ class ControlExtensionAdapter:
         self._event_queue = event_queue
 
     def dispatch(self, request: ControlActionRequest) -> RuntimeEvent:
-        session = self._session_authority.resolve(
+        binding = self._session_authority.resolve(
             request.session_id,
             request.runtime_generation,
         )
-
-        event = RuntimeEvent(
+        event = RuntimeEvent.create(
             event_id=f"evt-{request.command_id}",
             command_id=request.command_id,
             runtime_generation=request.runtime_generation,
-            session_id=session.session_id,
+            session_id=binding.session_id,
             event_type=request.action,
-            payload=dict(request.payload),
+            payload=request.payload,
         )
-
-        self._event_queue.enqueue(event)
-        return event
+        if not self._event_queue.enqueue(event):
+            raise ValueError("duplicate command")
+        return event.queued()

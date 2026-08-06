@@ -1,32 +1,33 @@
-"""Runtime control orchestration service."""
+"""Public Runtime control orchestration service."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
-from .agent_turn_queue import AgentTurnEvent, AgentTurnQueue
+from .remote_control_flow import RemoteControlFlowCoordinator, RemoteControlResult
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeControlRequest:
     command_id: str
+    runtime_generation: str
     session_id: str
     action: str
-    payload: dict[str, object]
+    payload: Mapping[str, object] = field(default_factory=dict)
 
 
 class RuntimeControlService:
-    """Final boundary before events enter the agent lifecycle."""
+    """Stable service facade over the idempotent remote-control flow."""
 
-    def __init__(self, turn_queue: AgentTurnQueue) -> None:
-        self._turn_queue = turn_queue
+    def __init__(self, coordinator: RemoteControlFlowCoordinator) -> None:
+        self._coordinator = coordinator
 
-    def dispatch(self, request: RuntimeControlRequest) -> AgentTurnEvent:
-        event = AgentTurnEvent(
-            event_id=f"turn-{request.command_id}",
+    def dispatch(self, request: RuntimeControlRequest) -> RemoteControlResult:
+        return self._coordinator.execute(
+            command_id=request.command_id,
+            runtime_generation=request.runtime_generation,
             session_id=request.session_id,
-            event_type=request.action,
+            action=request.action,
             payload=request.payload,
         )
-        self._turn_queue.push(event)
-        return event

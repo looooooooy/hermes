@@ -1,0 +1,30 @@
+name: Runtime control
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "hermes-runtime/**"
+      - ".github/workflows/runtime-control.yml"
+  pull_request:
+    paths:
+      - "hermes-runtime/**"
+      - ".github/workflows/runtime-control.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime-control package
+        run: python -m pip install -e './hermes-runtime[dev]'
+      - name: Lint
+        run: ruff check hermes-runtime/src hermes-runtime/tests
+      - name: Test
+        run: pytest -q hermes-runtime/tests

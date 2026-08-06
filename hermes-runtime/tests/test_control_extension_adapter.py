@@ -2,29 +2,32 @@ from hermes_runtime.control.control_extension_adapter import (
     ControlActionRequest,
     ControlExtensionAdapter,
 )
+from hermes_runtime.control.event_queue import RuntimeEventQueue
+from hermes_runtime.control.runtime_event import RuntimeEventState
+from hermes_runtime.control.session_authority import SessionAuthority, SessionBinding
 
 
-class FakeSessionAuthority:
-    def resolve(self, session_id, runtime_generation):
-        return type("Session", (), {"session_id": session_id})()
+class FakeSession:
+    def interrupt(self):
+        pass
+
+    def resume(self):
+        pass
+
+    def approve(self, payload):
+        pass
 
 
-class FakeQueue:
-    def __init__(self):
-        self.events = []
-
-    def enqueue(self, event):
-        self.events.append(event)
-
-
-def test_control_action_becomes_runtime_event():
-    queue = FakeQueue()
+def test_control_action_becomes_queued_runtime_event():
+    authority = SessionAuthority()
+    authority.bind(SessionBinding("s-1", "g-1", "default", FakeSession()))
+    queue = RuntimeEventQueue()
     adapter = ControlExtensionAdapter(
-        session_authority=FakeSessionAuthority(),
+        session_authority=authority,
         event_queue=queue,
     )
 
-    event = adapter.dispatch(
+    returned = adapter.dispatch(
         ControlActionRequest(
             command_id="cmd-1",
             runtime_generation="g-1",
@@ -34,5 +37,6 @@ def test_control_action_becomes_runtime_event():
         )
     )
 
-    assert event.command_id == "cmd-1"
-    assert queue.events[0] == event
+    queued = queue.pop()
+    assert returned.state is RuntimeEventState.QUEUED
+    assert queued == returned
