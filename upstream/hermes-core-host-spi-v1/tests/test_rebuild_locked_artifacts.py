@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -21,11 +22,39 @@ pytestmark = pytest.mark.skipif(
 )
 
 _WHEEL = b"deterministic-wheel\n"
-_SDIST_PAYLOAD = b"deterministic-sdist-tar-payload\n"
+_FILE_CONTENT = b"deterministic-sdist-file\n"
 _SOURCE_DATE_EPOCH = 1_785_409_311
 
 
 def _canonical_sdist_bytes() -> bytes:
+    tar_output = io.BytesIO()
+    with tarfile.open(
+        fileobj=tar_output,
+        mode="w",
+        format=tarfile.PAX_FORMAT,
+    ) as archive:
+        directory = tarfile.TarInfo("package")
+        directory.type = tarfile.DIRTYPE
+        directory.mode = 0o755
+        directory.mtime = _SOURCE_DATE_EPOCH
+        directory.uid = 0
+        directory.gid = 0
+        directory.uname = ""
+        directory.gname = ""
+        directory.pax_headers = {}
+        archive.addfile(directory)
+
+        source = tarfile.TarInfo("package/value.txt")
+        source.mode = 0o644
+        source.mtime = _SOURCE_DATE_EPOCH
+        source.uid = 0
+        source.gid = 0
+        source.uname = ""
+        source.gname = ""
+        source.pax_headers = {}
+        source.size = len(_FILE_CONTENT)
+        archive.addfile(source, io.BytesIO(_FILE_CONTENT))
+
     output = io.BytesIO()
     with gzip.GzipFile(
         filename="",
@@ -34,7 +63,7 @@ def _canonical_sdist_bytes() -> bytes:
         fileobj=output,
         mtime=_SOURCE_DATE_EPOCH,
     ) as compressed:
-        compressed.write(_SDIST_PAYLOAD)
+        compressed.write(tar_output.getvalue())
     return output.getvalue()
 
 
@@ -128,20 +157,46 @@ def _fake_uv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     binary.write_text(
         """#!/usr/bin/env python3
 import gzip
+import io
+import tarfile
 from pathlib import Path
 
 output = Path.cwd() / "dist"
 output.mkdir(parents=True, exist_ok=True)
 (output / "package.whl").write_bytes(b"deterministic-wheel\\n")
+raw_tar = io.BytesIO()
+with tarfile.open(fileobj=raw_tar, mode="w", format=tarfile.PAX_FORMAT) as archive:
+    source = tarfile.TarInfo("package/value.txt")
+    source.mode = 0o644
+    source.mtime = 91
+    source.uid = 501
+    source.gid = 20
+    source.uname = "runner"
+    source.gname = "staff"
+    source.pax_headers = {"comment": "volatile"}
+    content = b"deterministic-sdist-file\\n"
+    source.size = len(content)
+    archive.addfile(source, io.BytesIO(content))
+
+    directory = tarfile.TarInfo("package")
+    directory.type = tarfile.DIRTYPE
+    directory.mode = 0o755
+    directory.mtime = 37
+    directory.uid = 501
+    directory.gid = 20
+    directory.uname = "runner"
+    directory.gname = "staff"
+    directory.pax_headers = {"comment": "volatile"}
+    archive.addfile(directory)
 with (output / "package.tar.gz").open("wb") as raw:
     with gzip.GzipFile(
         filename="temporary-build-name.tar",
         mode="wb",
-        compresslevel=9,
+        compresslevel=6,
         fileobj=raw,
         mtime=7,
     ) as compressed:
-        compressed.write(b"deterministic-sdist-tar-payload\\n")
+        compressed.write(raw_tar.getvalue())
 """,
         encoding="utf-8",
     )
@@ -164,8 +219,6 @@ def test_rebuilds_missing_locked_artifacts_without_mutating_source(
     assert result.output_directory == bundle / "dist"
     assert (bundle / "dist/package.whl").read_bytes() == _WHEEL
     assert (bundle / "dist/package.tar.gz").read_bytes() == _canonical_sdist_bytes()
-    with gzip.open(bundle / "dist/package.tar.gz", "rb") as compressed:
-        assert compressed.read() == _SDIST_PAYLOAD
     assert _run("git", "status", "--porcelain=v1", cwd=source) == source_status
     assert _run("git", "rev-parse", "HEAD", cwd=source) == commit
 
@@ -208,7 +261,7 @@ def test_refuses_to_replace_nonempty_artifact_directory(
     assert (output / "operator-file.txt").read_text(encoding="utf-8") == "preserve"
 
 
-def test_canonicalizes_gzip_header_metadata(
+def test_canonicalizes_tar_and_gzip_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -222,3 +275,13 @@ def test_canonicalizes_gzip_header_metadata(
     assert value == _canonical_sdist_bytes()
     assert int.from_bytes(value[4:8], "little") == _SOURCE_DATE_EPOCH
     assert value[3] & 0x08 == 0
+    with tarfile.open(bundle / "dist/package.tar.gz", mode="r:gz") as archive:
+        assert [member.name for member in archive.getmembers()] == [
+            "package",
+            "package/value.txt",
+        ]
+        for member in archive.getmembers():
+            assert member.mtime == _SOURCE_DATE_EPOCH
+            assert member.uid == member.gid == 0
+            assert member.uname == member.gname == ""
+            assert member.pax_headers == {}
