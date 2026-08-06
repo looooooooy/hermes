@@ -10,7 +10,7 @@ from typing import Any
 
 __all__ = ["ConnectorConfig"]
 
-_EXPORTS = {
+_EXPORTS: dict[str, tuple[str, str]] = {
     "ConnectorConfig": (
         "hermes_connector.bootstrap.config",
         "ConnectorConfig",

@@ -5,6 +5,6 @@ production process. Runtime effects remain owned by patched Hermes Core, the
 Plugin Host SPI, and the independent Connector process.
 """
 
-__version__ = "0.1.0"
+__version__: str = "0.1.0"
 
 __all__ = ["__version__"]
