@@ -233,11 +233,13 @@ def _stabilize_pyproject(path: Path) -> None:
 
 
 def _normalize_patch(patch: str) -> str:
-    """Remove whitespace-only additions while preserving diff context lines."""
+    """Normalize whitespace-only diff lines without changing patch meaning."""
 
     normalized: list[str] = []
     for line in patch.splitlines():
-        if line.startswith("+") and not line.startswith("+++") and not line[1:].strip():
+        if line == " ":
+            normalized.append("")
+        elif line.startswith("+") and not line.startswith("+++") and not line[1:].strip():
             normalized.append("+")
         else:
             normalized.append(line)
