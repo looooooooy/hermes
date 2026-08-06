@@ -1,5 +1,8 @@
 from hermes_runtime.control.event_queue import RuntimeEventQueue
-from hermes_runtime.control.owner_action_router import OwnerActionRequest, OwnerActionRouter
+from hermes_runtime.control.owner_action_router import (
+    OwnerActionRequest,
+    OwnerActionRouter,
+)
 
 
 def test_owner_action_routes_to_runtime_event_queue() -> None:

@@ -6,8 +6,8 @@ existing agent lifecycle. This module intentionally does not execute models.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass, field
 from typing import Mapping
 
 
