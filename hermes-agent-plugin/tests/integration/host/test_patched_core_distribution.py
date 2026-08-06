@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from importlib import import_module
-from importlib.metadata import entry_points, version
+from importlib.metadata import distribution, entry_points, version
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar, Mapping
@@ -202,3 +202,19 @@ def test_real_patched_core_wheel_accepts_plugin_owner_action_contract() -> None:
         "started",
         "closed",
     ]
+
+
+def test_real_patched_core_wheel_contains_runtime_state_module_family() -> None:
+    if os.environ.get("HERMES_PATCHED_CORE_DISTRIBUTION") != "1":
+        pytest.skip("requires the isolated patched Core distribution environment")
+
+    installed = distribution("hermes-agent").files
+    assert installed is not None
+    paths = {str(path) for path in installed}
+    assert {
+        "hermes_state.py",
+        "hermes_state_common.py",
+        "hermes_state_portability.py",
+        "hermes_state_schema.py",
+        "hermes_state_search.py",
+    } <= paths
