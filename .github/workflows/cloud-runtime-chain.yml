@@ -1,0 +1,134 @@
+name: Cloud runtime chain
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "hermes-cloud/**"
+      - "hermes-connector/**"
+      - "hermes-agent-plugin/**"
+      - "tests/e2e/connector_cloud_interop/**"
+      - "hermes-web/scripts/real-full-chain-gate.mjs"
+      - "hermes-web/tests/real-full-chain-gate.test.mjs"
+      - ".github/workflows/cloud-runtime-chain.yml"
+  pull_request:
+    paths:
+      - "hermes-cloud/**"
+      - "hermes-connector/**"
+      - "hermes-agent-plugin/**"
+      - "tests/e2e/connector_cloud_interop/**"
+      - "hermes-web/scripts/real-full-chain-gate.mjs"
+      - "hermes-web/tests/real-full-chain-gate.test.mjs"
+      - ".github/workflows/cloud-runtime-chain.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-runtime-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cloud-tests:
+    name: Cloud package and full test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked Cloud environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv==0.12.0
+          cd hermes-cloud
+          uv sync --locked
+      - name: Lint Cloud
+        run: |
+          cd hermes-cloud
+          uv run --locked ruff check src tests
+      - name: Test Cloud
+        run: |
+          cd hermes-cloud
+          uv run --locked pytest -q tests
+      - name: Build Cloud wheel
+        run: |
+          cd hermes-cloud
+          uv build --wheel --out-dir "$RUNNER_TEMP/cloud-dist"
+          test -n "$(find "$RUNNER_TEMP/cloud-dist" -maxdepth 1 -name 'hermes_cloud-*.whl' -print -quit)"
+
+  connector-cloud-wss:
+    name: Real TLS WSS Connector Cloud interop
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked Cloud and Connector
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv==0.12.0
+          cd hermes-cloud
+          uv sync --locked
+          cd ..
+          uv pip install \
+            --python hermes-cloud/.venv/bin/python \
+            -e ./hermes-connector
+      - name: Lint WSS interop
+        run: |
+          hermes-cloud/.venv/bin/python -m ruff check \
+            tests/e2e/connector_cloud_interop/test_real_wss_gateway.py
+      - name: Test real WSS Gateway interop
+        env:
+          PYTHONPATH: .
+        run: |
+          hermes-cloud/.venv/bin/python -m pytest -q \
+            tests/e2e/connector_cloud_interop/test_real_wss_gateway.py
+
+  web-cloud-plugin-control:
+    name: Web Cloud Connector Plugin control chain
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked Cloud, Connector and Plugin
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv==0.12.0
+          cd hermes-cloud
+          uv sync --locked
+          cd ..
+          uv pip install \
+            --python hermes-cloud/.venv/bin/python \
+            -e ./hermes-connector \
+            -e ./hermes-agent-plugin
+      - name: Lint Cloud control bridge
+        run: |
+          hermes-cloud/.venv/bin/python -m ruff check \
+            hermes-cloud/tests/integration/test_web_connector_control_bridge_e2e.py
+      - name: Test Web to Plugin control chain
+        env:
+          PYTHONPATH: .
+        run: |
+          hermes-cloud/.venv/bin/python -m pytest -q \
+            hermes-cloud/tests/integration/test_web_connector_control_bridge_e2e.py
+
+  real-full-chain-gate-contract:
+    name: Real full-chain gate contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test fail-closed full-chain gate
+        run: node --test hermes-web/tests/real-full-chain-gate.test.mjs

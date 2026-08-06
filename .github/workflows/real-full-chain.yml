@@ -1,0 +1,134 @@
+name: Hermes real full chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_url:
+        description: HTTPS base URL of the staging Hermes Cloud deployment
+        required: true
+        type: string
+      agent_id:
+        description: Explicit live Agent UUID from the authenticated catalog
+        required: true
+        type: string
+      session_id:
+        description: Explicit live Session UUID owned by the selected Agent
+        required: true
+        type: string
+      prompt:
+        description: Benign staging prompt used to prove the real turn lifecycle
+        required: true
+        default: "Full-chain staging acceptance: reply with a short acknowledgement."
+        type: string
+      require_evidence:
+        description: Optional comma-separated evidence names: todo,tool,pending_input,approval
+        required: false
+        default: ""
+        type: string
+      timeout_ms:
+        description: Gate deadline in milliseconds (5000-300000)
+        required: true
+        default: "120000"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-real-full-chain-${{ inputs.agent_id }}-${{ inputs.session_id }}
+  cancel-in-progress: false
+
+jobs:
+  staging-full-chain:
+    name: Staging Cloud to real Hermes Session
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: hermes-runtime-staging
+    env:
+      CLOUD_URL: ${{ inputs.cloud_url }}
+      AGENT_ID: ${{ inputs.agent_id }}
+      SESSION_ID: ${{ inputs.session_id }}
+      GATE_PROMPT: ${{ inputs.prompt }}
+      REQUIRE_EVIDENCE: ${{ inputs.require_evidence }}
+      TIMEOUT_MS: ${{ inputs.timeout_ms }}
+      HERMES_FULL_CHAIN_ACCESS_TOKEN: ${{ secrets.HERMES_FULL_CHAIN_ACCESS_TOKEN }}
+      RECEIPT_FILE: ${{ runner.temp }}/hermes-real-full-chain-receipt.json
+      TOKEN_FILE: ${{ runner.temp }}/hermes-real-full-chain-token
+      PROMPT_FILE: ${{ runner.temp }}/hermes-real-full-chain-prompt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Materialize owner-private gate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${HERMES_FULL_CHAIN_ACCESS_TOKEN:-}" ]; then
+            echo "::error::HERMES_FULL_CHAIN_ACCESS_TOKEN is not configured in the hermes-runtime-staging environment"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$HERMES_FULL_CHAIN_ACCESS_TOKEN" > "$TOKEN_FILE"
+          printf '%s' "$GATE_PROMPT" > "$PROMPT_FILE"
+          chmod 600 "$TOKEN_FILE" "$PROMPT_FILE"
+      - name: Execute real full-chain gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import { writeFile } from "node:fs/promises";
+          import { runRealFullChainGate } from "./hermes-web/scripts/real-full-chain-gate.mjs";
+
+          const argumentsList = [
+            "--cloud-url", process.env.CLOUD_URL,
+            "--access-token-file", process.env.TOKEN_FILE,
+            "--agent-id", process.env.AGENT_ID,
+            "--session-id", process.env.SESSION_ID,
+            "--prompt-file", process.env.PROMPT_FILE,
+            "--timeout-ms", process.env.TIMEOUT_MS,
+          ];
+          const requiredEvidence = (process.env.REQUIRE_EVIDENCE ?? "").trim();
+          if (requiredEvidence.length > 0) {
+            argumentsList.push("--require-evidence", requiredEvidence);
+          }
+
+          let receipt;
+          try {
+            receipt = await runRealFullChainGate(argumentsList);
+          } catch (error) {
+            receipt = {
+              schema_version: 1,
+              gate: "hermes-real-full-chain",
+              status: "failed",
+              error_name: typeof error?.name === "string" ? error.name : "Error",
+              error_code: typeof error?.code === "string" ? error.code : "UNKNOWN",
+              error_step: typeof error?.step === "string" ? error.step : "unknown",
+              message: typeof error?.message === "string" ? error.message : "Full-chain gate failed closed.",
+            };
+            await writeFile(
+              process.env.RECEIPT_FILE,
+              `${JSON.stringify(receipt, null, 2)}\n`,
+              { mode: 0o600 },
+            );
+            console.error(JSON.stringify(receipt));
+            process.exitCode = 1;
+          }
+          if (receipt?.status === "passed") {
+            await writeFile(
+              process.env.RECEIPT_FILE,
+              `${JSON.stringify(receipt, null, 2)}\n`,
+              { mode: 0o600 },
+            );
+            console.log(JSON.stringify(receipt));
+          }
+          JS
+      - name: Upload sanitized full-chain receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-real-full-chain-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/hermes-real-full-chain-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
