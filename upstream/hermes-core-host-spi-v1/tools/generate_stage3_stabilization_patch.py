@@ -27,43 +27,44 @@ def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None)
     return completed.stdout
 
 
-def _replace_once(source: str, pattern: re.Pattern[str], replacement) -> str:
+def _replace_once(
+    source: str,
+    pattern: re.Pattern[str],
+    replacement,
+    *,
+    label: str,
+) -> str:
     updated, count = pattern.subn(replacement, source)
     if count != 1:
-        raise PatchBundleError(f"stabilization replacement count was {count}")
+        raise PatchBundleError(f"{label} stabilization replacement count was {count}")
     return updated
 
 
 def _stabilize_plugins(path: Path) -> None:
-    source = path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r"(?m)^(?P<indent>[ ]*)while self\._extension_active_installs:\n"
-        r"(?P=indent)    self\._extension_condition\.wait\(\)\n"
-        r"(?P=indent)keys = list\(reversed\(self\._extension_registrations\)\)\n"
-    )
-
-    def replacement(match: re.Match[str]) -> str:
-        indent = match.group("indent")
-        return "\n".join(
-            (
-                f"{indent}while self._extension_active_installs:",
-                f"{indent}    self._extension_condition.wait()",
-                f"{indent}registered_keys = set(self._extension_registrations)",
-                f"{indent}keys = [",
-                f"{indent}    key",
-                f"{indent}    for key in reversed(self._plugins)",
-                f"{indent}    if key in registered_keys",
-                f"{indent}]",
-                f"{indent}keys.extend(",
-                f"{indent}    key",
-                f"{indent}    for key in reversed(self._extension_registrations)",
-                f"{indent}    if key not in self._plugins",
-                f"{indent})",
-                "",
-            )
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    needle = "keys = list(reversed(self._extension_registrations))"
+    matches = [index for index, line in enumerate(lines) if line.strip() == needle]
+    if len(matches) != 1:
+        raise PatchBundleError(
+            f"plugin shutdown stabilization replacement count was {len(matches)}"
         )
-
-    path.write_text(_replace_once(source, pattern, replacement), encoding="utf-8")
+    index = matches[0]
+    indent = lines[index][: len(lines[index]) - len(lines[index].lstrip(" "))]
+    replacement = [
+        f"{indent}registered_keys = set(self._extension_registrations)\n",
+        f"{indent}keys = [\n",
+        f"{indent}    key\n",
+        f"{indent}    for key in reversed(self._plugins)\n",
+        f"{indent}    if key in registered_keys\n",
+        f"{indent}]\n",
+        f"{indent}keys.extend(\n",
+        f"{indent}    key\n",
+        f"{indent}    for key in reversed(self._extension_registrations)\n",
+        f"{indent}    if key not in self._plugins\n",
+        f"{indent})\n",
+    ]
+    lines[index : index + 1] = replacement
+    path.write_text("".join(lines), encoding="utf-8")
 
 
 def _stabilize_process_registry(path: Path) -> None:
@@ -107,7 +108,15 @@ def _stabilize_process_registry(path: Path) -> None:
             )
         )
 
-    path.write_text(_replace_once(source, pattern, replacement), encoding="utf-8")
+    path.write_text(
+        _replace_once(
+            source,
+            pattern,
+            replacement,
+            label="process registry",
+        ),
+        encoding="utf-8",
+    )
 
 
 def generate(bundle_root: Path, source: Path) -> str:
