@@ -38,6 +38,7 @@ jobs:
     env:
       BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
       UPSTREAM_COMMIT: 14db1a99e21e5523ee61f10f5c3300a5087e8449
+      RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -189,7 +190,7 @@ jobs:
           release.write_text(
               "\n".join(
                   (
-                      f"repository_commit={os.environ['GITHUB_SHA']}",
+                      f"repository_commit={os.environ['RELEASE_COMMIT']}",
                       f"upstream_core_commit={os.environ['UPSTREAM_COMMIT']}",
                       "core_version=0.19.0",
                       "plugin_version=0.1.0",
@@ -213,7 +214,7 @@ jobs:
       - name: Upload verified runtime release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: hermes-runtime-bundle-${{ github.sha }}
+          name: hermes-runtime-bundle-${{ env.RELEASE_COMMIT }}
           path: ${{ runner.temp }}/hermes-runtime-bundle
           if-no-files-found: error
           retention-days: 14
