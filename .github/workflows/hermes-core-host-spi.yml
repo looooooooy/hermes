@@ -49,6 +49,7 @@ jobs:
       - name: Lint rebuild and wheel contract gates
         run: |
           python -m ruff check \
+            "$BUNDLE_ROOT/tools/generate_stage3_stabilization_patch.py" \
             "$BUNDLE_ROOT/tools/rebuild_locked_artifacts.py" \
             "$BUNDLE_ROOT/tools/rebuild_locked_artifacts_verbose.py" \
             "$BUNDLE_ROOT/tests/test_rebuild_locked_artifacts.py" \
@@ -74,6 +75,11 @@ jobs:
             --extra dev \
             --locked \
             --no-install-project
+      - name: Generate stabilization patch from real Stage 3 tree
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m tools.generate_stage3_stabilization_patch \
+            --source "$RUNNER_TEMP/hermes-agent-upstream"
       - name: Rebuild locked Core artifacts
         run: |
           cd "$BUNDLE_ROOT"
