@@ -28,7 +28,7 @@
   "artifacts": [
     {
       "path": "dist/hermes_agent-0.19.0-py3-none-any.whl",
-      "sha256": "a48d1be51c594e2e211a872264e4980961fb4dd8c1ac1afe8ec694971bb918e1"
+      "sha256": "0f6dd076d79f1e3d33a28fd10c01dd2da61401797ccbc7b1fdaf897595e4451f"
     },
     {
       "path": "dist/hermes_agent-0.19.0.tar.gz",
