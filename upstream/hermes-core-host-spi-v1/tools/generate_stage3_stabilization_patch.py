@@ -15,6 +15,13 @@ from pathlib import Path
 
 from .apply_and_verify import PatchBundle, PatchBundleError
 
+_STATE_MODULES = (
+    "hermes_state_common",
+    "hermes_state_portability",
+    "hermes_state_schema",
+    "hermes_state_search",
+)
+
 
 @dataclass(frozen=True)
 class GeneratedStabilization:
@@ -184,6 +191,59 @@ def _stabilize_process_registry(path: Path) -> None:
     path.write_text(_replace_node(source, node, replacement), encoding="utf-8")
 
 
+def _stabilize_pyproject(path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
+    lines = source.splitlines(keepends=True)
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("py-modules = [")
+    ]
+    if len(starts) != 1:
+        raise PatchBundleError("setuptools py-modules declaration is unavailable")
+    start = starts[0]
+    end = start
+    while "]" not in lines[end]:
+        end += 1
+        if end >= len(lines):
+            raise PatchBundleError("setuptools py-modules declaration is malformed")
+
+    declaration = "".join(lines[start : end + 1])
+    payload = declaration.split("=", 1)[1].strip()
+    try:
+        modules = list(ast.literal_eval(payload))
+    except (SyntaxError, ValueError) as error:
+        raise PatchBundleError(
+            "setuptools py-modules declaration is malformed"
+        ) from error
+    if not all(isinstance(module, str) and module for module in modules):
+        raise PatchBundleError("setuptools py-modules declaration is malformed")
+    if any(module in modules for module in _STATE_MODULES):
+        raise PatchBundleError("runtime state modules are already packaged")
+    try:
+        insertion = modules.index("hermes_state") + 1
+    except ValueError as error:
+        raise PatchBundleError("hermes_state packaging anchor is unavailable") from error
+    modules[insertion:insertion] = _STATE_MODULES
+    replacement = ["py-modules = [\n"]
+    replacement.extend(f'  "{module}",\n' for module in modules)
+    replacement.append("]\n")
+    lines[start : end + 1] = replacement
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _normalize_patch(patch: str) -> str:
+    """Remove whitespace-only additions while preserving diff context lines."""
+
+    normalized: list[str] = []
+    for line in patch.splitlines():
+        if line.startswith("+") and not line.startswith("+++") and not line[1:].strip():
+            normalized.append("+")
+        else:
+            normalized.append(line)
+    return "\n".join(normalized) + ("\n" if patch.endswith("\n") else "")
+
+
 def generate(bundle_root: Path, source: Path) -> GeneratedStabilization:
     bundle = PatchBundle(bundle_root)
     upstream = bundle.lock.get("upstream")
@@ -225,20 +285,25 @@ def generate(bundle_root: Path, source: Path) -> GeneratedStabilization:
         _run(("git", "commit", "-q", "-m", "stage3 baseline"), cwd=tree)
         plugins = tree / "hermes_cli/plugins.py"
         process_registry = tree / "tools/process_registry.py"
+        pyproject = tree / "pyproject.toml"
         _stabilize_plugins(plugins)
         _stabilize_process_registry(process_registry)
-        patch = _run(
-            (
-                "git",
-                "diff",
-                "--binary",
-                "--full-index",
-                "--no-ext-diff",
-                "--",
-                "hermes_cli/plugins.py",
-                "tools/process_registry.py",
-            ),
-            cwd=tree,
+        _stabilize_pyproject(pyproject)
+        patch = _normalize_patch(
+            _run(
+                (
+                    "git",
+                    "diff",
+                    "--binary",
+                    "--full-index",
+                    "--no-ext-diff",
+                    "--",
+                    "hermes_cli/plugins.py",
+                    "pyproject.toml",
+                    "tools/process_registry.py",
+                ),
+                cwd=tree,
+            )
         )
         if not patch.strip():
             raise PatchBundleError("generated stabilization patch is empty")
@@ -246,6 +311,7 @@ def generate(bundle_root: Path, source: Path) -> GeneratedStabilization:
             patch=patch,
             source_provenance={
                 "hermes_cli/plugins.py": _sha256(plugins),
+                "pyproject.toml": _sha256(pyproject),
                 "tools/process_registry.py": _sha256(process_registry),
             },
         )
