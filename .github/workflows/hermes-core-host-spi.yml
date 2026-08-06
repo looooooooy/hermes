@@ -87,11 +87,48 @@ jobs:
           workspace="$RUNNER_TEMP/core-replay"
           mkdir -p "$workspace"
           cd "$BUNDLE_ROOT"
-          PYTHONPATH=. python -m tools.apply_and_verify \
-            --source "$RUNNER_TEMP/hermes-agent-upstream" \
-            --workspace-root "$workspace" \
-            --target "$workspace/patched" \
-            --test-python "$RUNNER_TEMP/hermes-agent-upstream/.venv/bin/python"
+          PYTHONPATH=. python - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import subprocess
+          from pathlib import Path
+
+          from tools.apply_and_verify import PatchBundle, PatchBundleError
+
+          original_run = PatchBundle._run
+
+          def verbose_run(command, **kwargs):
+              try:
+                  return original_run(command, **kwargs)
+              except PatchBundleError as error:
+                  cause = error.__cause__
+                  if isinstance(cause, subprocess.CalledProcessError):
+                      for label, value in (
+                          ("verification stdout", cause.stdout),
+                          ("verification stderr", cause.stderr),
+                      ):
+                          if not value:
+                              continue
+                          if isinstance(value, bytes):
+                              value = value.decode("utf-8", errors="replace")
+                          print(f"--- {label} ---\n{value}", flush=True)
+                  raise
+
+          PatchBundle._run = staticmethod(verbose_run)
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          try:
+              PatchBundle(Path.cwd()).apply_and_verify(
+                  source=runner_temp / "hermes-agent-upstream",
+                  workspace_root=runner_temp / "core-replay",
+                  target=runner_temp / "core-replay" / "patched",
+                  test_python=(
+                      runner_temp / "hermes-agent-upstream" / ".venv" / "bin" / "python"
+                  ),
+              )
+          except PatchBundleError as error:
+              raise SystemExit(str(error)) from error
+          PY
       - name: Build Plugin and Connector wheels
         run: |
           python -m build --wheel --outdir "$RUNNER_TEMP/plugin-dist" hermes-agent-plugin
