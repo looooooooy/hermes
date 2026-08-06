@@ -51,7 +51,10 @@ jobs:
           helpers = '''\n\ndef _required_text(payload: Mapping[str, object], field_name: str) -> str:\n    value = payload.get(field_name)\n    if not isinstance(value, str):\n        raise TypeError(f\"{field_name} must be text\")\n    canonical = value.strip()\n    if not canonical or canonical != value:\n        raise ValueError(f\"{field_name} must be canonical text\")\n    return canonical\n\n\ndef _canonical_text_tuple(value: object, field_name: str) -> tuple[str, ...]:\n    if isinstance(value, str):\n        raise TypeError(f\"{field_name} must be a collection\")\n    try:\n        items = tuple(value)\n    except TypeError as error:\n        raise TypeError(f\"{field_name} must be a collection\") from error\n    if any(\n        not isinstance(item, str) or not item or item != item.strip()\n        for item in items\n    ):\n        raise ValueError(f\"{field_name} must contain canonical text\")\n    if len(items) != len(set(items)):\n        raise ValueError(f\"{field_name} must be unique\")\n    return items\n'''
           if source.rstrip().endswith("}") is False:
               raise SystemExit("projection file ending changed")
-          projection.write_text(source.rstrip() + helpers + "\n", encoding="utf-8")
+          projection.write_text(
+              source.rstrip() + helpers.rstrip() + "\n",
+              encoding="utf-8",
+          )
 
           replace_one(
               "hermes-cloud/src/hermes_cloud/runtime_identity/gateway_adapter.py",
