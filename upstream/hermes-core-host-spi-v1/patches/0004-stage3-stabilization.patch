@@ -1,34 +1,22 @@
 diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
-index 713b3bc7d50a8de7f60a09dad9a6a93d9294ed91..29475062a478af15219202afa08e4708a16b1436 100644
+index 713b3bc7d50a8de7f60a09dad9a6a93d9294ed91..b8d468d958944e660244075bb7beb8fb0b9371be 100644
 --- a/hermes_cli/plugins.py
 +++ b/hermes_cli/plugins.py
-@@ -1689,16 +1689,16 @@ class PluginManager:
-                 self._extension_closing_thread = current_thread
-                 while self._extension_active_installs:
-                     self._extension_condition.wait()
--                keys = list(
--                    reversed(
--                        dict.fromkeys(
--                            [
--                                *self._extension_registrations,
--                                *self._loaded_plugin_store_keys,
--                                *self._active_plugin_store_keys,
--                            ]
--                        )
--                    )
-+                registered_keys = set(self._extension_registrations)
-+                keys = [
-+                    key
-+                    for key in reversed(self._plugins)
-+                    if key in registered_keys
-+                ]
-+                keys.extend(
-+                    key
-+                    for key in reversed(self._extension_registrations)
-+                    if key not in self._plugins
-                 )
+@@ -2215,7 +2215,13 @@ class PluginManager:
              else:
-                 if current_thread in self._extension_install_threads.get(
+                 group_eps = [ep for ep in eps if ep.group == ENTRY_POINTS_GROUP]
+ 
+-            for ep in group_eps:
++            for ep in sorted(
++                group_eps,
++                key=lambda entry_point: (
++                    entry_point.name,
++                    entry_point.value,
++                ),
++            ):
+                 manifest = PluginManifest(
+                     name=ep.name,
+                     source="entrypoint",
 diff --git a/tools/process_registry.py b/tools/process_registry.py
 index 0dfa331a37177ea52d3ff2d3ed2b09483366ffcb..45f4a665e8fcf813f7518c06ec1db38a14c5bb03 100644
 --- a/tools/process_registry.py
