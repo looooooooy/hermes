@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -19,7 +21,21 @@ pytestmark = pytest.mark.skipif(
 )
 
 _WHEEL = b"deterministic-wheel\n"
-_SDIST = b"deterministic-sdist\n"
+_SDIST_PAYLOAD = b"deterministic-sdist-tar-payload\n"
+_SOURCE_DATE_EPOCH = 1_785_409_311
+
+
+def _canonical_sdist_bytes() -> bytes:
+    output = io.BytesIO()
+    with gzip.GzipFile(
+        filename="",
+        mode="wb",
+        compresslevel=9,
+        fileobj=output,
+        mtime=_SOURCE_DATE_EPOCH,
+    ) as compressed:
+        compressed.write(_SDIST_PAYLOAD)
+    return output.getvalue()
 
 
 def _run(*args: str, cwd: Path) -> str:
@@ -82,11 +98,11 @@ index 92e1baf..e019be0 100644
             },
             {
                 "path": "dist/package.tar.gz",
-                "sha256": hashlib.sha256(_SDIST).hexdigest(),
+                "sha256": hashlib.sha256(_canonical_sdist_bytes()).hexdigest(),
             },
         ],
         "artifact_build": {
-            "source_date_epoch": 1_785_409_311,
+            "source_date_epoch": _SOURCE_DATE_EPOCH,
             "environment": {"HERMES_NIX_BUILD": "1"},
             "command": [
                 "uv",
@@ -111,12 +127,21 @@ def _fake_uv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     binary = tmp_path / "uv"
     binary.write_text(
         """#!/usr/bin/env python3
+import gzip
 from pathlib import Path
 
 output = Path.cwd() / "dist"
 output.mkdir(parents=True, exist_ok=True)
 (output / "package.whl").write_bytes(b"deterministic-wheel\\n")
-(output / "package.tar.gz").write_bytes(b"deterministic-sdist\\n")
+with (output / "package.tar.gz").open("wb") as raw:
+    with gzip.GzipFile(
+        filename="temporary-build-name.tar",
+        mode="wb",
+        compresslevel=9,
+        fileobj=raw,
+        mtime=7,
+    ) as compressed:
+        compressed.write(b"deterministic-sdist-tar-payload\\n")
 """,
         encoding="utf-8",
     )
@@ -138,7 +163,9 @@ def test_rebuilds_missing_locked_artifacts_without_mutating_source(
     assert result.upstream_commit == commit
     assert result.output_directory == bundle / "dist"
     assert (bundle / "dist/package.whl").read_bytes() == _WHEEL
-    assert (bundle / "dist/package.tar.gz").read_bytes() == _SDIST
+    assert (bundle / "dist/package.tar.gz").read_bytes() == _canonical_sdist_bytes()
+    with gzip.open(bundle / "dist/package.tar.gz", "rb") as compressed:
+        assert compressed.read() == _SDIST_PAYLOAD
     assert _run("git", "status", "--porcelain=v1", cwd=source) == source_status
     assert _run("git", "rev-parse", "HEAD", cwd=source) == commit
 
@@ -179,3 +206,19 @@ def test_refuses_to_replace_nonempty_artifact_directory(
         rebuild_locked_artifacts(bundle, source=source)
 
     assert (output / "operator-file.txt").read_text(encoding="utf-8") == "preserve"
+
+
+def test_canonicalizes_gzip_header_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source, commit = _source_repo(tmp_path)
+    bundle = _bundle(tmp_path, commit)
+    _fake_uv(tmp_path, monkeypatch)
+
+    rebuild_locked_artifacts(bundle, source=source)
+
+    value = (bundle / "dist/package.tar.gz").read_bytes()
+    assert value == _canonical_sdist_bytes()
+    assert int.from_bytes(value[4:8], "little") == _SOURCE_DATE_EPOCH
+    assert value[3] & 0x08 == 0
