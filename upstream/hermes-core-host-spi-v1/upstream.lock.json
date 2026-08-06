@@ -28,7 +28,7 @@
     },
     {
       "path": "dist/hermes_agent-0.19.0.tar.gz",
-      "sha256": "a432b892facf9e42ad7372bfd3adaaeb242ddfeed6491ab9c2819cbf89cde26d"
+      "sha256": "b6d232c04608cd3c22152e03211a61943ceb8f58b1021a6d00bb0e483427ff03"
     }
   ],
   "artifact_provenance": {
