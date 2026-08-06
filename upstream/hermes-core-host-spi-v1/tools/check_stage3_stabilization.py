@@ -6,7 +6,7 @@ import argparse
 import json
 import subprocess
 import tarfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from .apply_and_verify import PatchBundleError
@@ -31,6 +31,48 @@ def _print_generated(generated: GeneratedStabilization) -> None:
     )
 
 
+def _locked_provenance(lock: Mapping[str, object]) -> dict[str, str]:
+    artifact = lock.get("artifact_provenance")
+    if not isinstance(artifact, Mapping):
+        raise PatchBundleError("artifact provenance is invalid")
+    raw_sources = artifact.get("source_files")
+    if not isinstance(raw_sources, list) or not raw_sources:
+        raise PatchBundleError("artifact provenance is invalid")
+
+    build = lock.get("artifact_build_provenance")
+    if (
+        not isinstance(build, Mapping)
+        or set(build) != {"schema_version", "source_files"}
+        or build.get("schema_version") != 1
+    ):
+        raise PatchBundleError("artifact build provenance is invalid")
+    raw_build_sources = build.get("source_files")
+    if not isinstance(raw_build_sources, list) or not raw_build_sources:
+        raise PatchBundleError("artifact build provenance is invalid")
+
+    locked: dict[str, str] = {}
+    for label, entries in (
+        ("artifact provenance", raw_sources),
+        ("artifact build provenance", raw_build_sources),
+    ):
+        for item in entries:
+            if not isinstance(item, Mapping) or set(item) != {"path", "sha256"}:
+                raise PatchBundleError(f"{label} is invalid")
+            path = item.get("path")
+            digest = item.get("sha256")
+            if (
+                not isinstance(path, str)
+                or not path
+                or path in locked
+                or not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise PatchBundleError(f"{label} is invalid")
+            locked[path] = digest
+    return locked
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     bundle_root = Path(__file__).resolve().parent.parent
@@ -44,10 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         lock = json.loads(
             (bundle_root / "upstream.lock.json").read_text(encoding="utf-8")
         )
-        locked_sources = {
-            item["path"]: item["sha256"]
-            for item in lock["artifact_provenance"]["source_files"]
-        }
+        locked_sources = _locked_provenance(lock)
         for path, digest in generated.source_provenance.items():
             if locked_sources.get(path) != digest:
                 raise PatchBundleError(
