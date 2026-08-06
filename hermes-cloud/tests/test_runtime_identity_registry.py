@@ -1,5 +1,5 @@
-from hermes_cloud.runtime_identity.registry import RuntimeIdentityRegistry
 from hermes_cloud.runtime_identity.projection import RuntimeIdentityProjection
+from hermes_cloud.runtime_identity.registry import RuntimeIdentityRegistry
 
 
 def test_runtime_identity_registry_upserts_runtime():

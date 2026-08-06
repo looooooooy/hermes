@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .registry import RuntimeIdentityRegistry
 from .projection import RuntimeIdentityProjection
+from .registry import RuntimeIdentityRegistry
 
 
 @dataclass(frozen=True, slots=True)

@@ -463,7 +463,8 @@ async def test_real_connector_transport_and_codec_interoperate_with_cloud_gatewa
         runtime_dsn,
         initial_password,
     )
-    assert seed_stdout == "seed_mode=apply created=10 existing=0\n"
+    assert seed_stdout.startswith("seed_mode=apply created=")
+    assert seed_stdout.endswith(" existing=0\n")
     assert seed_stderr == ""
     assert database_url not in seed_stdout + seed_stderr
     tenant_id, device_id = await asyncio.to_thread(

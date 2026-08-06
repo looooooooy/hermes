@@ -6,8 +6,9 @@ identity service input boundary.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,10 +20,10 @@ class RuntimeHandshake:
     descriptor_hash: str
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> "RuntimeHandshake":
+    def from_payload(cls, payload: Mapping[str, Any]) -> RuntimeHandshake:
         runtime = payload.get("runtime")
         if not isinstance(runtime, Mapping):
-            raise ValueError("runtime identity payload is missing runtime")
+            raise TypeError("runtime identity payload is missing runtime")
 
         return cls(
             connector_id=_required_text(payload, "connector_id"),
