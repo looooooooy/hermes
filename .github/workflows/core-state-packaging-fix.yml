@@ -1,0 +1,295 @@
+name: Core state packaging repair
+
+on:
+  push:
+    branches:
+      - feature/runtime-identity-extension-health
+    paths:
+      - ".github/core-state-packaging-fix.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/runtime-identity-extension-health
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 14db1a99e21e5523ee61f10f5c3300a5087e8449
+          path: _upstream/hermes-agent
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked repair tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            uv==0.12.0 \
+            build==1.5.0 \
+            pytest==8.4.2 \
+            websockets==15.0.1
+      - name: Extend stabilization generator and wheel contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          generator = Path(
+              "upstream/hermes-core-host-spi-v1/tools/"
+              "generate_stage3_stabilization_patch.py"
+          )
+          source = generator.read_text(encoding="utf-8")
+          if "def _stabilize_pyproject(" in source:
+              raise SystemExit("generator already contains packaging repair")
+
+          function = '''\n\n_STATE_MODULES = (\n    "hermes_state_common",\n    "hermes_state_portability",\n    "hermes_state_schema",\n    "hermes_state_search",\n)\n\n\ndef _stabilize_pyproject(path: Path) -> None:\n    source = path.read_text(encoding="utf-8")\n    lines = source.splitlines(keepends=True)\n    starts = [\n        index\n        for index, line in enumerate(lines)\n        if line.startswith("py-modules = [")\n    ]\n    if len(starts) != 1:\n        raise PatchBundleError("setuptools py-modules declaration is unavailable")\n    start = starts[0]\n    end = start\n    while "]" not in lines[end]:\n        end += 1\n        if end >= len(lines):\n            raise PatchBundleError("setuptools py-modules declaration is malformed")\n\n    import ast as _literal_ast\n\n    declaration = "".join(lines[start : end + 1])\n    payload = declaration.split("=", 1)[1].strip()\n    try:\n        modules = list(_literal_ast.literal_eval(payload))\n    except (SyntaxError, ValueError) as error:\n        raise PatchBundleError("setuptools py-modules declaration is malformed") from error\n    if not all(isinstance(module, str) and module for module in modules):\n        raise PatchBundleError("setuptools py-modules declaration is malformed")\n    if any(module in modules for module in _STATE_MODULES):\n        raise PatchBundleError("runtime state modules are already packaged")\n    try:\n        insertion = modules.index("hermes_state") + 1\n    except ValueError as error:\n        raise PatchBundleError("hermes_state packaging anchor is unavailable") from error\n    modules[insertion:insertion] = _STATE_MODULES\n    replacement = ["py-modules = [\\n"]\n    replacement.extend(f'  "{module}",\\n' for module in modules)\n    replacement.append("]\\n")\n    lines[start : end + 1] = replacement\n    path.write_text("".join(lines), encoding="utf-8")\n'''
+          anchor = "\n\ndef generate(bundle_root: Path, source: Path) -> GeneratedStabilization:\n"
+          if source.count(anchor) != 1:
+              raise SystemExit("generator function anchor is not unique")
+          source = source.replace(anchor, function + anchor)
+
+          old = '''        plugins = tree / "hermes_cli/plugins.py"\n        process_registry = tree / "tools/process_registry.py"\n        _stabilize_plugins(plugins)\n        _stabilize_process_registry(process_registry)\n'''
+          new = '''        plugins = tree / "hermes_cli/plugins.py"\n        process_registry = tree / "tools/process_registry.py"\n        pyproject = tree / "pyproject.toml"\n        _stabilize_plugins(plugins)\n        _stabilize_process_registry(process_registry)\n        _stabilize_pyproject(pyproject)\n'''
+          if source.count(old) != 1:
+              raise SystemExit("generator production anchor is not unique")
+          source = source.replace(old, new)
+
+          old = '''                "hermes_cli/plugins.py",\n                "tools/process_registry.py",\n'''
+          new = '''                "hermes_cli/plugins.py",\n                "pyproject.toml",\n                "tools/process_registry.py",\n'''
+          if source.count(old) != 1:
+              raise SystemExit("generator diff anchor is not unique")
+          source = source.replace(old, new)
+
+          old = '''                "hermes_cli/plugins.py": _sha256(plugins),\n                "tools/process_registry.py": _sha256(process_registry),\n'''
+          new = '''                "hermes_cli/plugins.py": _sha256(plugins),\n                "pyproject.toml": _sha256(pyproject),\n                "tools/process_registry.py": _sha256(process_registry),\n'''
+          if source.count(old) != 1:
+              raise SystemExit("generator provenance anchor is not unique")
+          generator.write_text(source, encoding="utf-8")
+
+          contract = Path(
+              "hermes-agent-plugin/tests/integration/host/"
+              "test_patched_core_distribution.py"
+          )
+          test_source = contract.read_text(encoding="utf-8")
+          old_import = "from importlib.metadata import entry_points, version\n"
+          new_import = (
+              "from importlib.metadata import distribution, entry_points, version\n"
+          )
+          if test_source.count(old_import) != 1:
+              raise SystemExit("wheel contract import anchor is not unique")
+          test_source = test_source.replace(old_import, new_import)
+          test_source += '''\n\ndef test_real_patched_core_wheel_contains_runtime_state_module_family() -> None:\n    if os.environ.get("HERMES_PATCHED_CORE_DISTRIBUTION") != "1":\n        pytest.skip("requires the isolated patched Core distribution environment")\n\n    installed = distribution("hermes-agent").files\n    assert installed is not None\n    paths = {str(path) for path in installed}\n    assert {\n        "hermes_state.py",\n        "hermes_state_common.py",\n        "hermes_state_portability.py",\n        "hermes_state_schema.py",\n        "hermes_state_search.py",\n    } <= paths\n'''
+          contract.write_text(test_source, encoding="utf-8")
+          PY
+          git diff --check
+      - name: Generate patch, rebuild artifacts and synchronize locks
+        env:
+          BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
+          UPSTREAM_SOURCE: _upstream/hermes-agent
+        run: |
+          PYTHONPATH="$BUNDLE_ROOT" python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          import tempfile
+          from pathlib import Path
+
+          from tools.apply_and_verify import PatchBundle
+          from tools.generate_stage3_stabilization_patch import generate
+          from tools.rebuild_locked_artifacts import (
+              _build_artifacts,
+              _build_configuration,
+              _prepare_build_tree,
+              _sha256,
+              _validate_source,
+          )
+
+          bundle_root = Path(os.environ["BUNDLE_ROOT"]).resolve()
+          upstream = Path(os.environ["UPSTREAM_SOURCE"]).resolve()
+          lock_path = bundle_root / "upstream.lock.json"
+          patch_path = bundle_root / "patches/0004-stage3-stabilization.patch"
+
+          generated = generate(bundle_root, upstream)
+          patch_path.write_text(generated.patch, encoding="utf-8")
+          patch_digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+
+          lock = json.loads(lock_path.read_text(encoding="utf-8"))
+          lock["patches"][-1]["sha256"] = patch_digest
+          provenance = lock["artifact_provenance"]
+          provenance["stage3_patch_sha256"] = patch_digest
+          sources = {
+              item["path"]: item["sha256"]
+              for item in provenance["source_files"]
+          }
+          sources.update(generated.source_provenance)
+          provenance["source_files"] = [
+              {"path": path, "sha256": digest}
+              for path, digest in sorted(sources.items())
+          ]
+          lock_path.write_text(
+              json.dumps(lock, indent=2, sort_keys=False) + "\n",
+              encoding="utf-8",
+          )
+
+          bundle = PatchBundle(bundle_root)
+          commit = _validate_source(bundle, upstream)
+          epoch, command, environment = _build_configuration(lock)
+          with tempfile.TemporaryDirectory(prefix="state-package-build-") as temp:
+              root = Path(temp)
+              build_root = _prepare_build_tree(
+                  bundle,
+                  source=upstream,
+                  commit=commit,
+                  root=root,
+              )
+              generated_dir = _build_artifacts(
+                  bundle,
+                  build_root=build_root,
+                  source_date_epoch=epoch,
+                  command=command,
+                  environment=environment,
+              )
+              actual = {
+                  path.name: _sha256(path)
+                  for path in generated_dir.iterdir()
+                  if path.is_file()
+              }
+
+          for artifact in lock["artifacts"]:
+              name = Path(artifact["path"]).name
+              artifact["sha256"] = actual[name]
+          lock_path.write_text(
+              json.dumps(lock, indent=2, sort_keys=False) + "\n",
+              encoding="utf-8",
+          )
+
+          final_lock_digest = hashlib.sha256(lock_path.read_bytes()).hexdigest()
+          fixture_path = Path(
+              "hermes-cloud/tests/fixtures/hermes_core_host_spi_v1/PROVENANCE.json"
+          )
+          fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+          fixture["upstream"]["lock_sha256"] = final_lock_digest
+          fixture_path.write_text(
+              json.dumps(fixture, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          integration_path = Path(
+              "hermes-cloud/deploy/test_server/integration-source-lock.json"
+          )
+          integration = json.loads(integration_path.read_text(encoding="utf-8"))
+          matched = False
+          for item in integration["files"]:
+              if item["path"] == "upstream/hermes-core-host-spi-v1/upstream.lock.json":
+                  item["sha256"] = final_lock_digest
+                  matched = True
+          if not matched:
+              raise SystemExit("Cloud integration lock has no upstream lock entry")
+          integration_path.write_text(
+              json.dumps(integration, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          runbook_path = Path("docs/runtime-identity-owner-control-release-runbook.md")
+          runbook = runbook_path.read_text(encoding="utf-8")
+          old_wheel = "0f6dd076d79f1e3d33a28fd10c01dd2da61401797ccbc7b1fdaf897595e4451f"
+          old_sdist = "bb34fa630d8d0297ab10e9682d46369183aa8b72426716df8755c417905bc330"
+          runbook = runbook.replace(
+              old_wheel,
+              actual["hermes_agent-0.19.0-py3-none-any.whl"],
+          ).replace(
+              old_sdist,
+              actual["hermes_agent-0.19.0.tar.gz"],
+          )
+          runbook_path.write_text(runbook, encoding="utf-8")
+
+          print(
+              json.dumps(
+                  {
+                      "patch_sha256": patch_digest,
+                      "lock_sha256": final_lock_digest,
+                      "artifacts": actual,
+                      "source_provenance": generated.source_provenance,
+                  },
+                  indent=2,
+                  sort_keys=True,
+              )
+          )
+          PY
+          git diff --check
+      - name: Verify regenerated patch and locked artifacts
+        env:
+          BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
+          UPSTREAM_SOURCE: _upstream/hermes-agent
+        run: |
+          rm -rf "$BUNDLE_ROOT/dist"
+          PYTHONPATH="$BUNDLE_ROOT" python -m tools.check_stage3_stabilization \
+            --source "$UPSTREAM_SOURCE"
+          PYTHONPATH="$BUNDLE_ROOT" python -m tools.rebuild_locked_artifacts_verbose \
+            --source "$UPSTREAM_SOURCE"
+          python - <<'PY'
+          from importlib.metadata import distribution
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = Path(
+              "upstream/hermes-core-host-spi-v1/dist/"
+              "hermes_agent-0.19.0-py3-none-any.whl"
+          )
+          required = {
+              "hermes_state.py",
+              "hermes_state_common.py",
+              "hermes_state_portability.py",
+              "hermes_state_schema.py",
+              "hermes_state_search.py",
+          }
+          with ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          assert required <= names, sorted(required - names)
+          PY
+      - name: Verify installed wheel contract catches state modules
+        env:
+          HERMES_PATCHED_CORE_DISTRIBUTION: "1"
+        run: |
+          python -m build --wheel --outdir "$RUNNER_TEMP/plugin-dist" hermes-agent-plugin
+          python -m build --wheel --outdir "$RUNNER_TEMP/connector-dist" hermes-connector
+          contract_venv="$RUNNER_TEMP/state-package-contract"
+          python -m venv "$contract_venv"
+          "$contract_venv/bin/python" -m pip install --upgrade pip
+          "$contract_venv/bin/python" -m pip install --no-deps \
+            upstream/hermes-core-host-spi-v1/dist/hermes_agent-0.19.0-py3-none-any.whl \
+            "$RUNNER_TEMP"/plugin-dist/hermes_agent_plugin-0.1.0-py3-none-any.whl \
+            "$RUNNER_TEMP"/connector-dist/hermes_connector-0.1.0-py3-none-any.whl
+          "$contract_venv/bin/python" -m pip install \
+            pytest==8.4.2 \
+            websockets==15.0.1
+          "$contract_venv/bin/python" -m pytest -q \
+            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py
+      - name: Commit verified packaging repair
+        run: |
+          rm -f \
+            .github/workflows/core-state-packaging-fix.yml \
+            .github/core-state-packaging-fix.trigger
+          git diff --check
+          git config user.name "looooooooy"
+          git config user.email "105577763+looooooooy@users.noreply.github.com"
+          git add \
+            upstream/hermes-core-host-spi-v1/tools/generate_stage3_stabilization_patch.py \
+            upstream/hermes-core-host-spi-v1/patches/0004-stage3-stabilization.patch \
+            upstream/hermes-core-host-spi-v1/upstream.lock.json \
+            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py \
+            hermes-cloud/tests/fixtures/hermes_core_host_spi_v1/PROVENANCE.json \
+            hermes-cloud/deploy/test_server/integration-source-lock.json \
+            docs/runtime-identity-owner-control-release-runbook.md \
+            .github/workflows/core-state-packaging-fix.yml \
+            .github/core-state-packaging-fix.trigger
+          git commit -m "fix(core): package runtime state module family"
+          git push origin HEAD:feature/runtime-identity-extension-health
