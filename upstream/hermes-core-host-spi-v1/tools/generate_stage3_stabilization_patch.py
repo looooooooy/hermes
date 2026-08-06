@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import re
+import ast
 import subprocess
 import tarfile
 import tempfile
@@ -27,29 +27,59 @@ def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None)
     return completed.stdout
 
 
-def _replace_once(
+def _indent(line: str) -> str:
+    return line[: len(line) - len(line.lstrip(" "))]
+
+
+def _is_name(node: ast.AST, value: str) -> bool:
+    return isinstance(node, ast.Name) and node.id == value
+
+
+def _is_attribute(node: ast.AST, value: str) -> bool:
+    return isinstance(node, ast.Attribute) and node.attr == value
+
+
+def _replace_node(
     source: str,
-    pattern: re.Pattern[str],
-    replacement,
-    *,
-    label: str,
+    node: ast.AST,
+    replacement: list[str],
 ) -> str:
-    updated, count = pattern.subn(replacement, source)
-    if count != 1:
-        raise PatchBundleError(f"{label} stabilization replacement count was {count}")
-    return updated
+    if node.lineno is None or node.end_lineno is None:
+        raise PatchBundleError("stabilization AST location is unavailable")
+    lines = source.splitlines(keepends=True)
+    lines[node.lineno - 1 : node.end_lineno] = replacement
+    return "".join(lines)
+
+
+def _plugin_shutdown_assignment(tree: ast.AST) -> ast.Assign | None:
+    for node in ast.walk(tree):
+        if (
+            not isinstance(node, ast.Assign)
+            or len(node.targets) != 1
+            or not _is_name(node.targets[0], "keys")
+            or not isinstance(node.value, ast.Call)
+            or not _is_name(node.value.func, "list")
+            or len(node.value.args) != 1
+        ):
+            continue
+        reversed_call = node.value.args[0]
+        if (
+            isinstance(reversed_call, ast.Call)
+            and _is_name(reversed_call.func, "reversed")
+            and len(reversed_call.args) == 1
+            and _is_attribute(reversed_call.args[0], "_extension_registrations")
+        ):
+            return node
+    return None
 
 
 def _stabilize_plugins(path: Path) -> None:
-    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    needle = "keys = list(reversed(self._extension_registrations))"
-    matches = [index for index, line in enumerate(lines) if line.strip() == needle]
-    if len(matches) != 1:
-        raise PatchBundleError(
-            f"plugin shutdown stabilization replacement count was {len(matches)}"
-        )
-    index = matches[0]
-    indent = lines[index][: len(lines[index]) - len(lines[index].lstrip(" "))]
+    source = path.read_text(encoding="utf-8")
+    node = _plugin_shutdown_assignment(ast.parse(source))
+    if node is None:
+        raise PatchBundleError("plugin shutdown stabilization assignment is unavailable")
+    lines = source.splitlines(keepends=True)
+    indent = _indent(lines[node.lineno - 1])
     replacement = [
         f"{indent}registered_keys = set(self._extension_registrations)\n",
         f"{indent}keys = [\n",
@@ -63,60 +93,89 @@ def _stabilize_plugins(path: Path) -> None:
         f"{indent}    if key not in self._plugins\n",
         f"{indent})\n",
     ]
-    lines[index : index + 1] = replacement
-    path.write_text("".join(lines), encoding="utf-8")
+    path.write_text(_replace_node(source, node, replacement), encoding="utf-8")
+
+
+def _handler_names(node: ast.AST | None) -> set[str]:
+    if isinstance(node, ast.Tuple):
+        return {item.id for item in node.elts if isinstance(item, ast.Name)}
+    if isinstance(node, ast.Name):
+        return {node.id}
+    return set()
+
+
+def _contains_call(node: ast.AST, function: str, attribute: str) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call) or not isinstance(child.func, ast.Attribute):
+            continue
+        if (
+            child.func.attr == attribute
+            and isinstance(child.func.value, ast.Name)
+            and child.func.value.id == function
+        ):
+            return True
+    return False
+
+
+def _contains_half_second_deadline(node: ast.AST) -> bool:
+    for child in ast.walk(node):
+        if not isinstance(child, ast.BinOp) or not isinstance(child.op, ast.Add):
+            continue
+        if isinstance(child.right, ast.Constant) and child.right.value == 0.5:
+            return True
+    return False
+
+
+def _process_fallback_handler(tree: ast.AST) -> ast.ExceptHandler | None:
+    terminate = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "_terminate_host_pid"
+        ),
+        None,
+    )
+    if terminate is None:
+        return None
+    matches = [
+        node
+        for node in ast.walk(terminate)
+        if isinstance(node, ast.ExceptHandler)
+        and _handler_names(node.type) == {"OSError", "PermissionError"}
+        and _contains_call(node, "os", "kill")
+        and _contains_half_second_deadline(node)
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _stabilize_process_registry(path: Path) -> None:
     source = path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r"(?m)^(?P<indent>[ ]*)except \(OSError, PermissionError\):\n"
-        r"(?P=indent)    try:\n"
-        r"(?P=indent)        os\.kill\(pid, signal\.SIGTERM\)\n"
-        r"(?P=indent)    except \(OSError, ProcessLookupError, PermissionError\):\n"
-        r"(?P=indent)        return False\n"
-        r"(?P=indent)    deadline = time\.monotonic\(\) \+ 0\.5\n"
-        r"(?P=indent)    while time\.monotonic\(\) < deadline:\n"
-        r"(?P=indent)        if cls\._host_pid_identity\(pid, expected_start\) == \"gone_or_reused\":\n"
-        r"(?P=indent)            return True\n"
-        r"(?P=indent)        time\.sleep\(0\.05\)\n"
-        r"(?P=indent)    return cls\._host_pid_identity\(pid, expected_start\) == \"gone_or_reused\"\n"
-    )
-
-    def replacement(match: re.Match[str]) -> str:
-        indent = match.group("indent")
-        return "\n".join(
-            (
-                f"{indent}except (OSError, PermissionError):",
-                f"{indent}    try:",
-                f"{indent}        os.kill(pid, signal.SIGTERM)",
-                f"{indent}    except ProcessLookupError:",
-                f"{indent}        return True",
-                f"{indent}    except (OSError, PermissionError):",
-                f"{indent}        return False",
-                f"{indent}    deadline = time.monotonic() + 0.5",
-                f"{indent}    while time.monotonic() < deadline:",
-                f"{indent}        try:",
-                f"{indent}            os.kill(pid, 0)",
-                f"{indent}        except ProcessLookupError:",
-                f"{indent}            return True",
-                f"{indent}        except (OSError, PermissionError):",
-                f"{indent}            return False",
-                f"{indent}        time.sleep(0.05)",
-                f"{indent}    return False",
-                "",
-            )
-        )
-
-    path.write_text(
-        _replace_once(
-            source,
-            pattern,
-            replacement,
-            label="process registry",
-        ),
-        encoding="utf-8",
-    )
+    node = _process_fallback_handler(ast.parse(source))
+    if node is None:
+        raise PatchBundleError("process registry stabilization handler is unavailable")
+    lines = source.splitlines(keepends=True)
+    indent = _indent(lines[node.lineno - 1])
+    replacement = [
+        f"{indent}except (OSError, PermissionError):\n",
+        f"{indent}    try:\n",
+        f"{indent}        os.kill(pid, signal.SIGTERM)\n",
+        f"{indent}    except ProcessLookupError:\n",
+        f"{indent}        return True\n",
+        f"{indent}    except (OSError, PermissionError):\n",
+        f"{indent}        return False\n",
+        f"{indent}    deadline = time.monotonic() + 0.5\n",
+        f"{indent}    while time.monotonic() < deadline:\n",
+        f"{indent}        try:\n",
+        f"{indent}            os.kill(pid, 0)\n",
+        f"{indent}        except ProcessLookupError:\n",
+        f"{indent}            return True\n",
+        f"{indent}        except (OSError, PermissionError):\n",
+        f"{indent}            return False\n",
+        f"{indent}        time.sleep(0.05)\n",
+        f"{indent}    return False\n",
+    ]
+    path.write_text(_replace_node(source, node, replacement), encoding="utf-8")
 
 
 def generate(bundle_root: Path, source: Path) -> str:
