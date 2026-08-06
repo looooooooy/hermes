@@ -20,15 +20,17 @@ jobs:
       - name: Apply bounded Stage 3 patch-count rule
         run: |
           python - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path("upstream/hermes-core-host-spi-v1/tools/apply_and_verify.py")
           source = path.read_text(encoding="utf-8")
-          old = '''        patches = lock.get("patches")
-          if not isinstance(patches, list) or len(patches) != stage:
-              raise PatchBundleError("bundle patch set does not match stage")
-          '''
-          new = '''        patches = lock.get("patches")
+          pattern = re.compile(
+              r'(?m)^        patches = lock\.get\("patches"\)\n'
+              r'^        if not isinstance\(patches, list\) or len\(patches\) != stage:\n'
+              r'^            raise PatchBundleError\("bundle patch set does not match stage"\)\n'
+          )
+          replacement = '''        patches = lock.get("patches")
           allowed_patch_counts = {
               1: frozenset({1}),
               2: frozenset({2}),
@@ -40,9 +42,10 @@ jobs:
           ):
               raise PatchBundleError("bundle patch set does not match stage")
           '''
-          if source.count(old) != 1:
-              raise SystemExit("validated-stage edit anchor is not unique")
-          path.write_text(source.replace(old, new), encoding="utf-8")
+          updated, count = pattern.subn(replacement, source)
+          if count != 1:
+              raise SystemExit(f"validated-stage edit anchor count={count}")
+          path.write_text(updated, encoding="utf-8")
           PY
           git diff --check
           git diff --exit-code --quiet && exit 1 || true
