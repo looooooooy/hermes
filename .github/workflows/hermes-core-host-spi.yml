@@ -27,7 +27,7 @@ concurrency:
 jobs:
   stage3-replay:
     name: Stage 3 replay and wheel contract
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
