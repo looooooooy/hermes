@@ -1,0 +1,157 @@
+name: Deploy Hermes staging Nginx
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: SSH host or public IP of the staging server
+        required: true
+        type: string
+      ssh_user:
+        description: SSH user; use a dedicated deploy user when available
+        required: true
+        default: root
+        type: string
+      server_name:
+        description: Nginx TLS server_name; must match the certificate SAN
+        required: true
+        type: string
+      tls_certificate_path:
+        description: Absolute certificate-chain path already present on the server
+        required: true
+        default: /etc/nginx/tls/hermes.crt
+        type: string
+      tls_certificate_key_path:
+        description: Absolute private-key path already present on the server
+        required: true
+        default: /etc/nginx/tls/hermes.key
+        type: string
+      require_backend_ready:
+        description: Require 8101 live/ready and TCP 8102/8104 before Nginx reload
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-staging-nginx-${{ inputs.host }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: hermes-runtime-staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment inputs
+        env:
+          HOST: ${{ inputs.host }}
+          SSH_USER: ${{ inputs.ssh_user }}
+          SERVER_NAME: ${{ inputs.server_name }}
+          TLS_CERTIFICATE_PATH: ${{ inputs.tls_certificate_path }}
+          TLS_CERTIFICATE_KEY_PATH: ${{ inputs.tls_certificate_key_path }}
+        run: |
+          python - <<'PY'
+          import ipaddress
+          import os
+          import re
+
+          def clean(name: str) -> str:
+              value = os.environ[name].strip()
+              if not value or any(character in value for character in "\r\n\0"):
+                  raise SystemExit(f"invalid {name}")
+              return value
+
+          host = clean("HOST")
+          user = clean("SSH_USER")
+          server_name = clean("SERVER_NAME")
+          cert = clean("TLS_CERTIFICATE_PATH")
+          key = clean("TLS_CERTIFICATE_KEY_PATH")
+
+          host_pattern = re.compile(r"^[A-Za-z0-9.-]+$")
+          user_pattern = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+          dns_pattern = re.compile(r"^[A-Za-z0-9.-]+$")
+          if not host_pattern.fullmatch(host):
+              raise SystemExit("invalid host")
+          if not user_pattern.fullmatch(user):
+              raise SystemExit("invalid ssh_user")
+          try:
+              ipaddress.ip_address(server_name)
+          except ValueError:
+              if not dns_pattern.fullmatch(server_name) or ".." in server_name:
+                  raise SystemExit("invalid server_name")
+          for label, value in (("certificate", cert), ("certificate key", key)):
+              if not value.startswith("/") or ".." in value or not re.fullmatch(r"/[A-Za-z0-9_./-]+", value):
+                  raise SystemExit(f"invalid {label} path")
+          PY
+
+      - name: Materialize pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HERMES_STAGING_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.HERMES_STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "${SSH_PRIVATE_KEY:-}" || { echo "missing HERMES_STAGING_SSH_PRIVATE_KEY" >&2; exit 1; }
+          test -n "${SSH_KNOWN_HOSTS:-}" || { echo "missing HERMES_STAGING_SSH_KNOWN_HOSTS" >&2; exit 1; }
+          install -d -m 0700 "$HOME/.ssh"
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/id_ed25519" >/dev/null
+
+      - name: Render bounded Nginx server block
+        env:
+          SERVER_NAME: ${{ inputs.server_name }}
+          TLS_CERTIFICATE_PATH: ${{ inputs.tls_certificate_path }}
+          TLS_CERTIFICATE_KEY_PATH: ${{ inputs.tls_certificate_key_path }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          source = Path("deploy/staging/nginx/hermes-public.conf.template").read_text(encoding="utf-8")
+          replacements = {
+              "__SERVER_NAME__": os.environ["SERVER_NAME"].strip(),
+              "__TLS_CERTIFICATE__": os.environ["TLS_CERTIFICATE_PATH"].strip(),
+              "__TLS_CERTIFICATE_KEY__": os.environ["TLS_CERTIFICATE_KEY_PATH"].strip(),
+          }
+          for marker, value in replacements.items():
+              if source.count(marker) == 0:
+                  raise SystemExit(f"missing template marker: {marker}")
+              source = source.replace(marker, value)
+          if "__" in source:
+              raise SystemExit("unresolved Nginx template marker")
+          Path(os.environ["RUNNER_TEMP"]).joinpath("hermes-public.conf").write_text(
+              source,
+              encoding="utf-8",
+          )
+          PY
+          bash -n deploy/staging/scripts/apply_nginx.sh
+
+      - name: Upload deployment assets
+        env:
+          HOST: ${{ inputs.host }}
+          SSH_USER: ${{ inputs.ssh_user }}
+        run: |
+          set -euo pipefail
+          options=(-i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          scp "${options[@]}" \
+            "$RUNNER_TEMP/hermes-public.conf" \
+            deploy/staging/scripts/apply_nginx.sh \
+            "$SSH_USER@$HOST:/tmp/"
+
+      - name: Apply and validate Nginx
+        env:
+          HOST: ${{ inputs.host }}
+          SSH_USER: ${{ inputs.ssh_user }}
+          REQUIRE_BACKEND_READY: ${{ inputs.require_backend_ready }}
+        run: |
+          set -euo pipefail
+          options=(-i "$HOME/.ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          ssh "${options[@]}" "$SSH_USER@$HOST" \
+            "if [ \"\$(id -u)\" -eq 0 ]; then exec bash /tmp/apply_nginx.sh /tmp/hermes-public.conf /etc/nginx/conf.d/hermes-public.conf '$REQUIRE_BACKEND_READY'; else exec sudo -n bash /tmp/apply_nginx.sh /tmp/hermes-public.conf /etc/nginx/conf.d/hermes-public.conf '$REQUIRE_BACKEND_READY'; fi"
