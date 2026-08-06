@@ -53,7 +53,6 @@ jobs:
           PY
           python -m py_compile upstream/hermes-core-host-spi-v1/tools/apply_and_verify.py
           PYTHONPATH=upstream/hermes-core-host-spi-v1 python - <<'PY'
-          import pytest
           from tools.apply_and_verify import PatchBundle, PatchBundleError
 
           def lock(count):
