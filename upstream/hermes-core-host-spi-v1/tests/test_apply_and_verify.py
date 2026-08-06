@@ -64,6 +64,7 @@ def test_stage3_artifacts_match_current_patch_source_provenance() -> None:
         "hermes_cli/plugin_store_v1.py",
         "hermes_cli/plugins.py",
         "hermes_cli/web_server.py",
+        "tools/process_registry.py",
     }
 
 
