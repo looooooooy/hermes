@@ -22,22 +22,22 @@
     },
     {
       "path": "patches/0004-stage3-stabilization.patch",
-      "sha256": "c0cf9b64c80f9f3179774134fb1d00cf859f23178065f7d3e2d97b50f65b2861"
+      "sha256": "81ec9143e3a553d3140f3ee2b12f2ae16a6b5513118d0f3ac5f7427ebc35214e"
     }
   ],
   "artifacts": [
     {
       "path": "dist/hermes_agent-0.19.0-py3-none-any.whl",
-      "sha256": "0f6dd076d79f1e3d33a28fd10c01dd2da61401797ccbc7b1fdaf897595e4451f"
+      "sha256": "314593d41fd8d7673bea30310119256fee577232fd042ae4b5d005c2bdd9acea"
     },
     {
       "path": "dist/hermes_agent-0.19.0.tar.gz",
-      "sha256": "bb34fa630d8d0297ab10e9682d46369183aa8b72426716df8755c417905bc330"
+      "sha256": "cd29a0696834c689108fc17b82b51ad925507d7179c852a467bfafca582ad45d"
     }
   ],
   "artifact_provenance": {
     "schema_version": 1,
-    "stage3_patch_sha256": "c0cf9b64c80f9f3179774134fb1d00cf859f23178065f7d3e2d97b50f65b2861",
+    "stage3_patch_sha256": "81ec9143e3a553d3140f3ee2b12f2ae16a6b5513118d0f3ac5f7427ebc35214e",
     "source_files": [
       {
         "path": "gateway/run.py",
@@ -152,6 +152,15 @@
           "tests/hermes_cli/test_plugins_cmd_enable_disable_nested.py",
           "-q"
         ]
+      }
+    ]
+  },
+  "artifact_build_provenance": {
+    "schema_version": 1,
+    "source_files": [
+      {
+        "path": "pyproject.toml",
+        "sha256": "a024e8943e51db2f09c0f8e0794c50312af0d566b471f5b251ca423d32126e3d"
       }
     ]
   }

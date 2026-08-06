@@ -6,7 +6,7 @@
     "version": "0.19.0",
     "commit": "14db1a99e21e5523ee61f10f5c3300a5087e8449",
     "lock_path": "upstream/hermes-core-host-spi-v1/upstream.lock.json",
-    "lock_sha256": "43e6d54882f246d26b3c2acffcf4594afed9fce9f6f4f459df60827b5a2b47fa"
+    "lock_sha256": "1613475b2c24c1726664da108ecbc18b2d6f9d78cd751a028ed0ef45e4d3bee3"
   },
   "stage1_patch": {
     "path": "upstream/hermes-core-host-spi-v1/patches/0001-gateway-extension-host-spi-v1-stage1.patch",
