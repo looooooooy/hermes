@@ -44,10 +44,6 @@
         "sha256": "80fb638f0a3f7b87d554f78573e154cb17a93022c7874b5aabf37f1f85e0f034"
       },
       {
-        "path": "hermes_cli/plugins.py",
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
-      },
-      {
         "path": "hermes_cli/web_server.py",
         "sha256": "b511bb017261f591ddf1402ca9e8e74ffe1ecaa6a3e7991e2bf9faaa6e46dffb"
       },
@@ -58,10 +54,6 @@
       {
         "path": "hermes_cli/extension_runtime.py",
         "sha256": "e89542f90598a6126295c313a1203181c9d4311085be73edbaf61d903ee2fc8a"
-      },
-      {
-        "path": "tools/process_registry.py",
-        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
       }
     ]
   },
