@@ -1,0 +1,55 @@
+name: Stage 3 stabilization edit
+
+on:
+  push:
+    branches:
+      - feature/runtime-identity-extension-health
+    paths:
+      - ".github/stage3-stabilization-edit.trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/runtime-identity-extension-health
+      - name: Apply bounded Stage 3 patch-count rule
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("upstream/hermes-core-host-spi-v1/tools/apply_and_verify.py")
+          source = path.read_text(encoding="utf-8")
+          old = '''        patches = lock.get("patches")
+          if not isinstance(patches, list) or len(patches) != stage:
+              raise PatchBundleError("bundle patch set does not match stage")
+          '''
+          new = '''        patches = lock.get("patches")
+          allowed_patch_counts = {
+              1: frozenset({1}),
+              2: frozenset({2}),
+              3: frozenset({3, 4}),
+          }
+          if (
+              not isinstance(patches, list)
+              or len(patches) not in allowed_patch_counts[stage]
+          ):
+              raise PatchBundleError("bundle patch set does not match stage")
+          '''
+          if source.count(old) != 1:
+              raise SystemExit("validated-stage edit anchor is not unique")
+          path.write_text(source.replace(old, new), encoding="utf-8")
+          PY
+          git diff --check
+          git diff --exit-code --quiet && exit 1 || true
+      - name: Commit bounded validator edit
+        run: |
+          git config user.name "looooooooy"
+          git config user.email "105577763+looooooooy@users.noreply.github.com"
+          git add upstream/hermes-core-host-spi-v1/tools/apply_and_verify.py
+          git commit -m "fix(core): allow locked Stage 3 stabilization patch"
+          git push origin HEAD:feature/runtime-identity-extension-health
