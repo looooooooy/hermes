@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -278,6 +279,31 @@ def _verify_source_provenance(
             raise PatchBundleError("patched source provenance mismatch")
 
 
+def _canonicalize_sdist(generated: Path, *, source_date_epoch: int) -> None:
+    candidates = tuple(sorted(generated.glob("*.tar.gz")))
+    if len(candidates) != 1:
+        raise PatchBundleError("artifact build sdist set is invalid")
+    source = candidates[0]
+    temporary = source.with_name(f".{source.name}.canonical")
+    try:
+        with gzip.open(source, "rb") as compressed:
+            tar_payload = compressed.read()
+        with temporary.open("wb") as raw_output:
+            with gzip.GzipFile(
+                filename="",
+                mode="wb",
+                compresslevel=9,
+                fileobj=raw_output,
+                mtime=source_date_epoch,
+            ) as canonical:
+                canonical.write(tar_payload)
+        temporary.replace(source)
+    except (EOFError, gzip.BadGzipFile, OSError) as error:
+        raise PatchBundleError("artifact sdist canonicalization failed") from error
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _build_artifacts(
     bundle: PatchBundle,
     *,
@@ -299,7 +325,9 @@ def _build_artifacts(
         env=child_environment,
         error_message="artifact build failed",
     )
-    return build_root / "dist"
+    generated = build_root / "dist"
+    _canonicalize_sdist(generated, source_date_epoch=source_date_epoch)
+    return generated
 
 
 def _verify_generated_artifacts(
@@ -320,8 +348,13 @@ def _verify_generated_artifacts(
         raise PatchBundleError("artifact build output set is invalid")
     for spec in specs:
         path = generated / Path(spec.relative_path).relative_to("dist")
-        if _sha256(path) != spec.sha256:
-            raise PatchBundleError("rebuilt artifact digest mismatch")
+        actual_digest = _sha256(path)
+        if actual_digest != spec.sha256:
+            raise PatchBundleError(
+                "rebuilt artifact digest mismatch: "
+                f"{spec.relative_path} expected={spec.sha256} "
+                f"actual={actual_digest}"
+            )
 
 
 def rebuild_locked_artifacts(
