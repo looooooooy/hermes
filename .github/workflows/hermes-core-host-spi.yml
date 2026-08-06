@@ -168,3 +168,53 @@ jobs:
         run: |
           "$RUNNER_TEMP/core-plugin-contract/bin/python" -m pytest -q \
             hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py
+      - name: Assemble verified runtime release bundle
+        env:
+          BUNDLE_DIR: ${{ runner.temp }}/hermes-runtime-bundle
+        run: |
+          mkdir -p "$BUNDLE_DIR"
+          cp "$BUNDLE_ROOT"/dist/hermes_agent-0.19.0-py3-none-any.whl "$BUNDLE_DIR/"
+          cp "$BUNDLE_ROOT"/dist/hermes_agent-0.19.0.tar.gz "$BUNDLE_DIR/"
+          cp "$RUNNER_TEMP"/plugin-dist/hermes_agent_plugin-0.1.0-py3-none-any.whl "$BUNDLE_DIR/"
+          cp "$RUNNER_TEMP"/connector-dist/hermes_connector-0.1.0-py3-none-any.whl "$BUNDLE_DIR/"
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["BUNDLE_DIR"])
+          release = root / "RELEASE.txt"
+          release.write_text(
+              "\n".join(
+                  (
+                      f"repository_commit={os.environ['GITHUB_SHA']}",
+                      f"upstream_core_commit={os.environ['UPSTREAM_COMMIT']}",
+                      "core_version=0.19.0",
+                      "plugin_version=0.1.0",
+                      "connector_version=0.1.0",
+                      "",
+                  )
+              ),
+              encoding="utf-8",
+          )
+          sums = []
+          for path in sorted(root.iterdir(), key=lambda item: item.name):
+              if not path.is_file() or path.name == "SHA256SUMS":
+                  continue
+              sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (root / "SHA256SUMS").write_text(
+              "\n".join(sums) + "\n",
+              encoding="ascii",
+          )
+          PY
+          cat "$BUNDLE_DIR/SHA256SUMS"
+      - name: Upload verified runtime release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-runtime-bundle-${{ github.sha }}
+          path: ${{ runner.temp }}/hermes-runtime-bundle
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
