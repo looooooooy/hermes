@@ -1,4 +1,7 @@
-"""Hermes Connector foundation package with infrastructure-lazy exports."""
+"""Independent Hermes Connector process with infrastructure-lazy public exports.
+
+Importing this package does not start storage, networking, or platform adapters.
+"""
 
 from __future__ import annotations
 
