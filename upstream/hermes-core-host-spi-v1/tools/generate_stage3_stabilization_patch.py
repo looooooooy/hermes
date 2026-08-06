@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
+import json
 import subprocess
 import tarfile
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from .apply_and_verify import PatchBundle, PatchBundleError
+
+
+@dataclass(frozen=True)
+class GeneratedStabilization:
+    patch: str
+    source_provenance: Mapping[str, str]
 
 
 def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None) -> str:
@@ -25,6 +34,10 @@ def _run(command: Sequence[str], *, cwd: Path, input_bytes: bytes | None = None)
     if isinstance(completed.stdout, bytes):
         return completed.stdout.decode("utf-8", errors="strict")
     return completed.stdout
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _indent(line: str) -> str:
@@ -196,7 +209,7 @@ def _stabilize_process_registry(path: Path) -> None:
     path.write_text(_replace_node(source, node, replacement), encoding="utf-8")
 
 
-def generate(bundle_root: Path, source: Path) -> str:
+def generate(bundle_root: Path, source: Path) -> GeneratedStabilization:
     bundle = PatchBundle(bundle_root)
     upstream = bundle.lock.get("upstream")
     commit = upstream.get("commit") if isinstance(upstream, dict) else None
@@ -235,8 +248,10 @@ def generate(bundle_root: Path, source: Path) -> str:
 
         _run(("git", "add", "-A"), cwd=tree)
         _run(("git", "commit", "-q", "-m", "stage3 baseline"), cwd=tree)
-        _stabilize_plugins(tree / "hermes_cli/plugins.py")
-        _stabilize_process_registry(tree / "tools/process_registry.py")
+        plugins = tree / "hermes_cli/plugins.py"
+        process_registry = tree / "tools/process_registry.py"
+        _stabilize_plugins(plugins)
+        _stabilize_process_registry(process_registry)
         patch = _run(
             (
                 "git",
@@ -252,7 +267,13 @@ def generate(bundle_root: Path, source: Path) -> str:
         )
         if not patch.strip():
             raise PatchBundleError("generated stabilization patch is empty")
-        return patch
+        return GeneratedStabilization(
+            patch=patch,
+            source_provenance={
+                "hermes_cli/plugins.py": _sha256(plugins),
+                "tools/process_registry.py": _sha256(process_registry),
+            },
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -264,13 +285,22 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        patch = generate(Path(__file__).resolve().parent.parent, args.source.resolve())
+        generated = generate(
+            Path(__file__).resolve().parent.parent,
+            args.source.resolve(),
+        )
     except (OSError, subprocess.CalledProcessError, tarfile.TarError, PatchBundleError) as error:
         print(f"stage3 stabilization generation failed: {error}")
         return 2
     print("--- BEGIN GENERATED STABILIZATION PATCH ---")
-    print(patch, end="" if patch.endswith("\n") else "\n")
+    print(generated.patch, end="" if generated.patch.endswith("\n") else "\n")
     print("--- END GENERATED STABILIZATION PATCH ---")
+    print(
+        json.dumps(
+            {"source_provenance": generated.source_provenance},
+            sort_keys=True,
+        )
+    )
     return 0
 
 
