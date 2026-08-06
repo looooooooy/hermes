@@ -1,0 +1,43 @@
+diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
+--- a/hermes_cli/plugins.py
++++ b/hermes_cli/plugins.py
+@@ -1730,4 +1730,14 @@ class PluginManager:
+                 while self._extension_active_installs:
+                     self._extension_condition.wait()
+-                keys = list(reversed(self._extension_registrations))
++                registered_keys = set(self._extension_registrations)
++                keys = [
++                    key
++                    for key in reversed(self._plugins)
++                    if key in registered_keys
++                ]
++                keys.extend(
++                    key
++                    for key in reversed(self._extension_registrations)
++                    if key not in self._plugins
++                )
+             else:
+diff --git a/tools/process_registry.py b/tools/process_registry.py
+--- a/tools/process_registry.py
++++ b/tools/process_registry.py
+@@ -650,11 +650,16 @@ class ProcessRegistry:
+         except (OSError, PermissionError):
+             try:
+                 os.kill(pid, signal.SIGTERM)
+-            except (OSError, ProcessLookupError, PermissionError):
++            except ProcessLookupError:
++                return True
++            except (OSError, PermissionError):
+                 return False
+             deadline = time.monotonic() + 0.5
+             while time.monotonic() < deadline:
+-                if cls._host_pid_identity(pid, expected_start) == "gone_or_reused":
++                try:
++                    os.kill(pid, 0)
++                except ProcessLookupError:
+                     return True
++                except (OSError, PermissionError):
++                    return False
+                 time.sleep(0.05)
+-            return cls._host_pid_identity(pid, expected_start) == "gone_or_reused"
++            return False
