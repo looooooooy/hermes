@@ -44,10 +44,6 @@ def _indent(line: str) -> str:
     return line[: len(line) - len(line.lstrip(" "))]
 
 
-def _is_attribute(node: ast.AST, value: str) -> bool:
-    return isinstance(node, ast.Attribute) and node.attr == value
-
-
 def _replace_node(
     source: str,
     node: ast.AST,
@@ -60,71 +56,50 @@ def _replace_node(
     return "".join(lines)
 
 
-def _assignment_target(node: ast.AST) -> ast.AST | None:
-    if isinstance(node, ast.Assign) and len(node.targets) == 1:
-        return node.targets[0]
-    if isinstance(node, ast.AnnAssign):
-        return node.target
-    return None
-
-
-def _assignment_value(node: ast.AST) -> ast.AST | None:
-    if isinstance(node, (ast.Assign, ast.AnnAssign)):
-        return node.value
-    return None
-
-
-def _plugin_shutdown_assignment(tree: ast.AST) -> ast.AST | None:
-    shutdown = next(
+def _entrypoint_scan_loop(tree: ast.AST) -> ast.For | None:
+    scan = next(
         (
             node
             for node in ast.walk(tree)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "shutdown_extensions"
+            and node.name == "_scan_entry_points"
         ),
         None,
     )
-    if shutdown is None:
+    if scan is None:
         return None
-    matches: list[ast.AST] = []
-    for node in ast.walk(shutdown):
-        target = _assignment_target(node)
-        value = _assignment_value(node)
-        if (
-            not isinstance(target, ast.Name)
-            or target.id != "keys"
-            or value is None
-        ):
-            continue
-        if any(
-            _is_attribute(child, "_extension_registrations")
-            for child in ast.walk(value)
-        ):
-            matches.append(node)
+    matches = [
+        node
+        for node in ast.walk(scan)
+        if isinstance(node, ast.For)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "ep"
+        and isinstance(node.iter, ast.Name)
+        and node.iter.id == "group_eps"
+    ]
     return matches[0] if len(matches) == 1 else None
 
 
 def _stabilize_plugins(path: Path) -> None:
     source = path.read_text(encoding="utf-8")
-    node = _plugin_shutdown_assignment(ast.parse(source))
-    if node is None:
-        raise PatchBundleError("plugin shutdown stabilization assignment is unavailable")
+    loop = _entrypoint_scan_loop(ast.parse(source))
+    if loop is None or loop.lineno is None:
+        raise PatchBundleError("entry-point scan stabilization loop is unavailable")
     lines = source.splitlines(keepends=True)
-    indent = _indent(lines[node.lineno - 1])
-    replacement = [
-        f"{indent}registered_keys = set(self._extension_registrations)\n",
-        f"{indent}keys = [\n",
-        f"{indent}    key\n",
-        f"{indent}    for key in reversed(self._plugins)\n",
-        f"{indent}    if key in registered_keys\n",
-        f"{indent}]\n",
-        f"{indent}keys.extend(\n",
-        f"{indent}    key\n",
-        f"{indent}    for key in reversed(self._extension_registrations)\n",
-        f"{indent}    if key not in self._plugins\n",
-        f"{indent})\n",
+    header_index = loop.lineno - 1
+    if lines[header_index].strip() != "for ep in group_eps:":
+        raise PatchBundleError("entry-point scan stabilization header is unavailable")
+    indent = _indent(lines[header_index])
+    lines[header_index : header_index + 1] = [
+        f"{indent}for ep in sorted(\n",
+        f"{indent}    group_eps,\n",
+        f"{indent}    key=lambda entry_point: (\n",
+        f"{indent}        entry_point.name,\n",
+        f"{indent}        entry_point.value,\n",
+        f"{indent}    ),\n",
+        f"{indent}):\n",
     ]
-    path.write_text(_replace_node(source, node, replacement), encoding="utf-8")
+    path.write_text("".join(lines), encoding="utf-8")
 
 
 def _handler_names(node: ast.AST | None) -> set[str]:
