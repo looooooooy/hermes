@@ -15,6 +15,7 @@ pub mod ports;
 pub mod release_control;
 pub mod toolchain;
 pub mod update_adapters;
+pub mod update_connector_lane;
 pub mod update_coordinator;
 pub mod update_download;
 pub mod update_http;
@@ -60,6 +61,7 @@ pub use update_adapters::{
     HttpUpdateArtifactFetcher, ServiceManagerReleaseActivator, ServiceManagerUpdateHealthGate,
     SignedBlockRollbackPolicy, SystemClock, UpdateCloudConnectivityProbe, UpdateLiveSessionProbe,
 };
+pub use update_connector_lane::GracefulServiceManagerConnectorLane;
 pub use update_coordinator::{
     StagedReleaseV1, UpdateArtifactFetcher, UpdateConnectorLane, UpdateCoordinator,
     UpdateCoordinatorError, UpdateHealthEvidenceV1, UpdateHealthGate, UpdateOutcomeStatusV1,
