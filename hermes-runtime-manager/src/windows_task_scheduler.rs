@@ -12,7 +12,7 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::TaskScheduler::{
     IRegisteredTask, ITaskFolder, ITaskService, TaskScheduler, TASK_CREATE_OR_UPDATE,
-    TASK_LOGON_INTERACTIVE_TOKEN, TASK_STATE_QUEUED, TASK_STATE_RUNNING,
+    TASK_LOGON_INTERACTIVE_TOKEN, TASK_RUNLEVEL_LUA, TASK_STATE_QUEUED, TASK_STATE_RUNNING,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE};
@@ -96,6 +96,7 @@ impl WindowsTaskSchedulerBootstrap {
         .map_err(|error| windows_operation("ITaskFolder::RegisterTask", error))?;
         let actual_xml = task_xml(&registered)?;
         validate_registered_xml(&actual_xml, &user_sid, runtime_manager, action)?;
+        validate_registered_principal(&registered, &user_sid)?;
         Ok(WindowsTaskRegistration {
             task_name: task_name.to_owned(),
             user_sid,
@@ -172,7 +173,7 @@ impl WindowsTaskSchedulerBootstrap {
 ///
 /// COM interfaces must be released while the apartment is still initialized. Rust
 /// runs a type's custom `Drop::drop` before automatically dropping its fields, so the
-/// interface lives in an `Option` and is explicitly `take()`n before CoUninitialize.
+/// service is held in an `Option` and explicitly released before `CoUninitialize`.
 struct TaskSchedulerApartment {
     service: Option<ITaskService>,
 }
@@ -193,7 +194,6 @@ impl TaskSchedulerApartment {
         };
         let empty = VARIANT::default();
         if let Err(error) = unsafe { service.Connect(&empty, &empty, &empty, &empty) } {
-            // Release the COM interface before balancing CoInitializeEx.
             drop(service);
             unsafe { CoUninitialize() };
             return Err(windows_operation("ITaskService::Connect", error));
@@ -214,8 +214,6 @@ impl TaskSchedulerApartment {
 
 impl Drop for TaskSchedulerApartment {
     fn drop(&mut self) {
-        // `Option::take` drops/releases ITaskService at the end of this statement,
-        // while COM is still initialized on the current thread.
         drop(self.service.take());
         unsafe { CoUninitialize() };
     }
@@ -225,6 +223,40 @@ fn task_xml(task: &IRegisteredTask) -> Result<String, PortError> {
     unsafe { task.Xml() }
         .map(|value| value.to_string())
         .map_err(|error| windows_operation("IRegisteredTask::Xml", error))
+}
+
+fn validate_registered_principal(
+    task: &IRegisteredTask,
+    expected_user_sid: &str,
+) -> Result<(), PortError> {
+    let definition = unsafe { task.Definition() }
+        .map_err(|error| windows_operation("IRegisteredTask::Definition", error))?;
+    let principal = unsafe { definition.Principal() }
+        .map_err(|error| windows_operation("ITaskDefinition::Principal", error))?;
+    let user_id = unsafe { principal.UserId() }
+        .map_err(|error| windows_operation("IPrincipal::UserId", error))?
+        .to_string();
+    let logon_type = unsafe { principal.LogonType() }
+        .map_err(|error| windows_operation("IPrincipal::LogonType", error))?;
+    let run_level = unsafe { principal.RunLevel() }
+        .map_err(|error| windows_operation("IPrincipal::RunLevel", error))?;
+
+    if user_id != expected_user_sid {
+        return Err(PortError::Operation(format!(
+            "registered Task Scheduler principal user SID mismatch: expected {expected_user_sid}, got {user_id}"
+        )));
+    }
+    if logon_type != TASK_LOGON_INTERACTIVE_TOKEN {
+        return Err(PortError::Operation(
+            "registered Task Scheduler principal is not InteractiveToken".to_owned(),
+        ));
+    }
+    if run_level != TASK_RUNLEVEL_LUA {
+        return Err(PortError::Operation(
+            "registered Task Scheduler principal is not least privilege (LUA)".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn render_task_xml(
@@ -298,7 +330,6 @@ fn validate_registered_xml(
     let required = [
         "<LogonTrigger>",
         "<LogonType>InteractiveToken</LogonType>",
-        "<RunLevel>LeastPrivilege</RunLevel>",
         "<RestartOnFailure>",
         "<Interval>PT1M</Interval>",
         "<Count>3</Count>",
