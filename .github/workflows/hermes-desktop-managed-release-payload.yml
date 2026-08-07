@@ -1,0 +1,312 @@
+name: Hermes Desktop managed release payload
+
+on:
+  push:
+    branches:
+      - "feature/hermes-desktop-foundation-*"
+    paths:
+      - "hermes-desktop/managed-release/**"
+      - "hermes-agent-plugin/packaging/common/portable_plugin_bundle.py"
+      - "hermes-agent-plugin/tests/packaging/test_portable_plugin_bundle.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-runtime-manager/**"
+      - "upstream/hermes-core-host-spi-v1/**"
+      - ".github/workflows/hermes-desktop-managed-release-payload.yml"
+  pull_request:
+    paths:
+      - "hermes-desktop/managed-release/**"
+      - "hermes-agent-plugin/packaging/common/portable_plugin_bundle.py"
+      - "hermes-agent-plugin/tests/packaging/test_portable_plugin_bundle.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-runtime-manager/**"
+      - "upstream/hermes-core-host-spi-v1/**"
+      - ".github/workflows/hermes-desktop-managed-release-payload.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-desktop-managed-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
+  UPSTREAM_COMMIT: 14db1a99e21e5523ee61f10f5c3300a5087e8449
+  RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  source-inputs:
+    name: Portable Core Plugin Connector source inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deterministic source tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            build==1.3.0 \
+            cryptography==46.0.7 \
+            pytest==8.4.2 \
+            ruff==0.16.1 \
+            uv==0.12.0
+          uv --version | grep -E '^uv 0\.12\.0([[:space:]]|$)'
+      - name: Checkout pinned Hermes Core
+        run: |
+          upstream="$RUNNER_TEMP/hermes-agent-upstream"
+          git init -q "$upstream"
+          git -C "$upstream" remote add origin https://github.com/NousResearch/hermes-agent.git
+          git -C "$upstream" fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git -C "$upstream" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$upstream" rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -z "$(git -C "$upstream" status --porcelain=v1 --untracked-files=all)"
+      - name: Create pinned Core verification environment
+        run: |
+          cd "$RUNNER_TEMP/hermes-agent-upstream"
+          uv sync --extra all --extra dev --locked --no-install-project
+      - name: Verify and rebuild locked patched Core artifacts
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m tools.check_stage3_stabilization \
+            --source "$RUNNER_TEMP/hermes-agent-upstream"
+          PYTHONPATH=. python -m tools.rebuild_locked_artifacts_verbose \
+            --source "$RUNNER_TEMP/hermes-agent-upstream"
+      - name: Materialize the exact patched Core project metadata
+        run: |
+          workspace="$RUNNER_TEMP/core-replay"
+          mkdir -p "$workspace"
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python - <<'PY'
+          from __future__ import annotations
+          import os
+          import subprocess
+          from pathlib import Path
+          from tools.apply_and_verify import PatchBundle, PatchBundleError
+
+          original_run = PatchBundle._run
+          def verbose_run(command, **kwargs):
+              try:
+                  return original_run(command, **kwargs)
+              except PatchBundleError as error:
+                  cause = error.__cause__
+                  if isinstance(cause, subprocess.CalledProcessError):
+                      if cause.stdout:
+                          print(cause.stdout, flush=True)
+                      if cause.stderr:
+                          print(cause.stderr, flush=True)
+                  raise
+          PatchBundle._run = staticmethod(verbose_run)
+          temp = Path(os.environ["RUNNER_TEMP"])
+          PatchBundle(Path.cwd()).apply_and_verify(
+              source=temp / "hermes-agent-upstream",
+              workspace_root=temp / "core-replay",
+              target=temp / "core-replay" / "patched",
+              test_python=temp / "hermes-agent-upstream" / ".venv" / "bin" / "python",
+          )
+          PY
+      - name: Build Plugin and Connector wheels
+        run: |
+          python -m build --wheel --outdir "$RUNNER_TEMP/plugin-dist" hermes-agent-plugin
+          python -m build --wheel --outdir "$RUNNER_TEMP/connector-dist" hermes-connector
+      - name: Prove portable Plugin generator contract
+        run: python -m pytest -q hermes-agent-plugin/tests/packaging/test_portable_plugin_bundle.py
+      - name: Generate ephemeral qualification-only portable Plugin signature
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import os
+          import sys
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          common = Path("hermes-agent-plugin/packaging/common").resolve()
+          sys.path.insert(0, str(common))
+          from portable_plugin_bundle import assemble_portable_plugin_bundle_v2
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          key = temp / "qualification-plugin-key.pem"
+          key.write_bytes(
+              Ed25519PrivateKey.generate().private_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PrivateFormat.PKCS8,
+                  encryption_algorithm=serialization.NoEncryption(),
+              )
+          )
+          key.chmod(0o600)
+          wheel = next((temp / "plugin-dist").glob("hermes_agent_plugin-0.1.0-*.whl"))
+          now = datetime.now(timezone.utc)
+          assemble_portable_plugin_bundle_v2(
+              wheel_path=wheel.resolve(),
+              private_key_path=key.resolve(),
+              output_root=(temp / "portable-plugin-v2").resolve(),
+              key_id="qualification-vendor-key",
+              now=now,
+              issued_at=now - timedelta(minutes=1),
+              expires_at=now + timedelta(hours=6),
+              key_not_before=now - timedelta(days=1),
+              key_not_after=now + timedelta(days=7),
+          )
+          key.unlink()
+          PY
+      - name: Assemble portable source-input artifact
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          output = temp / "managed-source-inputs"
+          core_project = temp / "core-replay" / "patched"
+          output.mkdir(mode=0o700)
+          (output / "core/project").mkdir(parents=True)
+          (output / "core/dist").mkdir(parents=True)
+          (output / "plugin").mkdir(parents=True)
+          (output / "connector/project").mkdir(parents=True)
+          (output / "connector/dist").mkdir(parents=True)
+          shutil.copy2(core_project / "pyproject.toml", output / "core/project/pyproject.toml")
+          shutil.copy2(core_project / "uv.lock", output / "core/project/uv.lock")
+          shutil.copy2(Path("upstream/hermes-core-host-spi-v1/dist/hermes_agent-0.19.0-py3-none-any.whl"), output / "core/dist/hermes_agent-0.19.0-py3-none-any.whl")
+          shutil.copy2(Path("upstream/hermes-core-host-spi-v1/dist/hermes_agent-0.19.0.tar.gz"), output / "core/dist/hermes_agent-0.19.0.tar.gz")
+          shutil.copytree(temp / "portable-plugin-v2", output / "plugin/portable", dirs_exist_ok=True)
+          shutil.copy2(Path("hermes-connector/pyproject.toml"), output / "connector/project/pyproject.toml")
+          shutil.copy2(Path("hermes-connector/uv.lock"), output / "connector/project/uv.lock")
+          connector_wheel = next((temp / "connector-dist").glob("hermes_connector-0.1.0-*.whl"))
+          shutil.copy2(connector_wheel, output / "connector/dist" / connector_wheel.name)
+          files = []
+          for path in sorted(output.rglob("*")):
+              if not path.is_file() or path.name == "SOURCE-INPUTS.json":
+                  continue
+              files.append({
+                  "path": path.relative_to(output).as_posix(),
+                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "size_bytes": path.stat().st_size,
+              })
+          manifest = {
+              "schema_version": 1,
+              "upstream_core_commit": os.environ["UPSTREAM_COMMIT"],
+              "repository_commit": os.environ["RELEASE_COMMIT"],
+              "core_version": "0.19.0",
+              "plugin_version": "0.1.0",
+              "connector_version": "0.1.0",
+              "portable_plugin_signature": True,
+              "files": files,
+          }
+          (output / "SOURCE-INPUTS.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps({"source_files": len(files), "source_root": str(output)}, sort_keys=True))
+          PY
+      - name: Upload portable source inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-managed-source-inputs-${{ env.RELEASE_COMMIT }}
+          path: ${{ runner.temp }}/managed-source-inputs
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  managed-release:
+    name: Managed Release payload / ${{ matrix.target }}
+    needs: source-inputs
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x86_64
+            private_uv: uv/uv
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+          - os: macos-latest
+            target: macos-aarch64
+            private_uv: uv/uv
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+          - os: windows-latest
+            target: windows-x86_64
+            private_uv: uv/uv.exe
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Download portable source inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: hermes-managed-source-inputs-${{ env.RELEASE_COMMIT }}
+          path: ${{ runner.temp }}/managed-source-inputs
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Build Runtime Manager release verifier
+        run: >-
+          cargo build --release
+          --manifest-path hermes-runtime-manager/Cargo.toml
+          --bin hermes-runtime-manager
+      - name: Build unqualified Private Toolchain
+        run: >-
+          python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
+          --lock hermes-runtime-manager/toolchains/upstream-lock-v1.json
+          --target ${{ matrix.target }}
+          --output "${{ runner.temp }}/hermes-toolchain-unqualified"
+      - name: Qualify Private Toolchain source and license evidence
+        run: >-
+          python hermes-runtime-manager/toolchains/qualify_toolchain_bundle.py
+          --bundle "${{ runner.temp }}/hermes-toolchain-unqualified"
+          --license-lock hermes-runtime-manager/toolchains/license-source-lock-v1.json
+          --output "${{ runner.temp }}/hermes-toolchain-qualified"
+      - name: Build lock-bound binary-only runtime wheelhouse
+        run: >-
+          python hermes-desktop/managed-release/build_runtime_wheelhouse.py
+          --target ${{ matrix.target }}
+          --uv "${{ runner.temp }}/hermes-toolchain-qualified/${{ matrix.private_uv }}"
+          --core-project "${{ runner.temp }}/managed-source-inputs/core/project"
+          --connector-project "${{ runner.temp }}/managed-source-inputs/connector/project"
+          --output "${{ runner.temp }}/runtime-wheelhouse"
+      - name: Cross-language verify portable Plugin vendor signature
+        run: >-
+          "${{ matrix.runtime_manager }}"
+          verify-plugin-signature
+          "${{ runner.temp }}/managed-source-inputs/plugin/portable/portable-plugin-manifest.json"
+          "${{ runner.temp }}/managed-source-inputs/plugin/portable/trust-store.json"
+          "${{ runner.temp }}/managed-source-inputs/plugin/portable/plugin/hermes_agent_plugin-0.1.0-py3-none-any.whl"
+      - name: Assemble immutable Managed Release and portable B2 payload
+        run: >-
+          python hermes-desktop/managed-release/assemble_managed_release_payload.py
+          --target ${{ matrix.target }}
+          --runtime-manager "${{ matrix.runtime_manager }}"
+          --qualified-toolchain "${{ runner.temp }}/hermes-toolchain-qualified"
+          --wheelhouse "${{ runner.temp }}/runtime-wheelhouse"
+          --core-project "${{ runner.temp }}/managed-source-inputs/core/project"
+          --core-wheel "${{ runner.temp }}/managed-source-inputs/core/dist/hermes_agent-0.19.0-py3-none-any.whl"
+          --core-sdist "${{ runner.temp }}/managed-source-inputs/core/dist/hermes_agent-0.19.0.tar.gz"
+          --plugin-bundle "${{ runner.temp }}/managed-source-inputs/plugin/portable"
+          --connector-project "${{ runner.temp }}/managed-source-inputs/connector/project"
+          --connector-wheel "${{ runner.temp }}/managed-source-inputs/connector/dist/hermes_connector-0.1.0-py3-none-any.whl"
+          --release-id desktop-0.1.0-${{ matrix.target }}
+          --output "${{ runner.temp }}/managed-release-payload"
+      - name: Independently validate portable B2 payload
+        run: >-
+          python hermes-desktop/managed-release/validate_managed_release_payload.py
+          --payload "${{ runner.temp }}/managed-release-payload"
+          --runtime-manager "${{ matrix.runtime_manager }}"
+          --expected-target ${{ matrix.target }}
+      - name: Upload Managed Release qualification payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-managed-release-qualification-${{ matrix.target }}-${{ env.RELEASE_COMMIT }}
+          path: ${{ runner.temp }}/managed-release-payload
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
