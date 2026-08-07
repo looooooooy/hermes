@@ -28,7 +28,7 @@
         "sha256": "fa909fea3bc06f460db79017030a221fdbc43ec4478f089cb554d8335c090817"
       },
       "python_executable": "python/bin/python3",
-      "uv_executable": "uv/bin/uv"
+      "uv_executable": "uv/uv"
     },
     "macos-x86_64": {
       "platform": "macos",
@@ -44,7 +44,7 @@
         "sha256": "a6e6506a9109801222d65d17461abf4ed13bdecc5d2b13af0495418a82972c6b"
       },
       "python_executable": "python/bin/python3",
-      "uv_executable": "uv/bin/uv"
+      "uv_executable": "uv/uv"
     },
     "linux-aarch64": {
       "platform": "linux",
@@ -60,7 +60,7 @@
         "sha256": "19b7f1f66895261fbaa07f8ea91da0f86337ad4e47efa594e87641c1718ffc52"
       },
       "python_executable": "python/bin/python3",
-      "uv_executable": "uv/bin/uv"
+      "uv_executable": "uv/uv"
     },
     "linux-x86_64": {
       "platform": "linux",
@@ -76,7 +76,7 @@
         "sha256": "d66e96b5f1ca3b99806eee283a8125d33a0bd669e6e6d9bc4ab7ffda63c41bf4"
       },
       "python_executable": "python/bin/python3",
-      "uv_executable": "uv/bin/uv"
+      "uv_executable": "uv/uv"
     },
     "windows-x86_64": {
       "platform": "windows",
