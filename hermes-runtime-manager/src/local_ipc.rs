@@ -167,8 +167,6 @@ mod unix_transport {
         {
             let mut credential = std::mem::MaybeUninit::<libc::ucred>::zeroed();
             let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-            // SAFETY: `credential` points to a correctly sized writable ucred buffer,
-            // `length` describes that buffer, and `fd` is a live accepted Unix socket.
             let result = unsafe {
                 libc::getsockopt(
                     fd,
@@ -181,9 +179,7 @@ mod unix_transport {
             if result != 0 {
                 return Err(LocalIpcError::Io(std::io::Error::last_os_error()));
             }
-            // SAFETY: successful SO_PEERCRED initialized the complete ucred value.
             let credential = unsafe { credential.assume_init() };
-            // SAFETY: geteuid has no preconditions.
             let current_uid = unsafe { libc::geteuid() };
             if credential.uid != current_uid {
                 return Err(LocalIpcError::Peer(format!(
@@ -199,15 +195,15 @@ mod unix_transport {
 
         #[cfg(target_os = "macos")]
         {
+            const SOL_LOCAL_DARWIN: libc::c_int = 0;
+            const LOCAL_PEERPID_DARWIN: libc::c_int = 0x002;
+
             let mut peer_uid: libc::uid_t = 0;
             let mut peer_gid: libc::gid_t = 0;
-            // SAFETY: peer_uid/peer_gid are valid writable outputs and `fd` is a live
-            // accepted Unix-domain socket. getpeereid does not retain the pointers.
             let result = unsafe { libc::getpeereid(fd, &mut peer_uid, &mut peer_gid) };
             if result != 0 {
                 return Err(LocalIpcError::Io(std::io::Error::last_os_error()));
             }
-            // SAFETY: geteuid has no preconditions.
             let current_uid = unsafe { libc::geteuid() };
             if peer_uid != current_uid {
                 return Err(LocalIpcError::Peer(format!(
@@ -215,9 +211,30 @@ mod unix_transport {
                     peer_uid, current_uid
                 )));
             }
+
+            let mut peer_pid: libc::pid_t = 0;
+            let mut length = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+            let pid_result = unsafe {
+                libc::getsockopt(
+                    fd,
+                    SOL_LOCAL_DARWIN,
+                    LOCAL_PEERPID_DARWIN,
+                    (&mut peer_pid as *mut libc::pid_t).cast(),
+                    &mut length,
+                )
+            };
+            if pid_result != 0 {
+                return Err(LocalIpcError::Io(std::io::Error::last_os_error()));
+            }
+            let peer_pid = u32::try_from(peer_pid).map_err(|_| {
+                LocalIpcError::Peer("macOS peer PID is outside the supported range".to_owned())
+            })?;
+            if peer_pid == 0 {
+                return Err(LocalIpcError::Peer("macOS peer PID is zero".to_owned()));
+            }
             return Ok(UnixPeerIdentity {
                 uid: peer_uid,
-                pid: None,
+                pid: Some(peer_pid),
             });
         }
 
@@ -264,7 +281,7 @@ mod unix_transport {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         #[test]
-        fn accepted_peer_is_bound_to_current_os_user() {
+        fn accepted_peer_is_bound_to_current_os_user_and_process() {
             let unique = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("clock")
@@ -279,9 +296,7 @@ mod unix_transport {
             let identity = verify_same_user(&server_stream).expect("peer identity");
             let _client_stream = client.join().expect("client thread");
 
-            // SAFETY: geteuid has no preconditions.
             assert_eq!(identity.uid, unsafe { libc::geteuid() });
-            #[cfg(target_os = "linux")]
             assert_eq!(identity.pid, Some(std::process::id()));
             let _ = fs::remove_file(endpoint);
             let _ = fs::remove_dir_all(root);
