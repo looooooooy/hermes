@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "feature/hermes-desktop-foundation-*"
+      - "feature/hermes-release-update-plane-*"
     paths:
       - "hermes-desktop/managed-release/**"
       - "hermes-agent-plugin/packaging/common/portable_plugin_bundle.py"
@@ -225,18 +226,21 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux-x86_64
+            private_python: python/bin/python3
             private_uv: uv/uv
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
           - os: macos-latest
             target: macos-aarch64
+            private_python: python/bin/python3
             private_uv: uv/uv
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
           - os: windows-latest
             target: windows-x86_64
+            private_python: python/python.exe
             private_uv: uv/uv.exe
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager.exe
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -249,11 +253,15 @@ jobs:
           path: ${{ runner.temp }}/managed-source-inputs
       - name: Use stable Rust
         run: rustup default stable
-      - name: Build Runtime Manager release verifier
+      - name: Build Runtime Manager release verifier and staging authority
         run: >-
           cargo build --release
           --manifest-path hermes-runtime-manager/Cargo.toml
           --bin hermes-runtime-manager
+      - name: Build trusted local Managed Release installer zipapp
+        run: >-
+          python hermes-desktop/managed-release/build_managed_release_installer_zipapp.py
+          --output "${{ runner.temp }}/hermes-managed-release-installer.pyz"
       - name: Build unqualified Private Toolchain
         run: >-
           python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
@@ -276,16 +284,17 @@ jobs:
           --output "${{ runner.temp }}/runtime-wheelhouse"
       - name: Cross-language verify portable Plugin vendor signature
         run: >-
-          "${{ matrix.runtime_manager }}"
-          verify-plugin-signature
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- verify-plugin-signature
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/portable-plugin-manifest.json"
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/trust-store.json"
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/plugin/hermes_agent_plugin-0.1.0-py3-none-any.whl"
-      - name: Assemble immutable Managed Release and portable B2 payload
+      - name: Assemble immutable Managed Release proof and portable B2 directory
         run: >-
           python hermes-desktop/managed-release/assemble_managed_release_payload.py
           --target ${{ matrix.target }}
-          --runtime-manager "${{ matrix.runtime_manager }}"
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
           --qualified-toolchain "${{ runner.temp }}/hermes-toolchain-qualified"
           --wheelhouse "${{ runner.temp }}/runtime-wheelhouse"
           --core-project "${{ runner.temp }}/managed-source-inputs/core/project"
@@ -296,17 +305,56 @@ jobs:
           --connector-wheel "${{ runner.temp }}/managed-source-inputs/connector/dist/hermes_connector-0.1.0-py3-none-any.whl"
           --release-id desktop-0.1.0-${{ matrix.target }}
           --output "${{ runner.temp }}/managed-release-payload"
-      - name: Independently validate portable B2 payload
+      - name: Independently validate portable B2 directory
         run: >-
           python hermes-desktop/managed-release/validate_managed_release_payload.py
           --payload "${{ runner.temp }}/managed-release-payload"
-          --runtime-manager "${{ matrix.runtime_manager }}"
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
           --expected-target ${{ matrix.target }}
-      - name: Upload Managed Release qualification payload
+      - name: Pack deterministic production-shape Managed Release tar.zst
+        run: >-
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- pack-managed-payload
+          "${{ runner.temp }}/managed-release-payload"
+          "${{ runner.temp }}/managed-release-${{ matrix.target }}.tar.zst"
+      - name: Stage downloaded-shape archive with Private Python and trusted zipapp
+        run: >-
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- stage-managed-payload
+          "${{ runner.temp }}/managed-release-${{ matrix.target }}.tar.zst"
+          "${{ runner.temp }}/hermes-toolchain-qualified/${{ matrix.private_python }}"
+          "${{ runner.temp }}/hermes-managed-release-installer.pyz"
+          "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          "${{ runner.temp }}/hermes-toolchain-qualified"
+          "${{ runner.temp }}/staged-releases"
+          "${{ runner.temp }}/update-stage"
+          desktop-0.1.0-${{ matrix.target }}
+          1
+          ${{ matrix.target }}
+      - name: Verify exact immutable release produced by client staging path
+        shell: python
+        run: |
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "staged-releases" / "desktop-0.1.0-${{ matrix.target }}"
+          if root.is_symlink() or not root.is_dir():
+              raise SystemExit("staged immutable release is missing")
+          manifest = json.loads((root / "manifest/release.json").read_text(encoding="utf-8"))
+          if manifest.get("release_id") != "desktop-0.1.0-${{ matrix.target }}":
+              raise SystemExit("staged release identity mismatch")
+          for relative in ("host/venv", "connector/venv", "plugin/artifacts"):
+              path = root / relative
+              if path.is_symlink() or not path.is_dir():
+                  raise SystemExit(f"staged release missing {relative}")
+          print(json.dumps({"release": str(root), "local_stage_verified": True}, sort_keys=True))
+      - name: Upload production-shape Managed Release qualification artifact
         uses: actions/upload-artifact@v4
         with:
           name: hermes-managed-release-qualification-${{ matrix.target }}-${{ env.RELEASE_COMMIT }}
-          path: ${{ runner.temp }}/managed-release-payload
+          path: ${{ runner.temp }}/managed-release-${{ matrix.target }}.tar.zst
           if-no-files-found: error
           retention-days: 7
-          compression-level: 6
+          compression-level: 0

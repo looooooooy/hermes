@@ -50,7 +50,12 @@ def test_verified_wheelhouse_binds_both_runtime_locks(tmp_path: Path) -> None:
     verified.require_lock("core", "1" * 64)
     verified.require_lock("connector", "2" * 64)
     assert verified.root == root
-    assert len(verified.manifest.artifacts) == 1
+    assert verified.platform == verified.manifest.platform == "macos"
+    assert verified.architecture == verified.manifest.architecture == "arm64"
+    assert verified.python_tag == verified.manifest.python_tag == "cp313"
+    assert verified.locks is verified.manifest.locks
+    assert verified.artifacts is verified.manifest.artifacts
+    assert len(verified.artifacts) == 1
     assert len(verified.manifest_sha256) == 64
 
 

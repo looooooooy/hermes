@@ -148,6 +148,70 @@ def test_verified_wheelhouse_disables_registry_and_binds_find_links(tmp_path: Pa
     assert environment["UV_NO_PYTHON_DOWNLOADS"] == "1"
 
 
+def test_uv_venv_uses_exact_private_python_without_registry_flags(tmp_path: Path) -> None:
+    runner, executor, toolchain = _runner(tmp_path, with_wheelhouse=True)
+    target = (tmp_path / "managed-venv").resolve()
+
+    runner.run(_command(tmp_path, ("uv", "venv", "--offline", str(target))))
+
+    argv, _, environment = executor.calls[0]
+    assert argv[:4] == (
+        str(toolchain.uv.path),
+        "venv",
+        "--python",
+        str(toolchain.python.path),
+    )
+    assert "--no-index" not in argv
+    assert argv[-1] == str(target)
+    assert environment["UV_OFFLINE"] == "1"
+    assert environment["UV_PYTHON"] == str(toolchain.python.path)
+
+
+def test_uv_venv_rejects_private_python_override(tmp_path: Path) -> None:
+    runner, _, _ = _runner(tmp_path)
+    other = (tmp_path / "other-python").resolve()
+
+    with pytest.raises(PrivateToolchainError, match="override"):
+        runner.run(
+            _command(
+                tmp_path,
+                ("uv", "venv", "--python", str(other), str(tmp_path / "venv")),
+            )
+        )
+
+
+def test_uv_pip_target_plan_is_offline_and_wheelhouse_bound(tmp_path: Path) -> None:
+    runner, executor, _ = _runner(tmp_path, with_wheelhouse=True)
+    target_python = (tmp_path / "venv" / "bin" / "python").resolve()
+    requirements = (tmp_path / "runtime-requirements.txt").resolve()
+
+    runner.run(
+        _command(
+            tmp_path,
+            (
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(target_python),
+                "--require-hashes",
+                "--no-deps",
+                "--requirement",
+                str(requirements),
+            ),
+        )
+    )
+
+    argv, _, environment = executor.calls[0]
+    assert argv[0] != "uv"
+    assert argv[1:3] == ("pip", "install")
+    assert "--no-index" in argv
+    assert "--require-hashes" in argv
+    assert "--no-deps" in argv
+    assert environment["UV_FIND_LINKS"] == str((tmp_path / "wheelhouse").resolve())
+
+
 def test_uv_pip_requires_explicit_absolute_target_python(tmp_path: Path) -> None:
     runner, _, _ = _runner(tmp_path)
 
@@ -158,7 +222,14 @@ def test_uv_pip_requires_explicit_absolute_target_python(tmp_path: Path) -> None
         runner.run(
             _command(
                 tmp_path,
-                ("uv", "pip", "install", "--python", "venv/bin/python", "package.whl"),
+                (
+                    "uv",
+                    "pip",
+                    "install",
+                    "--python",
+                    "venv/bin/python",
+                    "package.whl",
+                ),
             )
         )
 

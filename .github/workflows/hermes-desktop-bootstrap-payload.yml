@@ -4,14 +4,27 @@ on:
   push:
     branches:
       - "feature/hermes-desktop-foundation-*"
+      - "feature/hermes-release-update-plane-*"
     paths:
       - "hermes-desktop/bootstrap/**"
+      - "hermes-desktop/managed-release/install_managed_release_payload.py"
+      - "hermes-desktop/managed-release/build_managed_release_installer_zipapp.py"
+      - "hermes-connector/packaging/common/hermes_local_release.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
       - "hermes-desktop/src-tauri/**"
       - "hermes-runtime-manager/**"
       - ".github/workflows/hermes-desktop-bootstrap-payload.yml"
   pull_request:
     paths:
       - "hermes-desktop/bootstrap/**"
+      - "hermes-desktop/managed-release/install_managed_release_payload.py"
+      - "hermes-desktop/managed-release/build_managed_release_installer_zipapp.py"
+      - "hermes-connector/packaging/common/hermes_local_release.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
       - "hermes-desktop/src-tauri/**"
       - "hermes-runtime-manager/**"
       - ".github/workflows/hermes-desktop-bootstrap-payload.yml"
@@ -84,6 +97,10 @@ jobs:
           cargo build --release
           --manifest-path hermes-runtime-manager/Cargo.toml
           --bin hermes-runtime-manager
+      - name: Build trusted local Managed Release installer zipapp
+        run: >-
+          python hermes-desktop/managed-release/build_managed_release_installer_zipapp.py
+          --output "${{ runner.temp }}/hermes-managed-release-installer.pyz"
       - name: Build unqualified Private Toolchain
         run: >-
           python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
@@ -105,6 +122,11 @@ jobs:
           --runtime-manager "${{ matrix.runtime_manager }}"
           --qualified-toolchain "${{ runner.temp }}/hermes-toolchain-qualified"
           --output "${{ runner.temp }}/hermes-bootstrap-payload"
+      - name: Bind trusted local update installer into Bootstrap manifest
+        run: >-
+          python hermes-desktop/bootstrap/augment_bootstrap_with_update_installer.py
+          --payload "${{ runner.temp }}/hermes-bootstrap-payload"
+          --installer "${{ runner.temp }}/hermes-managed-release-installer.pyz"
       - name: Verify payload with poisoned host PATH
         run: >-
           python hermes-desktop/bootstrap/validate_bootstrap_payload.py

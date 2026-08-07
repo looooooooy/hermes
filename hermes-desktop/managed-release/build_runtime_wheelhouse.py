@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Build the DESKTOP-020B2 closed runtime dependency wheelhouse.
 
-This runs only in qualification CI. Customer machines consume the resulting wheelhouse
-strictly offline through the pinned Hermes Private uv; they never invoke pip/download.
+Qualification CI derives one target-specific, hash-bound install plan from the same
+Core/Connector uv locks used for the release. Customer machines consume the exported
+requirements strictly offline through Hermes Private uv; they never re-solve the
+universal lock or invoke network package discovery.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ COMMON = ROOT / "hermes-connector" / "packaging" / "common"
 sys.path.insert(0, str(COMMON))
 
 from hermes_offline_wheelhouse import load_verified_wheelhouse  # noqa: E402
+from hermes_target_runtime_plan import load_verified_target_runtime_plan  # noqa: E402
 
 TARGETS = {
     "macos-aarch64": ("macos", "aarch64"),
@@ -29,6 +32,10 @@ TARGETS = {
     "linux-aarch64": ("linux", "aarch64"),
     "linux-x86_64": ("linux", "x86_64"),
     "windows-x86_64": ("windows", "x86_64"),
+}
+_REQUIREMENT_FILES = {
+    "core": "CORE-RUNTIME-REQUIREMENTS.txt",
+    "connector": "CONNECTOR-RUNTIME-REQUIREMENTS.txt",
 }
 
 
@@ -54,11 +61,13 @@ def main() -> int:
         raise WheelhouseBuildError(f"wheelhouse output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    core_lock = sha256_file(core / "uv.lock")
-    connector_lock = sha256_file(connector / "uv.lock")
+    locks = {
+        "core": sha256_file(core / "uv.lock"),
+        "connector": sha256_file(connector / "uv.lock"),
+    }
     with tempfile.TemporaryDirectory(prefix="hermes-wheelhouse-") as temporary:
         scratch = Path(temporary)
-        requirements = []
+        requirements: dict[str, Path] = {}
         for label, project in (("core", core), ("connector", connector)):
             exported = subprocess.run(
                 [
@@ -78,15 +87,17 @@ def main() -> int:
                 timeout=90,
                 env=sanitized_environment(),
             ).stdout
-            if not exported.strip():
-                raise WheelhouseBuildError(f"{label} lock export produced no requirements")
+            if not exported.strip() or "--hash=" not in exported:
+                raise WheelhouseBuildError(
+                    f"{label} lock export did not produce hash-bound requirements"
+                )
             path = scratch / f"{label}-requirements.txt"
             path.write_text(exported, encoding="utf-8")
-            requirements.append(path)
+            requirements[label] = path
 
         stage = scratch / "wheelhouse"
         stage.mkdir(mode=0o700)
-        for requirement in requirements:
+        for requirement in requirements.values():
             subprocess.run(
                 [
                     sys.executable,
@@ -108,7 +119,9 @@ def main() -> int:
         artifacts = []
         for path in sorted(stage.iterdir(), key=lambda item: item.name):
             if path.is_symlink() or not path.is_file() or path.suffix != ".whl":
-                raise WheelhouseBuildError(f"non-wheel dependency artifact is forbidden: {path.name}")
+                raise WheelhouseBuildError(
+                    f"non-wheel dependency artifact is forbidden: {path.name}"
+                )
             artifacts.append(
                 {
                     "filename": path.name,
@@ -118,25 +131,63 @@ def main() -> int:
             )
         if not artifacts:
             raise WheelhouseBuildError("runtime wheelhouse is empty")
-        manifest = {
+
+        wheelhouse_manifest = {
             "schema_version": 1,
             "platform": platform_name,
             "architecture": architecture,
             "python_tag": "cp313",
-            "locks": {"core": core_lock, "connector": connector_lock},
+            "locks": locks,
             "artifacts": artifacts,
         }
-        (stage / "WHEELHOUSE-MANIFEST.json").write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        wheelhouse_manifest_path = stage / "WHEELHOUSE-MANIFEST.json"
+        wheelhouse_manifest_path.write_text(
+            json.dumps(wheelhouse_manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+        wheelhouse_manifest_sha = sha256_file(wheelhouse_manifest_path)
+
+        requirement_manifest: dict[str, dict[str, object]] = {}
+        for label, source in requirements.items():
+            destination = stage / _REQUIREMENT_FILES[label]
+            shutil.copy2(source, destination)
+            requirement_manifest[label] = {
+                "filename": destination.name,
+                "sha256": sha256_file(destination),
+                "size_bytes": destination.stat().st_size,
+            }
+
+        runtime_plan = {
+            "schema_version": 1,
+            "target": args.target,
+            "platform": platform_name,
+            "architecture": architecture,
+            "python_tag": "cp313",
+            "wheelhouse_manifest_sha256": wheelhouse_manifest_sha,
+            "locks": locks,
+            "requirements": requirement_manifest,
+        }
+        (stage / "RUNTIME-INSTALL-PLAN.json").write_text(
+            json.dumps(runtime_plan, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
         if os.name != "nt":
             for path in stage.iterdir():
-                path.chmod(0o400)
+                if path.is_file():
+                    path.chmod(0o400)
         load_verified_wheelhouse(stage)
+        load_verified_target_runtime_plan(
+            stage,
+            expected_wheelhouse_manifest_sha256=wheelhouse_manifest_sha,
+        )
         shutil.copytree(stage, output, symlinks=False, copy_function=shutil.copy2)
 
     verified = load_verified_wheelhouse(output)
+    runtime_plan = load_verified_target_runtime_plan(
+        output,
+        expected_wheelhouse_manifest_sha256=verified.manifest_sha256,
+    )
     print(
         json.dumps(
             {
@@ -145,11 +196,15 @@ def main() -> int:
                 "platform": verified.platform,
                 "architecture": verified.architecture,
                 "python_tag": verified.python_tag,
-                "core_lock_sha256": core_lock,
-                "connector_lock_sha256": connector_lock,
+                "core_lock_sha256": locks["core"],
+                "connector_lock_sha256": locks["connector"],
+                "core_requirements_sha256": runtime_plan.requirement("core").sha256,
+                "connector_requirements_sha256": runtime_plan.requirement("connector").sha256,
+                "runtime_plan_sha256": runtime_plan.plan_sha256,
                 "wheel_count": len(verified.artifacts),
                 "wheelhouse_root": str(output),
                 "binary_only": True,
+                "target_install_plan_verified": True,
                 "verified": True,
             },
             sort_keys=True,
@@ -160,7 +215,9 @@ def main() -> int:
 
 def require_executable(path: Path, label: str) -> Path:
     if not path.is_absolute() or path.is_symlink() or not path.is_file():
-        raise WheelhouseBuildError(f"{label} must be an absolute regular non-symlink file")
+        raise WheelhouseBuildError(
+            f"{label} must be an absolute regular non-symlink file"
+        )
     if os.name != "nt" and path.stat().st_mode & 0o111 == 0:
         raise WheelhouseBuildError(f"{label} is not executable")
     return path
@@ -196,5 +253,10 @@ def sha256_file(path: Path) -> str:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (WheelhouseBuildError, OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+    except (
+        WheelhouseBuildError,
+        OSError,
+        subprocess.SubprocessError,
+        json.JSONDecodeError,
+    ) as error:
         raise SystemExit(f"runtime_wheelhouse_error: {error}") from error

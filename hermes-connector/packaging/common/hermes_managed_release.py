@@ -1,18 +1,21 @@
 """Production entrypoint for Hermes Managed Runtime release assembly.
 
-The legacy ReleaseBuilder remains the deterministic immutable layout engine. This
-module is the customer-runtime composition root and makes a verified private
-toolchain, a closed lock-bound wheelhouse, and (for portable Plugin manifest v2)
-an external cryptographic verifier mandatory.
+The legacy ReleaseBuilder remains the deterministic immutable layout engine. Customer
+assembly adds a target-specific, hash-bound runtime install plan derived from the same
+Core/Connector uv locks, avoiding universal-lock re-resolution on a single OS while
+preserving lock and wheelhouse provenance.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from hermes_local_release import (
@@ -24,6 +27,11 @@ from hermes_local_release import (
 )
 from hermes_offline_wheelhouse import VerifiedWheelhouseV1
 from hermes_private_toolchain import PinnedToolchainRunner, PrivateToolchainV1
+from hermes_target_runtime_plan import VerifiedTargetRuntimePlanV1
+from hermes_wheelhouse_provenance import (
+    WheelhouseProvenanceError,
+    verify_wheelhouse_direct_urls,
+)
 
 _PORTABLE_PLUGIN_FIELDS = {
     "schema_version",
@@ -91,43 +99,95 @@ print(json.dumps({
 
 
 class ManagedReleaseBuilder(ReleaseBuilder):
-    """ReleaseBuilder specialization for customer runtime assembly.
+    """ReleaseBuilder specialization for customer runtime assembly."""
 
-    - `uv sync` installs runtime dependencies only (`--no-default-groups`).
-    - venv interpreter/console verification is platform-correct on macOS/Linux/Windows.
-    - portable Plugin manifest v2 is accepted only as an artifact identity; customer
-      absolute wheel/store paths are derived locally and are never part of the vendor
-      signed payload.
-    """
-
-    @staticmethod
-    def _commands(inputs: ReleaseInputs, release_dir: Path) -> tuple[BuildCommand, ...]:
-        commands = ReleaseBuilder._commands(inputs, release_dir)
-        hardened: list[BuildCommand] = []
-        for command in commands:
-            argv = tuple(_managed_venv_python(value) for value in command.argv)
-            if len(argv) >= 2 and argv[:2] == ("uv", "sync"):
-                if "--no-default-groups" in argv:
-                    raise RuntimeError("duplicate --no-default-groups in managed release command")
-                argv = (*argv, "--no-default-groups")
-            if command.purpose.startswith("verify-"):
-                values = list(argv)
-                try:
-                    code_index = values.index("-c") + 1
-                except (ValueError, IndexError) as error:
-                    raise RuntimeError("managed runtime verification command is malformed") from error
-                values[code_index] = _VERIFY_RUNTIME_CROSS_PLATFORM
-                argv = tuple(values)
-            hardened.append(
-                BuildCommand(
-                    purpose=command.purpose,
-                    argv=argv,
-                    cwd=command.cwd,
-                    environment=command.environment,
-                    release_dir=command.release_dir,
+    def __init__(
+        self,
+        *,
+        releases_root: Path,
+        runner: Any,
+        runtime_plan: VerifiedTargetRuntimePlanV1 | None,
+        private_python: Path | None = None,
+        service_renderer: Callable[[Path], Mapping[str, bytes]] | None = None,
+    ) -> None:
+        super().__init__(
+            releases_root=releases_root,
+            runner=runner,
+            service_renderer=service_renderer,
+        )
+        self._runtime_plan = runtime_plan
+        self._private_python = None if private_python is None else Path(private_python)
+        if self._runtime_plan is not None:
+            if (
+                self._private_python is None
+                or not self._private_python.is_absolute()
+                or self._private_python.is_symlink()
+                or not self._private_python.is_file()
+            ):
+                raise RuntimeError(
+                    "target runtime assembly requires the verified Private Python executable"
                 )
+
+    def _prepare_staging(
+        self,
+        staging: Path,
+        inputs: ReleaseInputs,
+        services: Mapping[str, bytes],
+    ) -> None:
+        ReleaseBuilder._prepare_staging(staging, inputs, services)
+        if self._runtime_plan is not None:
+            _copy_plan_input(
+                self._runtime_plan.requirement("core").path,
+                self._runtime_plan.requirement("core").sha256,
+                staging / "host/project/runtime-requirements.txt",
             )
-        return tuple(hardened)
+            _copy_plan_input(
+                self._runtime_plan.requirement("connector").path,
+                self._runtime_plan.requirement("connector").sha256,
+                staging / "connector/project/runtime-requirements.txt",
+            )
+            _copy_plan_input(
+                self._runtime_plan.plan_path,
+                self._runtime_plan.plan_sha256,
+                staging / "receipts/runtime-install-plan.json",
+            )
+
+        # chmod(0400) maps to the Windows read-only attribute. A failed command would
+        # otherwise make cleanup mask the real resolver error with AccessDenied.
+        # Keep staging Plugin files writable until ReleaseBuilder's final freeze.
+        if os.name == "nt":
+            for path in (staging / "plugin").rglob("*"):
+                if path.is_file() and not path.is_symlink():
+                    path.chmod(0o600)
+
+    def _commands(self, inputs: ReleaseInputs, release_dir: Path) -> tuple[BuildCommand, ...]:
+        if self._runtime_plan is None:
+            return _harden_legacy_commands(ReleaseBuilder._commands(inputs, release_dir))
+        if self._private_python is None:
+            raise RuntimeError("target runtime Private Python binding is missing")
+        return _target_runtime_commands(inputs, release_dir, self._private_python)
+
+    def _execute(
+        self,
+        commands: tuple[BuildCommand, ...],
+        staging: Path,
+        release_dir: Path,
+    ) -> dict[str, Mapping[str, Any]]:
+        verification: dict[str, Mapping[str, Any]] = {}
+        for command in commands:
+            result = self._runner.run(command)
+            if command.purpose.startswith("verify-"):
+                runtime = "host" if command.purpose == "verify-host-runtime" else "connector"
+                verification[runtime] = _validate_managed_verification(
+                    result.stdout,
+                    staging / runtime / "venv",
+                    release_dir / runtime / "venv",
+                    command.argv[-3],
+                    runtime_plan=self._runtime_plan,
+                )
+        if set(verification) != {"host", "connector"}:
+            raise RuntimeError("managed runtime verification receipts are incomplete")
+        return verification
 
     def _validate_inputs(self, inputs: ReleaseInputs) -> None:
         manifest = inputs.signed_plugin_manifest
@@ -161,9 +221,6 @@ class ManagedReleaseBuilder(ReleaseBuilder):
             "expires_at": manifest["expires_at"],
             "signature": manifest["signature"],
         }
-        # The base validator owns local-path and trust-store structural checks. It does
-        # not cryptographically verify the signature, so v2 callers must separately
-        # provide the mandatory verifier callback enforced by ManagedReleaseAssembler.
         super()._validate_inputs(replace(inputs, signed_plugin_manifest=local_binding))
 
 
@@ -176,22 +233,28 @@ class ManagedReleaseAssembler:
         releases_root: Path,
         toolchain: PrivateToolchainV1,
         wheelhouse: VerifiedWheelhouseV1,
+        runtime_plan: VerifiedTargetRuntimePlanV1 | None = None,
         service_renderer: Callable[[Path], Mapping[str, bytes]] | None = None,
         executor: Any | None = None,
         portable_plugin_verifier: Callable[[ReleaseInputs], None] | None = None,
     ) -> None:
         self._wheelhouse = wheelhouse
+        self._runtime_plan = runtime_plan
         self._portable_plugin_verifier = portable_plugin_verifier
         self._runner = PinnedToolchainRunner(
             toolchain,
             wheelhouse=wheelhouse,
             executor=executor,
         )
-        self._builder = ManagedReleaseBuilder(
-            releases_root=Path(releases_root),
-            runner=self._runner,
-            service_renderer=service_renderer,
-        )
+        builder_args: dict[str, Any] = {
+            "releases_root": Path(releases_root),
+            "runner": self._runner,
+            "runtime_plan": runtime_plan,
+            "service_renderer": service_renderer,
+        }
+        if runtime_plan is not None:
+            builder_args["private_python"] = toolchain.python.path
+        self._builder = ManagedReleaseBuilder(**builder_args)
 
     def build(
         self,
@@ -201,6 +264,17 @@ class ManagedReleaseAssembler:
     ) -> ReleasePlan | PublishedRelease:
         self._wheelhouse.require_lock("core", inputs.core.lock.sha256)
         self._wheelhouse.require_lock("connector", inputs.connector.lock.sha256)
+        if self._runtime_plan is not None:
+            self._runtime_plan.require_lock("core", inputs.core.lock.sha256)
+            self._runtime_plan.require_lock("connector", inputs.connector.lock.sha256)
+            if self._runtime_plan.wheelhouse_manifest_sha256 != self._wheelhouse.manifest_sha256:
+                raise RuntimeError("target runtime plan is not bound to verified wheelhouse")
+            if (
+                self._runtime_plan.platform != self._wheelhouse.platform
+                or self._runtime_plan.architecture != self._wheelhouse.architecture
+                or self._runtime_plan.python_tag != self._wheelhouse.python_tag
+            ):
+                raise RuntimeError("target runtime plan target does not match wheelhouse")
         portable_manifest = getattr(inputs, "signed_plugin_manifest", None)
         if _is_portable_plugin_manifest(portable_manifest):
             if self._portable_plugin_verifier is None:
@@ -208,7 +282,10 @@ class ManagedReleaseAssembler:
                     "portable Plugin manifest v2 requires external cryptographic verification"
                 )
             self._portable_plugin_verifier(inputs)
-        return self._builder.build(inputs, dry_run=dry_run)
+        published = self._builder.build(inputs, dry_run=dry_run)
+        if not dry_run and self._runtime_plan is not None:
+            _verify_runtime_plan_receipt(published.release_dir, self._runtime_plan)
+        return published
 
 
 def build_managed_release(
@@ -217,21 +294,309 @@ def build_managed_release(
     toolchain: PrivateToolchainV1,
     wheelhouse: VerifiedWheelhouseV1,
     inputs: ReleaseInputs,
+    runtime_plan: VerifiedTargetRuntimePlanV1 | None = None,
     service_renderer: Callable[[Path], Mapping[str, bytes]] | None = None,
     executor: Any | None = None,
     portable_plugin_verifier: Callable[[ReleaseInputs], None] | None = None,
     dry_run: bool = False,
 ) -> ReleasePlan | PublishedRelease:
-    """Functional composition helper used by installer/update orchestration."""
-
     return ManagedReleaseAssembler(
         releases_root=releases_root,
         toolchain=toolchain,
         wheelhouse=wheelhouse,
+        runtime_plan=runtime_plan,
         service_renderer=service_renderer,
         executor=executor,
         portable_plugin_verifier=portable_plugin_verifier,
     ).build(inputs, dry_run=dry_run)
+
+
+def _target_runtime_commands(
+    inputs: ReleaseInputs,
+    release_dir: Path,
+    private_python: Path,
+) -> tuple[BuildCommand, ...]:
+    host_project = release_dir / "host/project"
+    connector_project = release_dir / "connector/project"
+    host_venv = release_dir / "host/venv"
+    connector_venv = release_dir / "connector/venv"
+    host_python = _venv_python(host_venv)
+    connector_python = _venv_python(connector_venv)
+    host_wheel = release_dir / "receipts/inputs/core" / inputs.core.wheel.path.name
+    connector_wheel = (
+        release_dir / "receipts/inputs/connector" / inputs.connector.wheel.path.name
+    )
+
+    def command(purpose: str, argv: tuple[str, ...], cwd: Path) -> BuildCommand:
+        return BuildCommand(
+            purpose=purpose,
+            argv=argv,
+            cwd=cwd,
+            environment=MappingProxyType({"UV_OFFLINE": "1"}),
+            release_dir=release_dir,
+        )
+
+    def create_venv(destination: Path) -> tuple[str, ...]:
+        return (
+            str(private_python),
+            "-I",
+            "-m",
+            "venv",
+            "--without-pip",
+            "--copies",
+            str(destination),
+        )
+
+    return (
+        command("create-host-venv", create_venv(host_venv), release_dir),
+        command(
+            "install-host-dependencies",
+            (
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(host_python),
+                "--require-hashes",
+                "--no-deps",
+                "--requirement",
+                str(host_project / "runtime-requirements.txt"),
+            ),
+            host_project,
+        ),
+        command(
+            "install-final-core-wheel",
+            (
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(host_python),
+                "--no-deps",
+                str(host_wheel),
+            ),
+            release_dir,
+        ),
+        command(
+            "verify-host-runtime",
+            (
+                str(host_python),
+                "-I",
+                "-c",
+                _VERIFY_RUNTIME_CROSS_PLATFORM,
+                inputs.core.launch_module,
+                inputs.core.console_script,
+                inputs.core.entrypoint,
+                inputs.core.project_name,
+            ),
+            release_dir,
+        ),
+        command("create-connector-venv", create_venv(connector_venv), release_dir),
+        command(
+            "install-connector-dependencies",
+            (
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(connector_python),
+                "--require-hashes",
+                "--no-deps",
+                "--requirement",
+                str(connector_project / "runtime-requirements.txt"),
+            ),
+            connector_project,
+        ),
+        command(
+            "install-final-connector-wheel",
+            (
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(connector_python),
+                "--no-deps",
+                str(connector_wheel),
+            ),
+            release_dir,
+        ),
+        command(
+            "verify-connector-runtime",
+            (
+                str(connector_python),
+                "-I",
+                "-c",
+                _VERIFY_RUNTIME_CROSS_PLATFORM,
+                inputs.connector.launch_module,
+                inputs.connector.console_script,
+                inputs.connector.entrypoint,
+                inputs.connector.project_name,
+            ),
+            release_dir,
+        ),
+    )
+
+
+def _harden_legacy_commands(commands: tuple[BuildCommand, ...]) -> tuple[BuildCommand, ...]:
+    hardened: list[BuildCommand] = []
+    for command in commands:
+        argv = tuple(_managed_venv_python(value) for value in command.argv)
+        if len(argv) >= 2 and argv[:2] == ("uv", "sync"):
+            if "--no-default-groups" in argv:
+                raise RuntimeError("duplicate --no-default-groups in managed release command")
+            argv = (*argv, "--no-default-groups")
+        if command.purpose.startswith("verify-"):
+            values = list(argv)
+            try:
+                code_index = values.index("-c") + 1
+            except (ValueError, IndexError) as error:
+                raise RuntimeError("managed runtime verification command is malformed") from error
+            values[code_index] = _VERIFY_RUNTIME_CROSS_PLATFORM
+            argv = tuple(values)
+        hardened.append(
+            BuildCommand(
+                purpose=command.purpose,
+                argv=argv,
+                cwd=command.cwd,
+                environment=command.environment,
+                release_dir=command.release_dir,
+            )
+        )
+    return tuple(hardened)
+
+
+def _copy_plan_input(source: Path, expected_sha: str, destination: Path) -> None:
+    if source.is_symlink() or not source.is_file():
+        raise RuntimeError("target runtime plan input is missing or symlinked")
+    payload = source.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != expected_sha:
+        raise RuntimeError("target runtime plan input digest changed")
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with destination.open("xb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    if os.name != "nt":
+        destination.chmod(0o600)
+
+
+def _verify_runtime_plan_receipt(
+    release_dir: Path,
+    runtime_plan: VerifiedTargetRuntimePlanV1,
+) -> None:
+    expected = {
+        release_dir / "host/project/runtime-requirements.txt": runtime_plan.requirement(
+            "core"
+        ).sha256,
+        release_dir
+        / "connector/project/runtime-requirements.txt": runtime_plan.requirement(
+            "connector"
+        ).sha256,
+        release_dir / "receipts/runtime-install-plan.json": runtime_plan.plan_sha256,
+    }
+    for path, digest in expected.items():
+        if path.is_symlink() or not path.is_file() or _sha256_file(path) != digest:
+            raise RuntimeError(
+                f"managed runtime install-plan receipt mismatch: {path.name}"
+            )
+
+
+def _validate_managed_verification(
+    stdout: str,
+    staging_venv: Path,
+    final_venv: Path,
+    console_script: str,
+    *,
+    runtime_plan: VerifiedTargetRuntimePlanV1 | None,
+) -> Mapping[str, Any]:
+    try:
+        value = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "managed runtime verification did not return valid JSON"
+        ) from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("managed runtime verification is not an object")
+    pth_escapes = value.get("pth_escapes")
+    direct_urls = value.get("unexpected_direct_urls")
+    if (
+        not isinstance(pth_escapes, list)
+        or any(not isinstance(item, str) for item in pth_escapes)
+        or pth_escapes
+        or not isinstance(direct_urls, list)
+        or any(not isinstance(item, str) for item in direct_urls)
+    ):
+        raise RuntimeError("managed runtime verification detected an unsafe installation")
+    if direct_urls:
+        if runtime_plan is None:
+            raise RuntimeError(
+                "legacy managed runtime contains unexpected direct-url dependencies"
+            )
+        try:
+            verify_wheelhouse_direct_urls(
+                direct_urls,
+                venv_root=staging_venv,
+                wheelhouse_root=runtime_plan.root,
+                expected_manifest_sha256=runtime_plan.wheelhouse_manifest_sha256,
+            )
+        except WheelhouseProvenanceError as exc:
+            raise RuntimeError(
+                "managed runtime dependency provenance failed wheelhouse verification"
+            ) from exc
+
+    module_origin = _path_inside(value.get("module_origin"), staging_venv)
+    console = _path_inside(value.get("console_entrypoint"), staging_venv)
+    candidates = [_venv_console(staging_venv, console_script)]
+    if os.name == "nt":
+        candidates.append(_venv_console(staging_venv, f"{console_script}.exe"))
+    resolved_candidates = {
+        candidate.resolve(strict=False) for candidate in candidates
+    }
+    if console not in resolved_candidates:
+        raise RuntimeError(
+            "managed console entrypoint is not the exact isolated venv executable"
+        )
+    return {
+        "module_origin": str(
+            final_venv
+            / module_origin.relative_to(staging_venv.resolve(strict=False))
+        ),
+        "console_entrypoint": str(
+            final_venv / console.relative_to(staging_venv.resolve(strict=False))
+        ),
+        "unexpected_direct_urls": [],
+        "pth_escapes": [],
+    }
+
+
+def _path_inside(raw: object, root: Path) -> Path:
+    if not isinstance(raw, str) or not raw:
+        raise RuntimeError("managed runtime verification path is missing")
+    path = Path(raw).resolve(strict=False)
+    expected = root.resolve(strict=False)
+    try:
+        path.relative_to(expected)
+    except ValueError as exc:
+        raise RuntimeError(
+            "managed runtime verification path escaped isolated venv"
+        ) from exc
+    return path
+
+
+def _venv_python(venv: Path) -> Path:
+    if os.name == "nt":
+        return venv / "Scripts/python.exe"
+    return venv / "bin/python"
+
+
+def _venv_console(venv: Path, name: str) -> Path:
+    if os.name == "nt":
+        return venv / "Scripts" / name
+    return venv / "bin" / name
 
 
 def _managed_venv_python(value: str) -> str:
@@ -239,7 +604,7 @@ def _managed_venv_python(value: str) -> str:
         return value
     path = Path(value)
     if path.name == "python" and path.parent.name == "bin":
-        return str(path.parent.parent / "Scripts" / "python.exe")
+        return str(path.parent.parent / "Scripts/python.exe")
     return value
 
 
@@ -251,10 +616,18 @@ def _validate_portable_plugin_manifest(inputs: ReleaseInputs) -> None:
     manifest = inputs.signed_plugin_manifest
     if not isinstance(manifest, Mapping) or set(manifest) != _PORTABLE_PLUGIN_FIELDS:
         raise RuntimeError("portable Plugin manifest does not match schema v2")
-    if manifest["schema_version"] != 2 or manifest["plugin_id"] != "hermes-agent-plugin":
+    if (
+        manifest["schema_version"] != 2
+        or manifest["plugin_id"] != "hermes-agent-plugin"
+    ):
         raise RuntimeError("portable Plugin identity is invalid")
     version = manifest["version"]
-    if not isinstance(version, str) or not version or version != version.strip() or len(version) > 64:
+    if (
+        not isinstance(version, str)
+        or not version
+        or version != version.strip()
+        or len(version) > 64
+    ):
         raise RuntimeError("portable Plugin version is invalid")
     filename = manifest["artifact_filename"]
     if (
@@ -274,3 +647,11 @@ def _validate_portable_plugin_manifest(inputs: ReleaseInputs) -> None:
         value = manifest[field]
         if not isinstance(value, str) or not value or value != value.strip():
             raise RuntimeError(f"portable Plugin {field} is invalid")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

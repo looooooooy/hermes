@@ -49,6 +49,8 @@ from hermes_cloud.modules.projection.ports import (
     SessionCatalogRepositoryPort,
     SessionProjectionRepositoryPort,
 )
+from hermes_cloud.modules.release_update.http import register_update_check_route
+from hermes_cloud.modules.release_update.service import UpdateCheckService
 from hermes_cloud.ports.dependency_probe import DependencyProbe
 
 
@@ -65,6 +67,7 @@ class BusinessApiApplication(FastAPI):
         observer_subscription_manager: ObserverSubscriptionPort | None = None,
         control_runtime: ControlRuntimePort | None = None,
         pairing_service: PairingHttpService | None = None,
+        update_check_service: UpdateCheckService | None = None,
     ) -> None:
         self._health_application = HealthApplication(
             "business-api",
@@ -107,6 +110,12 @@ class BusinessApiApplication(FastAPI):
                     self,
                     authentication=service,
                     pairing=pairing_service,
+                )
+            if update_check_service is not None:
+                register_update_check_route(
+                    self,
+                    authentication=service,
+                    updates=update_check_service,
                 )
             register_ticket_route(
                 self,
@@ -324,6 +333,7 @@ def build_fastapi_application(
     settings: Mapping[str, object] | CloudApiSettings | None = None,
     now: Callable[[], datetime] | None = None,
     pairing_service: PairingHttpService | None = None,
+    update_check_service: UpdateCheckService | None = None,
 ) -> BusinessApiApplication:
     service = None
     if (
@@ -361,6 +371,7 @@ def build_fastapi_application(
         observer_subscription_manager=observer_subscription_manager,
         control_runtime=control_runtime,
         pairing_service=pairing_service,
+        update_check_service=update_check_service,
     )
 
 

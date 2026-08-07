@@ -2,9 +2,8 @@
 """Assemble and prove one DESKTOP-020B2 Managed Release payload.
 
 The output is portable input material, not a pre-built venv. CI transiently assembles
-an immutable release at a machine-local path using Hermes Private Python/uv, a verified
-binary-only wheelhouse, and the Rust vendor-signature verifier. The assembled venv is
-used only as proof and is deliberately excluded from the portable payload.
+an immutable release using Hermes Private Python/uv, a verified binary-only wheelhouse,
+a target-specific hash-bound install plan, and the Rust vendor-signature verifier.
 """
 
 from __future__ import annotations
@@ -35,6 +34,7 @@ from hermes_private_toolchain import (  # noqa: E402
     PinnedExecutable,
     PrivateToolchainV1,
 )
+from hermes_target_runtime_plan import load_verified_target_runtime_plan  # noqa: E402
 
 TARGETS = {
     "macos-aarch64": ("macos", "aarch64"),
@@ -44,12 +44,13 @@ TARGETS = {
     "windows-x86_64": ("windows", "x86_64"),
 }
 REQUIRED_PURPOSES = {
-    "sync-host-dependencies",
-    "install-host-runtime",
-    "install-agent-plugin",
+    "create-host-venv",
+    "install-host-dependencies",
+    "install-final-core-wheel",
     "verify-host-runtime",
-    "sync-connector-dependencies",
-    "install-connector-runtime",
+    "create-connector-venv",
+    "install-connector-dependencies",
+    "install-final-connector-wheel",
     "verify-connector-runtime",
 }
 
@@ -78,7 +79,12 @@ def main() -> int:
     runtime_manager = require_binary(args.runtime_manager.resolve(), "Runtime Manager")
     toolchain_root = args.qualified_toolchain.resolve()
     toolchain = load_private_toolchain(toolchain_root, platform_name, architecture)
-    wheelhouse = load_verified_wheelhouse(args.wheelhouse.resolve())
+    wheelhouse_root = args.wheelhouse.resolve()
+    wheelhouse = load_verified_wheelhouse(wheelhouse_root)
+    runtime_plan = load_verified_target_runtime_plan(
+        wheelhouse_root,
+        expected_wheelhouse_manifest_sha256=wheelhouse.manifest_sha256,
+    )
     if wheelhouse.platform != platform_name or wheelhouse.architecture != architecture:
         raise ManagedPayloadError(
             f"wheelhouse target mismatch: expected {platform_name}/{architecture}, "
@@ -86,30 +92,43 @@ def main() -> int:
         )
     if wheelhouse.python_tag != "cp313":
         raise ManagedPayloadError("Managed Release wheelhouse must target cp313")
+    if (
+        runtime_plan.target != args.target
+        or runtime_plan.platform != platform_name
+        or runtime_plan.architecture != architecture
+        or runtime_plan.python_tag != "cp313"
+    ):
+        raise ManagedPayloadError("target runtime install plan does not match B2 target")
 
     core_project = require_project(args.core_project.resolve(), "Core")
     connector_project = require_project(args.connector_project.resolve(), "Connector")
     core_wheel = require_regular(args.core_wheel.resolve(), "Core wheel")
     connector_wheel = require_regular(args.connector_wheel.resolve(), "Connector wheel")
-    core_sdist = None if args.core_sdist is None else require_regular(args.core_sdist.resolve(), "Core sdist")
+    core_sdist = (
+        None
+        if args.core_sdist is None
+        else require_regular(args.core_sdist.resolve(), "Core sdist")
+    )
     plugin_root = args.plugin_bundle.resolve()
     portable_manifest_path = require_regular(
         plugin_root / "portable-plugin-manifest.json", "portable Plugin manifest"
     )
-    trust_store_path = require_regular(plugin_root / "trust-store.json", "Plugin trust store")
+    trust_store_path = require_regular(
+        plugin_root / "trust-store.json", "Plugin trust store"
+    )
     portable_manifest = load_json(portable_manifest_path)
     plugin_wheel = require_regular(
         plugin_root / "plugin" / str(portable_manifest.get("artifact_filename", "")),
         "Plugin wheel",
     )
 
-    # Cryptographic vendor trust is a Rust Runtime Manager decision, made before the
-    # Python release assembler gets authority to install the Plugin wheel.
     plugin_report = run_plugin_verifier(
         runtime_manager, portable_manifest_path, trust_store_path, plugin_wheel
     )
     if plugin_report.get("signature_verified") is not True:
-        raise ManagedPayloadError("Runtime Manager did not verify the portable Plugin signature")
+        raise ManagedPayloadError(
+            "Runtime Manager did not verify the portable Plugin signature"
+        )
 
     inputs = ReleaseInputs(
         release_id=args.release_id,
@@ -138,17 +157,19 @@ def main() -> int:
         ),
     )
 
-    if wheelhouse.locks.get("core") != inputs.core.lock.sha256:
-        raise ManagedPayloadError("wheelhouse Core lock does not match portable Core project")
-    if wheelhouse.locks.get("connector") != inputs.connector.lock.sha256:
-        raise ManagedPayloadError("wheelhouse Connector lock does not match portable Connector project")
+    wheelhouse.require_lock("core", inputs.core.lock.sha256)
+    wheelhouse.require_lock("connector", inputs.connector.lock.sha256)
+    runtime_plan.require_lock("core", inputs.core.lock.sha256)
+    runtime_plan.require_lock("connector", inputs.connector.lock.sha256)
 
     output = args.output.resolve()
     if output.exists() or output.is_symlink():
         raise ManagedPayloadError(f"output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="hermes-managed-proof-", dir=output.parent) as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="hermes-managed-proof-", dir=output.parent
+    ) as temporary:
         proof_root = Path(temporary).resolve()
         releases_root = proof_root / "releases"
 
@@ -157,39 +178,60 @@ def main() -> int:
                 runtime_manager, portable_manifest_path, trust_store_path, plugin_wheel
             )
             if report.get("signature_verified") is not True:
-                raise ManagedPayloadError("portable Plugin signature verification failed during assembly")
+                raise ManagedPayloadError(
+                    "portable Plugin signature verification failed during assembly"
+                )
 
         published = ManagedReleaseAssembler(
             releases_root=releases_root,
             toolchain=toolchain,
             wheelhouse=wheelhouse,
+            runtime_plan=runtime_plan,
             portable_plugin_verifier=portable_verifier,
         ).build(inputs)
         release_dir = published.release_dir.resolve()
-        verify_assembled_release(release_dir, published.release_digest, portable_manifest)
+        verify_assembled_release(
+            release_dir,
+            published.release_digest,
+            portable_manifest,
+            runtime_plan,
+        )
         purposes = [command.purpose for command in published.commands]
         if set(purposes) != REQUIRED_PURPOSES or len(purposes) != len(REQUIRED_PURPOSES):
-            raise ManagedPayloadError(f"unexpected Managed Release command set: {purposes}")
+            raise ManagedPayloadError(
+                f"unexpected Managed Release command set: {purposes}"
+            )
         for command in published.commands:
-            if command.purpose.startswith("sync-") and "--no-default-groups" not in command.argv:
-                raise ManagedPayloadError("Managed Release sync command included default dependency groups")
+            if command.purpose.startswith("install-") and command.purpose.endswith("dependencies"):
+                if "--require-hashes" not in command.argv or "--no-deps" not in command.argv:
+                    raise ManagedPayloadError(
+                        "Managed Runtime dependency install is not hash-bound/no-deps"
+                    )
 
         stage = proof_root / "payload"
         stage.mkdir(mode=0o700)
-        copy_file(core_project / "pyproject.toml", stage / "core/project/pyproject.toml")
+        copy_file(
+            core_project / "pyproject.toml", stage / "core/project/pyproject.toml"
+        )
         copy_file(core_project / "uv.lock", stage / "core/project/uv.lock")
         copy_file(core_wheel, stage / f"core/dist/{core_wheel.name}")
         if core_sdist is not None:
             copy_file(core_sdist, stage / f"core/dist/{core_sdist.name}")
         copy_file(plugin_wheel, stage / f"plugin/{plugin_wheel.name}")
-        copy_file(portable_manifest_path, stage / "plugin/portable-plugin-manifest.json")
+        copy_file(
+            portable_manifest_path, stage / "plugin/portable-plugin-manifest.json"
+        )
         copy_file(trust_store_path, stage / "plugin/trust-store.json")
-        copy_file(connector_project / "pyproject.toml", stage / "connector/project/pyproject.toml")
-        copy_file(connector_project / "uv.lock", stage / "connector/project/uv.lock")
+        copy_file(
+            connector_project / "pyproject.toml",
+            stage / "connector/project/pyproject.toml",
+        )
+        copy_file(
+            connector_project / "uv.lock", stage / "connector/project/uv.lock"
+        )
         copy_file(connector_wheel, stage / f"connector/dist/{connector_wheel.name}")
-        copy_tree(args.wheelhouse.resolve(), stage / "wheelhouse")
+        copy_tree(wheelhouse_root, stage / "wheelhouse")
 
-        portable_files = enumerate_files(stage)
         proof = {
             "schema_version": 1,
             "scope": "managed_release_offline_assembly_proof",
@@ -198,7 +240,11 @@ def main() -> int:
             "release_digest": published.release_digest,
             "command_purposes": purposes,
             "portable_plugin_signature_verified": True,
-            "wheelhouse_binary_only": all(item["path"].endswith(".whl") for item in portable_files if item["path"].startswith("wheelhouse/") and item["path"] != "wheelhouse/WHEELHOUSE-MANIFEST.json"),
+            "wheelhouse_binary_only": all(
+                artifact.filename.endswith(".whl") for artifact in wheelhouse.artifacts
+            ),
+            "target_runtime_plan_verified": True,
+            "runtime_plan_sha256": runtime_plan.plan_sha256,
             "private_toolchain_used": True,
             "network_dependency_install_allowed": False,
             "assembled_release_shipped": False,
@@ -216,9 +262,28 @@ def main() -> int:
             "connector_version": "0.1.0",
             "core_lock_sha256": inputs.core.lock.sha256,
             "connector_lock_sha256": inputs.connector.lock.sha256,
-            "wheelhouse_manifest_sha256": sha256_file(stage / "wheelhouse/WHEELHOUSE-MANIFEST.json"),
-            "portable_plugin_manifest_sha256": sha256_file(stage / "plugin/portable-plugin-manifest.json"),
-            "plugin_trust_store_sha256": sha256_file(stage / "plugin/trust-store.json"),
+            "wheelhouse_manifest_sha256": sha256_file(
+                stage / "wheelhouse/WHEELHOUSE-MANIFEST.json"
+            ),
+            "runtime_install_plan_sha256": sha256_file(
+                stage / "wheelhouse/RUNTIME-INSTALL-PLAN.json"
+            ),
+            "core_requirements_sha256": sha256_file(
+                stage
+                / "wheelhouse"
+                / runtime_plan.requirement("core").filename
+            ),
+            "connector_requirements_sha256": sha256_file(
+                stage
+                / "wheelhouse"
+                / runtime_plan.requirement("connector").filename
+            ),
+            "portable_plugin_manifest_sha256": sha256_file(
+                stage / "plugin/portable-plugin-manifest.json"
+            ),
+            "plugin_trust_store_sha256": sha256_file(
+                stage / "plugin/trust-store.json"
+            ),
             "files": payload_files,
         }
         manifest = {
@@ -241,6 +306,7 @@ def main() -> int:
                 "release_id": args.release_id,
                 "release_digest": published.release_digest,
                 "portable_plugin_signature_verified": True,
+                "target_runtime_plan_verified": True,
                 "wheel_count": len(wheelhouse.artifacts),
                 "payload_root": str(output),
                 "content_sha256": manifest["content_sha256"],
@@ -253,16 +319,29 @@ def main() -> int:
     return 0
 
 
-def load_private_toolchain(root: Path, platform_name: str, architecture: str) -> PrivateToolchainV1:
-    manifest = load_json(require_regular(root / "TOOLCHAIN-BUNDLE.json", "Toolchain manifest"))
+def load_private_toolchain(
+    root: Path, platform_name: str, architecture: str
+) -> PrivateToolchainV1:
+    manifest = load_json(
+        require_regular(root / "TOOLCHAIN-BUNDLE.json", "Toolchain manifest")
+    )
     if manifest.get("schema_version") != 1:
         raise ManagedPayloadError("unsupported Toolchain manifest schema")
-    if manifest.get("platform") != platform_name or manifest.get("architecture") != architecture:
-        raise ManagedPayloadError("Toolchain target does not match Managed Release target")
+    if (
+        manifest.get("platform") != platform_name
+        or manifest.get("architecture") != architecture
+    ):
+        raise ManagedPayloadError(
+            "Toolchain target does not match Managed Release target"
+        )
     for evidence in ("LICENSE-EVIDENCE.json", "UPSTREAM-SOURCE.json"):
         require_regular(root / evidence, f"Toolchain {evidence}")
-    python = require_binary(root / safe_relative(str(manifest.get("python_path", ""))), "Private Python")
-    uv = require_binary(root / safe_relative(str(manifest.get("uv_path", ""))), "Private uv")
+    python = require_binary(
+        root / safe_relative(str(manifest.get("python_path", ""))), "Private Python"
+    )
+    uv = require_binary(
+        root / safe_relative(str(manifest.get("uv_path", ""))), "Private uv"
+    )
     return PrivateToolchainV1(
         python=PinnedExecutable(
             path=python,
@@ -277,11 +356,19 @@ def load_private_toolchain(root: Path, platform_name: str, architecture: str) ->
     )
 
 
-def run_plugin_verifier(runtime_manager: Path, manifest: Path, trust: Path, wheel: Path) -> dict[str, Any]:
+def run_plugin_verifier(
+    runtime_manager: Path, manifest: Path, trust: Path, wheel: Path
+) -> dict[str, Any]:
     environment = dict(os.environ)
     environment["PATH"] = ""
     completed = subprocess.run(
-        [str(runtime_manager), "verify-plugin-signature", str(manifest), str(trust), str(wheel)],
+        [
+            str(runtime_manager),
+            "verify-plugin-signature",
+            str(manifest),
+            str(trust),
+            str(wheel),
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -290,20 +377,52 @@ def run_plugin_verifier(runtime_manager: Path, manifest: Path, trust: Path, whee
     )
     value = json.loads(completed.stdout)
     if not isinstance(value, dict):
-        raise ManagedPayloadError("Runtime Manager Plugin verification report is invalid")
+        raise ManagedPayloadError(
+            "Runtime Manager Plugin verification report is invalid"
+        )
     return value
 
 
-def verify_assembled_release(release_dir: Path, release_digest: str, portable_manifest: dict[str, Any]) -> None:
-    release_manifest = load_json(require_regular(release_dir / "manifest/release.json", "release manifest"))
+def verify_assembled_release(
+    release_dir: Path,
+    release_digest: str,
+    portable_manifest: dict[str, Any],
+    runtime_plan: Any,
+) -> None:
+    release_manifest = load_json(
+        require_regular(release_dir / "manifest/release.json", "release manifest")
+    )
     if release_manifest.get("release_digest") != release_digest:
         raise ManagedPayloadError("assembled release digest does not match manifest")
-    receipt = load_json(require_regular(release_dir / "receipts/build-commands.json", "build receipt"))
+    receipt = load_json(
+        require_regular(release_dir / "receipts/build-commands.json", "build receipt")
+    )
     if not receipt:
         raise ManagedPayloadError("Managed Release build receipt is empty")
-    signed = load_json(require_regular(release_dir / "plugin/metadata/signed-plugin-manifest.json", "published Plugin manifest"))
+    signed = load_json(
+        require_regular(
+            release_dir / "plugin/metadata/signed-plugin-manifest.json",
+            "published Plugin manifest",
+        )
+    )
     if signed != portable_manifest:
-        raise ManagedPayloadError("assembled release did not preserve portable Plugin manifest v2")
+        raise ManagedPayloadError(
+            "assembled release did not preserve portable Plugin manifest v2"
+        )
+    expected_plan_files = {
+        release_dir / "receipts/runtime-install-plan.json": runtime_plan.plan_sha256,
+        release_dir
+        / "host/project/runtime-requirements.txt": runtime_plan.requirement("core").sha256,
+        release_dir
+        / "connector/project/runtime-requirements.txt": runtime_plan.requirement(
+            "connector"
+        ).sha256,
+    }
+    for path, digest in expected_plan_files.items():
+        if path.is_symlink() or not path.is_file() or sha256_file(path) != digest:
+            raise ManagedPayloadError(
+                f"assembled target runtime plan receipt mismatch: {path.name}"
+            )
     for relative in ("host/venv", "connector/venv", "plugin/artifacts"):
         path = release_dir / relative
         if path.is_symlink() or not path.is_dir():
@@ -325,7 +444,9 @@ def require_project(path: Path, label: str) -> Path:
 
 def require_regular(path: Path, label: str) -> Path:
     if not path.is_absolute() or path.is_symlink() or not path.is_file():
-        raise ManagedPayloadError(f"{label} must be an absolute regular non-symlink file")
+        raise ManagedPayloadError(
+            f"{label} must be an absolute regular non-symlink file"
+        )
     return path
 
 
@@ -373,7 +494,11 @@ def enumerate_files(root: Path) -> list[dict[str, Any]]:
 def safe_relative(value: str) -> PurePosixPath:
     normalized = value.replace("\\", "/")
     path = PurePosixPath(normalized)
-    if not normalized or path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    if (
+        not normalized
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
         raise ManagedPayloadError(f"unsafe relative path: {value}")
     return path
 
@@ -398,7 +523,9 @@ def canonical_json(value: Any) -> bytes:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if os.name != "nt":
         path.chmod(0o400)
 
@@ -406,5 +533,12 @@ def write_json(path: Path, value: Any) -> None:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ManagedPayloadError, OSError, RuntimeError, ValueError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+    except (
+        ManagedPayloadError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.SubprocessError,
+        json.JSONDecodeError,
+    ) as error:
         raise SystemExit(f"managed_release_payload_error: {error}") from error

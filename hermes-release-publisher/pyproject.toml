@@ -1,0 +1,28 @@
+[project]
+name = "hermes-release-publisher"
+version = "0.1.0"
+description = "Hermes versioned release publisher for Alibaba Cloud OSS"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+dependencies = [
+  "alibabacloud-oss-v2==1.3.2",
+  "cryptography==48.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.2",
+]
+
+[project.scripts]
+hermes-release-publisher = "hermes_release_publisher.cli:main"
+
+[build-system]
+requires = ["setuptools>=77,<83"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

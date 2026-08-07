@@ -2,7 +2,8 @@ use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceMa
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
 use hermes_runtime_manager::{
-    run_blank_machine_toolchain_gate, verify_portable_plugin_signature, PrivateToolchainInstaller,
+    pack_managed_payload, run_blank_machine_toolchain_gate, verify_portable_plugin_signature,
+    verify_release_control_files, PrivatePythonManagedReleaseStager, PrivateToolchainInstaller,
     RuntimeManager,
 };
 use std::path::PathBuf;
@@ -22,6 +23,18 @@ fn main() {
     }
     if command == "verify-plugin-signature" {
         verify_plugin_signature_command(&args);
+        return;
+    }
+    if command == "verify-release-control" {
+        verify_release_control_command(&args);
+        return;
+    }
+    if command == "pack-managed-payload" {
+        pack_managed_payload_command(&args);
+        return;
+    }
+    if command == "stage-managed-payload" {
+        stage_managed_payload_command(&args);
         return;
     }
 
@@ -63,7 +76,7 @@ fn main() {
         other => {
             eprintln!("unsupported command: {other}");
             eprintln!(
-                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, version"
+                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, verify-release-control, pack-managed-payload, stage-managed-payload, version"
             );
             std::process::exit(64);
         }
@@ -128,6 +141,97 @@ fn verify_plugin_signature_command(args: &[String]) {
         Err(error) => {
             eprintln!("runtime_manager_plugin_signature_error: {error}");
             std::process::exit(9);
+        }
+    }
+}
+
+fn verify_release_control_command(args: &[String]) {
+    if args.len() != 7 {
+        eprintln!(
+            "usage: hermes-runtime-manager verify-release-control <release-envelope.json> <channel-envelope.json> <block-envelope.json> <release-trust-store.json> <observed-state.json>"
+        );
+        std::process::exit(64);
+    }
+    let release = PathBuf::from(&args[2]);
+    let channel = PathBuf::from(&args[3]);
+    let block = PathBuf::from(&args[4]);
+    let trust_store = PathBuf::from(&args[5]);
+    let observed = PathBuf::from(&args[6]);
+    match verify_release_control_files(&release, &channel, &block, &trust_store, &observed) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("release control report serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_release_control_error: {error}");
+            std::process::exit(10);
+        }
+    }
+}
+
+fn pack_managed_payload_command(args: &[String]) {
+    if args.len() != 4 {
+        eprintln!(
+            "usage: hermes-runtime-manager pack-managed-payload <portable-payload-root> <output.tar.zst>"
+        );
+        std::process::exit(64);
+    }
+    let payload = PathBuf::from(&args[2]);
+    let output = PathBuf::from(&args[3]);
+    match pack_managed_payload(&payload, &output) {
+        Ok(receipt) => println!(
+            "{{\"schema_version\":1,\"files\":{},\"expanded_bytes\":{},\"archive\":{}}}",
+            receipt.files,
+            receipt.expanded_bytes,
+            serde_json::to_string(&output).expect("archive path is serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_managed_payload_pack_error: {error}");
+            std::process::exit(11);
+        }
+    }
+}
+
+fn stage_managed_payload_command(args: &[String]) {
+    if args.len() != 12 {
+        eprintln!(
+            "usage: hermes-runtime-manager stage-managed-payload <archive.tar.zst> <private-python> <installer.pyz> <runtime-manager> <qualified-toolchain-root> <releases-root> <staging-root> <release-id> <release-generation> <target>"
+        );
+        std::process::exit(64);
+    }
+    let release_id = &args[9];
+    let release_generation = match args[10].parse::<u64>() {
+        Ok(value) if value > 0 => value,
+        _ => {
+            eprintln!("runtime_manager_managed_payload_stage_error: release generation is invalid");
+            std::process::exit(64);
+        }
+    };
+    let stager = match PrivatePythonManagedReleaseStager::new(
+        PathBuf::from(&args[3]),
+        PathBuf::from(&args[4]),
+        PathBuf::from(&args[5]),
+        PathBuf::from(&args[6]),
+        PathBuf::from(&args[7]),
+        PathBuf::from(&args[8]),
+        args[11].clone(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("runtime_manager_managed_payload_stage_error: {error}");
+            std::process::exit(12);
+        }
+    };
+    match stager.stage_archive(&PathBuf::from(&args[2]), release_id, release_generation) {
+        Ok(staged) => println!(
+            "{{\"schema_version\":1,\"release_id\":{},\"release_generation\":{},\"release_path\":{},\"content_verified\":true}}",
+            serde_json::to_string(&staged.release_id).expect("release id serializable"),
+            staged.release_generation,
+            serde_json::to_string(&staged.release_path).expect("release path serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_managed_payload_stage_error: {error}");
+            std::process::exit(12);
         }
     }
 }
