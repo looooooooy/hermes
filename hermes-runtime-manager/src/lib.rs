@@ -6,6 +6,7 @@ pub mod linux_secret_service;
 pub mod linux_systemd_user;
 pub mod local_ipc;
 pub mod managed_payload_archive;
+pub mod managed_release_stager;
 pub mod manager;
 pub mod model;
 pub mod platform;
@@ -37,6 +38,7 @@ pub use managed_payload_archive::{
     pack_managed_payload, unpack_managed_payload, ManagedPayloadArchiveError,
     ManagedPayloadArchiveReceiptV1,
 };
+pub use managed_release_stager::PrivatePythonManagedReleaseStager;
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use portable_plugin_signature::{
