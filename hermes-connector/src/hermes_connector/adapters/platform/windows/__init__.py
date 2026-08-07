@@ -1,17 +1,11 @@
-"""Windows Connector platform foundation."""
+"""Windows Connector platform capability boundary.
 
-from hermes_connector.adapters.platform.windows.agent_discovery import (
-    WindowsAgentDiscovery,
-)
+Concrete adapters are imported directly by the Windows composition root only
+after the platform is declared fully available. Keeping the package root light
+prevents Linux/macOS capability probes from importing Windows-only stdlib or
+Win32 bindings while the platform remains fail-closed.
+"""
+
 from hermes_connector.adapters.platform.windows.availability import AVAILABILITY
-from hermes_connector.adapters.platform.windows.instance_lock import WindowsInstanceLock
-from hermes_connector.adapters.platform.windows.local_gateway_transport import (
-    WindowsLocalGatewayTransport,
-)
 
-__all__ = [
-    "AVAILABILITY",
-    "WindowsAgentDiscovery",
-    "WindowsInstanceLock",
-    "WindowsLocalGatewayTransport",
-]
+__all__ = ["AVAILABILITY"]
