@@ -30,10 +30,11 @@ jobs:
             "$RUNNER_TEMP/dist/hermes_connector-0.1.0-py3-none-any.whl"
           cp "$RUNNER_TEMP/dist/hermes_connector-0.1.0-py3-none-any.whl" "$RUNNER_TEMP/wheelhouse/"
           python - <<'PY'
+          import os
           from pathlib import Path
           from zipfile import ZipFile
 
-          root = Path("${RUNNER_TEMP}") / "wheelhouse"
+          root = Path(os.environ["RUNNER_TEMP"]) / "wheelhouse"
           connector = root / "hermes_connector-0.1.0-py3-none-any.whl"
           assert connector.is_file()
           assert any(path.name.startswith("websockets-15.0.1-") for path in root.iterdir())
