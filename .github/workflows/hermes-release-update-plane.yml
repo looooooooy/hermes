@@ -6,6 +6,7 @@ on:
       - "feature/hermes-release-update-plane-*"
     paths:
       - "hermes-runtime-manager/src/release_control.rs"
+      - "hermes-runtime-manager/src/update_download.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - "hermes-runtime-manager/src/release_control.rs"
+      - "hermes-runtime-manager/src/update_download.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -40,6 +42,8 @@ jobs:
         run: rustup default stable
       - name: Test Release / Channel / Block signature and anti-rollback contracts
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml release_control::tests
+      - name: Test resumable signed-artifact download contracts
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_download::tests
       - name: Compile Runtime Manager verification CLI
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
