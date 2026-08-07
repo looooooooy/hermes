@@ -147,7 +147,8 @@ class ManagedReleaseAssembler:
     ) -> ReleasePlan | PublishedRelease:
         self._wheelhouse.require_lock("core", inputs.core.lock.sha256)
         self._wheelhouse.require_lock("connector", inputs.connector.lock.sha256)
-        if _is_portable_plugin_manifest(inputs.signed_plugin_manifest):
+        portable_manifest = getattr(inputs, "signed_plugin_manifest", None)
+        if _is_portable_plugin_manifest(portable_manifest):
             if self._portable_plugin_verifier is None:
                 raise RuntimeError(
                     "portable Plugin manifest v2 requires external cryptographic verification"
