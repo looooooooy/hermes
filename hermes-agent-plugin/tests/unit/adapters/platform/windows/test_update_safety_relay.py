@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+import ctypes
+import json
+import os
+from ctypes import wintypes
+
+import pytest
+
+from hermes_agent_plugin.adapters.platform.windows.update_safety_relay import (
+    WindowsUpdateSafetyRelay,
+    resolve_update_safety_pipe_name,
+)
+
+pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Named Pipes required")
+
+
+def _snapshot() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "profile": "default",
+        "runtime_generation": "generation-42",
+        "active_tasks": 0,
+        "pending_approvals": 0,
+        "pending_clarifications": 0,
+        "evidence_complete": True,
+    }
+
+
+def _pipe_name(label: str) -> str:
+    return rf"\\.\pipe\HermesUpdateSafetyTest-{os.getpid()}-{label}"
+
+
+def _call(pipe_name: str, payload: object) -> dict[str, object]:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CallNamedPipeW.restype = wintypes.BOOL
+    body = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        + b"\n"
+    )
+    input_buffer = ctypes.create_string_buffer(body)
+    output_buffer = ctypes.create_string_buffer(8_192)
+    read = wintypes.DWORD()
+    if not kernel32.CallNamedPipeW(
+        pipe_name,
+        input_buffer,
+        len(body),
+        output_buffer,
+        len(output_buffer),
+        ctypes.byref(read),
+        2_000,
+    ):
+        raise OSError(ctypes.get_last_error(), "CallNamedPipeW failed")
+    response = output_buffer.raw[: read.value]
+    assert response.endswith(b"\n")
+    return json.loads(response.decode("utf-8"))
+
+
+def test_resolves_sid_bound_default_and_strict_override() -> None:
+    assert resolve_update_safety_pipe_name({}, user_sid="S-1-5-21-1") == (
+        r"\\.\pipe\HermesUpdateSafety-S-1-5-21-1"
+    )
+    assert resolve_update_safety_pipe_name(
+        {"HERMES_UPDATE_SAFETY_PIPE": r"\\.\pipe\CustomHermesSafety"},
+        user_sid="ignored",
+    ) == r"\\.\pipe\CustomHermesSafety"
+
+    with pytest.raises(ValueError, match="invalid"):
+        resolve_update_safety_pipe_name(
+            {"HERMES_UPDATE_SAFETY_PIPE": r"C:\temp\host.pipe"},
+            user_sid="ignored",
+        )
+
+
+def test_serves_only_the_aggregate_snapshot_contract() -> None:
+    pipe_name = _pipe_name("snapshot")
+    relay = WindowsUpdateSafetyRelay(_snapshot, pipe_name=pipe_name).start()
+    try:
+        assert _call(
+            pipe_name,
+            {"schema_version": 1, "method": "update-safety.snapshot"},
+        ) == _snapshot()
+    finally:
+        relay.close()
+
+
+def test_malformed_request_returns_body_free_error_without_provider_call() -> None:
+    pipe_name = _pipe_name("malformed")
+    called = False
+
+    def provider() -> dict[str, object]:
+        nonlocal called
+        called = True
+        return _snapshot()
+
+    relay = WindowsUpdateSafetyRelay(provider, pipe_name=pipe_name).start()
+    try:
+        response = _call(
+            pipe_name,
+            {
+                "schema_version": 1,
+                "method": "update-safety.snapshot",
+                "session_key": "must-not-cross-boundary",
+            },
+        )
+    finally:
+        relay.close()
+
+    assert response == {"schema_version": 1, "error": "unavailable"}
+    assert called is False
+
+
+def test_provider_failure_never_leaks_exception_text() -> None:
+    pipe_name = _pipe_name("provider-failure")
+
+    def provider() -> object:
+        raise RuntimeError("approval body secret")
+
+    relay = WindowsUpdateSafetyRelay(provider, pipe_name=pipe_name).start()
+    try:
+        response = _call(
+            pipe_name,
+            {"schema_version": 1, "method": "update-safety.snapshot"},
+        )
+    finally:
+        relay.close()
+
+    assert response == {"schema_version": 1, "error": "unavailable"}
+    assert "secret" not in repr(response)
+
+
+def test_first_pipe_instance_prevents_live_endpoint_takeover() -> None:
+    pipe_name = _pipe_name("takeover")
+    first = WindowsUpdateSafetyRelay(_snapshot, pipe_name=pipe_name).start()
+    try:
+        with pytest.raises(OSError, match="CreateNamedPipeW"):
+            WindowsUpdateSafetyRelay(_snapshot, pipe_name=pipe_name).start()
+        assert _call(
+            pipe_name,
+            {"schema_version": 1, "method": "update-safety.snapshot"},
+        ) == _snapshot()
+    finally:
+        first.close()
