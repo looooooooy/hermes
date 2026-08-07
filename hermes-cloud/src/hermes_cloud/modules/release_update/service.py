@@ -9,7 +9,7 @@ anti-rollback state before any local download or activation.
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .domain import (
     DeviceUpdateContextV1,
@@ -51,17 +51,11 @@ class UpdateCheckService:
 
         if candidate.channel != context.requested_channel:
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.INELIGIBLE,
-                "channel_mismatch",
+                context, candidate, UpdateDecisionStatusV1.INELIGIBLE, "channel_mismatch"
             )
         if candidate.target != context.target:
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.INELIGIBLE,
-                "target_mismatch",
+                context, candidate, UpdateDecisionStatusV1.INELIGIBLE, "target_mismatch"
             )
         if context.enterprise_pin_release_id is not None and (
             candidate.release_id != context.enterprise_pin_release_id
@@ -78,17 +72,11 @@ class UpdateCheckService:
             minimum_os=candidate.minimum_os,
         ):
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.INELIGIBLE,
-                "os_incompatible",
+                context, candidate, UpdateDecisionStatusV1.INELIGIBLE, "os_incompatible"
             )
         if candidate.blocked:
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.BLOCKED,
-                "candidate_blocked",
+                context, candidate, UpdateDecisionStatusV1.BLOCKED, "candidate_blocked"
             )
         if candidate.release_generation < candidate.minimum_safe_release_generation:
             return _candidate_decision(
@@ -102,19 +90,13 @@ class UpdateCheckService:
             and context.active_release_generation == candidate.release_generation
         ):
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.UP_TO_DATE,
-                "already_active",
+                context, candidate, UpdateDecisionStatusV1.UP_TO_DATE, "already_active"
             )
 
         historical = candidate.release_generation < context.highest_release_generation
         if historical and not candidate.rollback_authorized:
             return _candidate_decision(
-                context,
-                candidate,
-                UpdateDecisionStatusV1.INELIGIBLE,
-                "anti_rollback",
+                context, candidate, UpdateDecisionStatusV1.INELIGIBLE, "anti_rollback"
             )
 
         mandatory = _is_mandatory(context, candidate, observed_now)
@@ -141,7 +123,11 @@ class UpdateCheckService:
             for artifact in candidate.artifacts
         )
         _validate_grants(candidate, grants, observed_now)
-        status = UpdateDecisionStatusV1.MANDATORY if mandatory else UpdateDecisionStatusV1.AVAILABLE
+        status = (
+            UpdateDecisionStatusV1.MANDATORY
+            if mandatory
+            else UpdateDecisionStatusV1.AVAILABLE
+        )
         return UpdateDecisionV1(
             status=status,
             reason_code="mandatory_update" if mandatory else "eligible_update",
@@ -159,10 +145,7 @@ class UpdateCheckService:
 
 
 def deterministic_rollout_bucket(
-    *,
-    organization_id: str,
-    device_id: str,
-    release_id: str,
+    *, organization_id: str, device_id: str, release_id: str
 ) -> int:
     for label, value in (
         ("organization_id", organization_id),
@@ -196,11 +179,12 @@ def _validate_context(context: DeviceUpdateContextV1) -> None:
         ("device_id", context.device_id, 160),
         ("organization_id", context.organization_id, 160),
         ("target", context.target, 64),
-        ("os_version", context.os_version, 128),
         ("requested_channel", context.requested_channel, 32),
     ):
         if not _safe_identifier(value, maximum):
             raise UpdateCheckPolicyError(f"invalid {label}")
+    if not _safe_text(context.os_version, 128):
+        raise UpdateCheckPolicyError("invalid os_version")
     if context.active_release_generation < 0 or context.highest_release_generation < 0:
         raise UpdateCheckPolicyError("release generations must be non-negative")
     if context.highest_release_generation < context.active_release_generation:
@@ -217,10 +201,11 @@ def _validate_candidate(candidate: ReleaseUpdateCandidateV1) -> None:
         ("product_version", candidate.product_version, 64),
         ("channel", candidate.channel, 32),
         ("target", candidate.target, 64),
-        ("minimum_os", candidate.minimum_os, 128),
     ):
         if not _safe_identifier(value, maximum):
             raise UpdateCheckPolicyError(f"invalid candidate {label}")
+    if not _safe_text(candidate.minimum_os, 128):
+        raise UpdateCheckPolicyError("invalid candidate minimum_os")
     if candidate.release_generation <= 0 or candidate.channel_generation <= 0:
         raise UpdateCheckPolicyError("candidate generations must be positive")
     if not 0 <= candidate.rollout_basis_points <= 10_000:
@@ -257,7 +242,7 @@ def _validate_grants(candidate, grants, now: datetime) -> None:
         if not grant.url.startswith("https://") or len(grant.url) > 4096:
             raise UpdateCheckPolicyError("download grant URL must be bounded HTTPS")
         expires_at = _utc(grant.expires_at)
-        if expires_at <= now or expires_at > now.replace(microsecond=0) + __import__("datetime").timedelta(minutes=20):
+        if expires_at <= now or expires_at > now + timedelta(minutes=20):
             raise UpdateCheckPolicyError("download grant expiry must be short-lived")
 
 
@@ -314,7 +299,13 @@ def _utc(value: datetime) -> datetime:
 
 def _safe_identifier(value: str, maximum: int) -> bool:
     return bool(value) and len(value) <= maximum and all(
-        ch.isalnum() or ch in ".:_+-" for ch in value
+        ch.isascii() and (ch.isalnum() or ch in ".:_+-") for ch in value
+    )
+
+
+def _safe_text(value: str, maximum: int) -> bool:
+    return bool(value) and len(value) <= maximum and all(
+        ch.isascii() and (ch == " " or 0x21 <= ord(ch) <= 0x7E) for ch in value
     )
 
 
