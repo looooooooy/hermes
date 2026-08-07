@@ -367,6 +367,7 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
                 "__init__.py",
                 "agent_discovery.py",
                 "availability.py",
+                "control_client.py",
                 "instance_lock.py",
                 "local_gateway_transport.py",
                 "named_pipe.py",
