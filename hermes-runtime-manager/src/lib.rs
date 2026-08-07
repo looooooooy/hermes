@@ -12,6 +12,7 @@ pub mod portable_plugin_signature;
 pub mod ports;
 pub mod release_control;
 pub mod toolchain;
+pub mod update_download;
 #[cfg(windows)]
 pub mod windows_pipe;
 #[cfg(windows)]
@@ -45,6 +46,11 @@ pub use release_control::{
     RollbackAuthorizationV1, SignedReleaseEnvelopeV1,
 };
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
+pub use update_download::{
+    download_spec_from_verified_release, download_verified_artifact, ArtifactDownloadReceiptV1,
+    ArtifactDownloadSpecV1, ArtifactRangeSource, DownloadChunkV1, ReleaseArtifactKindV1,
+    UpdateDownloadError,
+};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
 #[cfg(windows)]
