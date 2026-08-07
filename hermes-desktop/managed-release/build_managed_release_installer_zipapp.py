@@ -18,6 +18,7 @@ MODULES = (
     "hermes_managed_release.py",
     "hermes_offline_wheelhouse.py",
     "hermes_private_toolchain.py",
+    "hermes_target_runtime_plan.py",
 )
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 
@@ -93,7 +94,9 @@ def write_entry(archive: zipfile.ZipFile, name: str, payload: bytes, *, mode: in
     info.compress_type = zipfile.ZIP_DEFLATED
     info.create_system = 3
     info.external_attr = (stat.S_IFREG | mode) << 16
-    archive.writestr(info, payload, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    archive.writestr(
+        info, payload, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9
+    )
 
 
 def verify_zipapp(path: Path, manifest: dict[str, object]) -> None:
@@ -111,7 +114,10 @@ def verify_zipapp(path: Path, manifest: dict[str, object]) -> None:
         for name in expected - {"INSTALLER-MANIFEST.json"}:
             payload = archive.read(name)
             item = declared[name]
-            if len(payload) != item["size_bytes"] or hashlib.sha256(payload).hexdigest() != item["sha256"]:
+            if (
+                len(payload) != item["size_bytes"]
+                or hashlib.sha256(payload).hexdigest() != item["sha256"]
+            ):
                 raise ZipappBuildError(f"zipapp module integrity failed: {name}")
 
 
