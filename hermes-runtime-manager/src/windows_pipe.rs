@@ -6,6 +6,7 @@ use crate::ipc::{
 };
 use crate::local_ipc::dispatch_read_only;
 use crate::RuntimeManager;
+use std::ffi::c_void;
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
 use thiserror::Error;
@@ -27,10 +28,96 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
 };
 
-// Win32 `PIPE_ACCESS_DUPLEX` is defined as 0x00000003. Keeping this one open-mode
-// constant local avoids depending on a windows-sys re-export location that has moved
-// across generated projections while preserving the documented Win32 contract.
 const PIPE_ACCESS_DUPLEX_MODE: u32 = 0x0000_0003;
+const SDDL_REVISION_1: u32 = 1;
+
+#[link(name = "advapi32")]
+unsafe extern "system" {
+    fn ConvertSidToStringSidW(sid: *mut c_void, string_sid: *mut *mut u16) -> i32;
+    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        string_security_descriptor: *const u16,
+        string_sd_revision: u32,
+        security_descriptor: *mut *mut c_void,
+        security_descriptor_size: *mut u32,
+    ) -> i32;
+}
+
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn LocalFree(memory: *mut c_void) -> *mut c_void;
+}
+
+#[repr(C)]
+struct RawSecurityAttributes {
+    n_length: u32,
+    security_descriptor: *mut c_void,
+    inherit_handle: i32,
+}
+
+struct PipeSecurity {
+    descriptor: *mut c_void,
+    attributes: RawSecurityAttributes,
+    user_sid: String,
+}
+
+impl PipeSecurity {
+    fn current_user() -> Result<Self, WindowsPipeError> {
+        let token = open_process_token()?;
+        let user_buffer = token_user_buffer(token.raw())?;
+        let user = unsafe { &*(user_buffer.as_ptr().cast::<TOKEN_USER>()) };
+        if user.User.Sid.is_null() {
+            return Err(WindowsPipeError::Identity("TokenUser SID is null"));
+        }
+        let user_sid = sid_to_string(user.User.Sid)?;
+        // Protected DACL with exactly one allow ACE: the Runtime Manager's current
+        // user gets Generic All; Everyone/Anonymous receive no inherited/default ACE.
+        let sddl = format!("D:P(A;;GA;;;{user_sid})");
+        let sddl_wide = wide(&sddl);
+        let mut descriptor = null_mut();
+        let mut descriptor_size = 0u32;
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl_wide.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                &mut descriptor_size,
+            )
+        } == 0
+        {
+            return Err(last_error());
+        }
+        if descriptor.is_null() || descriptor_size == 0 {
+            if !descriptor.is_null() {
+                unsafe { LocalFree(descriptor) };
+            }
+            return Err(WindowsPipeError::Identity(
+                "current-user pipe security descriptor is empty",
+            ));
+        }
+        Ok(Self {
+            descriptor,
+            attributes: RawSecurityAttributes {
+                n_length: std::mem::size_of::<RawSecurityAttributes>() as u32,
+                security_descriptor: descriptor,
+                inherit_handle: 0,
+            },
+            user_sid,
+        })
+    }
+
+    fn attributes_ptr(&self) -> *const RawSecurityAttributes {
+        &self.attributes
+    }
+}
+
+impl Drop for PipeSecurity {
+    fn drop(&mut self) {
+        if !self.descriptor.is_null() {
+            unsafe { LocalFree(self.descriptor) };
+            self.descriptor = null_mut();
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum WindowsPipeError {
@@ -72,11 +159,14 @@ impl OwnedHandle {
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
         if !self.0.is_null() && self.0 != INVALID_HANDLE_VALUE {
-            unsafe {
-                CloseHandle(self.0);
-            }
+            unsafe { CloseHandle(self.0) };
         }
     }
+}
+
+pub fn current_user_pipe_name() -> Result<String, WindowsPipeError> {
+    let security = PipeSecurity::current_user()?;
+    Ok(format!(r"\\.\pipe\HermesRuntimeManager-{}", security.user_sid))
 }
 
 pub struct ReadOnlyWindowsPipeServer {
@@ -86,14 +176,10 @@ pub struct ReadOnlyWindowsPipeServer {
 
 impl ReadOnlyWindowsPipeServer {
     pub fn new(name: &str, manager: Arc<RuntimeManager>) -> Result<Self, WindowsPipeError> {
-        if !name.starts_with(r"\\.\pipe\") || name.len() > 220 || name.contains('\0') {
+        if !name.starts_with(r"\\.\pipe\") || name.len() > 240 || name.contains('\0') {
             return Err(WindowsPipeError::Identity("invalid Named Pipe name"));
         }
         let name = wide(name);
-        // Create the server instance synchronously here rather than inside
-        // `serve_once`. This removes a real client/server startup race: after `new`
-        // succeeds the named pipe namespace entry already exists, so a client may
-        // connect immediately while the serving thread enters ConnectNamedPipe.
         let pipe = create_pipe(&name)?;
         Ok(Self { pipe, manager })
     }
@@ -104,9 +190,7 @@ impl ReadOnlyWindowsPipeServer {
         let envelope: ManagerEnvelopeV1<ManagerRequestV1> = read_envelope(self.pipe.raw())?;
         let same_user = verify_client_same_user(self.pipe.raw())?;
         if !same_user {
-            unsafe {
-                DisconnectNamedPipe(self.pipe.raw());
-            }
+            unsafe { DisconnectNamedPipe(self.pipe.raw()) };
             return Err(WindowsPipeError::Identity(
                 "Named Pipe client SID does not match Runtime Manager user SID",
             ));
@@ -116,9 +200,7 @@ impl ReadOnlyWindowsPipeServer {
             self.pipe.raw(),
             &ManagerEnvelopeV1::new(envelope.request_id, response),
         )?;
-        unsafe {
-            DisconnectNamedPipe(self.pipe.raw());
-        }
+        unsafe { DisconnectNamedPipe(self.pipe.raw()) };
         Ok(WindowsPipePeerIdentity { pid, same_user })
     }
 }
@@ -153,6 +235,7 @@ pub fn request_read_only(
 }
 
 fn create_pipe(name: &[u16]) -> Result<OwnedHandle, WindowsPipeError> {
+    let security = PipeSecurity::current_user()?;
     let handle = unsafe {
         CreateNamedPipeW(
             name.as_ptr(),
@@ -162,7 +245,7 @@ fn create_pipe(name: &[u16]) -> Result<OwnedHandle, WindowsPipeError> {
             (MAX_MANAGER_FRAME_BYTES + 4) as u32,
             (MAX_MANAGER_FRAME_BYTES + 4) as u32,
             0,
-            null(),
+            security.attributes_ptr().cast(),
         )
     };
     OwnedHandle::new(handle)
@@ -193,8 +276,6 @@ fn client_pid(pipe: HANDLE) -> Result<u32, WindowsPipeError> {
 }
 
 fn verify_client_same_user(pipe: HANDLE) -> Result<bool, WindowsPipeError> {
-    // Identity is checked after a complete bounded request frame is read but before
-    // any request is dispatched. The impersonation is reverted on every exit path.
     if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
         return Err(last_error());
     }
@@ -241,9 +322,7 @@ fn same_token_user(left: HANDLE, right: HANDLE) -> Result<bool, WindowsPipeError
 
 fn token_user_buffer(token: HANDLE) -> Result<Vec<u8>, WindowsPipeError> {
     let mut required = 0u32;
-    unsafe {
-        GetTokenInformation(token, TokenUser, null_mut(), 0, &mut required);
-    }
+    unsafe { GetTokenInformation(token, TokenUser, null_mut(), 0, &mut required) };
     if required == 0 || required > 64 * 1024 {
         return Err(WindowsPipeError::Identity("invalid TokenUser size"));
     }
@@ -261,6 +340,29 @@ fn token_user_buffer(token: HANDLE) -> Result<Vec<u8>, WindowsPipeError> {
         return Err(last_error());
     }
     Ok(buffer)
+}
+
+fn sid_to_string(sid: *mut c_void) -> Result<String, WindowsPipeError> {
+    let mut string_sid: *mut u16 = null_mut();
+    if unsafe { ConvertSidToStringSidW(sid, &mut string_sid) } == 0 {
+        return Err(last_error());
+    }
+    if string_sid.is_null() {
+        return Err(WindowsPipeError::Identity("string SID is null"));
+    }
+    let result = (|| {
+        let mut length = 0usize;
+        while length < 256 && unsafe { *string_sid.add(length) } != 0 {
+            length += 1;
+        }
+        if length == 0 || length == 256 {
+            return Err(WindowsPipeError::Identity("string SID length is invalid"));
+        }
+        String::from_utf16(unsafe { std::slice::from_raw_parts(string_sid, length) })
+            .map_err(|_| WindowsPipeError::Identity("string SID is invalid UTF-16"))
+    })();
+    unsafe { LocalFree(string_sid.cast()) };
+    result
 }
 
 fn read_envelope<T: serde::de::DeserializeOwned>(
@@ -355,17 +457,19 @@ mod tests {
     use std::thread;
 
     #[test]
+    fn current_user_pipe_name_is_sid_scoped() {
+        let name = current_user_pipe_name().expect("pipe name");
+        assert!(name.starts_with(r"\\.\pipe\HermesRuntimeManager-S-1-"));
+    }
+
+    #[test]
     fn named_pipe_status_round_trip_returns_client_pid_and_same_user() {
-        let name = format!(
-            r"\\.\pipe\HermesRuntimeManagerTest-{}",
-            std::process::id()
-        );
+        let base = current_user_pipe_name().expect("pipe name");
+        let name = format!("{base}-test-{}", std::process::id());
         let manager = Arc::new(RuntimeManager::new(
             Arc::new(FailClosedServiceManager),
             Arc::new(DefaultInstallLayout::discover().expect("layout")),
         ));
-        // Server creation binds the pipe synchronously, so the client can connect
-        // immediately without a scheduler-dependent sleep or retry loop.
         let server = ReadOnlyWindowsPipeServer::new(&name, manager).expect("server");
         let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
 
