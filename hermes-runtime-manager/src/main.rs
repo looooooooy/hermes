@@ -2,7 +2,8 @@ use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceMa
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
 use hermes_runtime_manager::{
-    run_blank_machine_toolchain_gate, PrivateToolchainInstaller, RuntimeManager,
+    run_blank_machine_toolchain_gate, verify_portable_plugin_signature, PrivateToolchainInstaller,
+    RuntimeManager,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +18,10 @@ fn main() {
     }
     if command == "blank-machine-toolchain-gate" {
         blank_machine_toolchain_gate_command(&args);
+        return;
+    }
+    if command == "verify-plugin-signature" {
+        verify_plugin_signature_command(&args);
         return;
     }
 
@@ -58,7 +63,7 @@ fn main() {
         other => {
             eprintln!("unsupported command: {other}");
             eprintln!(
-                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, version"
+                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, version"
             );
             std::process::exit(64);
         }
@@ -101,6 +106,28 @@ fn blank_machine_toolchain_gate_command(args: &[String]) {
         Err(error) => {
             eprintln!("runtime_manager_blank_machine_gate_error: {error}");
             std::process::exit(8);
+        }
+    }
+}
+
+fn verify_plugin_signature_command(args: &[String]) {
+    if args.len() != 5 {
+        eprintln!(
+            "usage: hermes-runtime-manager verify-plugin-signature <portable-manifest.json> <trust-store.json> <plugin-wheel>"
+        );
+        std::process::exit(64);
+    }
+    let manifest = PathBuf::from(&args[2]);
+    let trust_store = PathBuf::from(&args[3]);
+    let wheel = PathBuf::from(&args[4]);
+    match verify_portable_plugin_signature(&manifest, &trust_store, &wheel) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("plugin verification report serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_plugin_signature_error: {error}");
+            std::process::exit(9);
         }
     }
 }

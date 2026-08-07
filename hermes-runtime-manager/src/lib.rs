@@ -8,6 +8,7 @@ pub mod local_ipc;
 pub mod manager;
 pub mod model;
 pub mod platform;
+pub mod portable_plugin_signature;
 pub mod ports;
 pub mod toolchain;
 #[cfg(windows)]
@@ -28,6 +29,12 @@ pub use linux_secret_service::LinuxSecretServiceStore;
 pub use linux_systemd_user::{LinuxSystemdUserBootstrap, LinuxSystemdUserStatus};
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
+pub use portable_plugin_signature::{
+    verify_portable_plugin_signature, verify_portable_plugin_signature_at,
+    PluginTrustKeyV1, PluginTrustStoreV1, PortablePluginEntrypointV2,
+    PortablePluginManifestV2, PortablePluginVerificationError,
+    PortablePluginVerificationReportV2,
+};
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
