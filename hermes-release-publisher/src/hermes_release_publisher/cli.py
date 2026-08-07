@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
 
 from .repository import BucketMap, OssV2Backend, PublisherError, ReleasePublisher, content_addressed_key
+from .signing import (
+    ReleaseSigningError,
+    build_release_trust_store,
+    sign_control_payload,
+    write_json_new,
+)
 
 
 def main() -> int:
@@ -15,6 +22,20 @@ def main() -> int:
     plan = subparsers.add_parser("plan-artifact")
     plan.add_argument("file", type=Path)
     plan.add_argument("--namespace", choices=("artifacts", "evidence"), default="artifacts")
+
+    sign = subparsers.add_parser("sign-control")
+    sign.add_argument("payload", type=Path)
+    sign.add_argument("--private-key", type=Path, required=True)
+    sign.add_argument("--key-id", required=True)
+    sign.add_argument("--signed-at", required=True)
+    sign.add_argument("--output", type=Path, required=True)
+
+    trust = subparsers.add_parser("emit-trust-store")
+    trust.add_argument("--private-key", type=Path, required=True)
+    trust.add_argument("--key-id", required=True)
+    trust.add_argument("--not-before", required=True)
+    trust.add_argument("--not-after", required=True)
+    trust.add_argument("--output", type=Path, required=True)
 
     for name in ("publish-artifact", "publish-release", "promote-channel", "publish-block"):
         command = subparsers.add_parser(name)
@@ -36,8 +57,6 @@ def main() -> int:
         if args.command == "plan-artifact":
             source = args.file.resolve(strict=True)
             payload = source.read_bytes()
-            import hashlib
-
             digest = hashlib.sha256(payload).hexdigest()
             print(
                 json.dumps(
@@ -52,6 +71,29 @@ def main() -> int:
                     sort_keys=True,
                 )
             )
+            return 0
+
+        if args.command == "sign-control":
+            payload = _read_json_object(args.payload)
+            envelope = sign_control_payload(
+                payload,
+                private_key_path=args.private_key.resolve(strict=True),
+                key_id=args.key_id,
+                signed_at=args.signed_at,
+            )
+            write_json_new(args.output, envelope)
+            print(json.dumps({"schema_version": 1, "output": str(args.output.resolve()), "key_id": args.key_id}, sort_keys=True))
+            return 0
+
+        if args.command == "emit-trust-store":
+            trust_store = build_release_trust_store(
+                private_key_path=args.private_key.resolve(strict=True),
+                key_id=args.key_id,
+                not_before=args.not_before,
+                not_after=args.not_after,
+            )
+            write_json_new(args.output, trust_store)
+            print(json.dumps({"schema_version": 1, "output": str(args.output.resolve()), "key_id": args.key_id}, sort_keys=True))
             return 0
 
         buckets = _bucket_map(args)
@@ -82,7 +124,7 @@ def main() -> int:
             raise PublisherError(f"unsupported command: {args.command}")
         print(json.dumps(receipt.to_json(), sort_keys=True))
         return 0
-    except (PublisherError, OSError, ValueError, json.JSONDecodeError) as error:
+    except (PublisherError, ReleaseSigningError, OSError, ValueError, json.JSONDecodeError) as error:
         raise SystemExit(f"hermes_release_publisher_error: {error}") from error
 
 
@@ -107,6 +149,16 @@ def _bucket_map(args: argparse.Namespace) -> BucketMap:
     if missing:
         raise PublisherError(f"missing OSS bucket configuration: {', '.join(missing)}")
     return BucketMap(**values)
+
+
+def _read_json_object(path: Path) -> dict[str, object]:
+    source = path.resolve(strict=True)
+    if source.is_symlink() or not source.is_file():
+        raise ReleaseSigningError("control payload must be a regular non-symlink JSON file")
+    value = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ReleaseSigningError("control payload root must be a JSON object")
+    return value
 
 
 if __name__ == "__main__":
