@@ -52,6 +52,9 @@ pub struct WindowsPipePeerIdentity {
 
 struct OwnedHandle(HANDLE);
 
+unsafe impl Send for OwnedHandle {}
+unsafe impl Sync for OwnedHandle {}
+
 impl OwnedHandle {
     fn new(handle: HANDLE) -> Result<Self, WindowsPipeError> {
         if handle.is_null() || handle == INVALID_HANDLE_VALUE {
@@ -77,7 +80,7 @@ impl Drop for OwnedHandle {
 }
 
 pub struct ReadOnlyWindowsPipeServer {
-    name: Vec<u16>,
+    pipe: OwnedHandle,
     manager: Arc<RuntimeManager>,
 }
 
@@ -86,21 +89,23 @@ impl ReadOnlyWindowsPipeServer {
         if !name.starts_with(r"\\.\pipe\") || name.len() > 220 || name.contains('\0') {
             return Err(WindowsPipeError::Identity("invalid Named Pipe name"));
         }
-        Ok(Self {
-            name: wide(name),
-            manager,
-        })
+        let name = wide(name);
+        // Create the server instance synchronously here rather than inside
+        // `serve_once`. This removes a real client/server startup race: after `new`
+        // succeeds the named pipe namespace entry already exists, so a client may
+        // connect immediately while the serving thread enters ConnectNamedPipe.
+        let pipe = create_pipe(&name)?;
+        Ok(Self { pipe, manager })
     }
 
     pub fn serve_once(&self) -> Result<WindowsPipePeerIdentity, WindowsPipeError> {
-        let pipe = create_pipe(&self.name)?;
-        connect_pipe(pipe.raw())?;
-        let pid = client_pid(pipe.raw())?;
-        let envelope: ManagerEnvelopeV1<ManagerRequestV1> = read_envelope(pipe.raw())?;
-        let same_user = verify_client_same_user(pipe.raw())?;
+        connect_pipe(self.pipe.raw())?;
+        let pid = client_pid(self.pipe.raw())?;
+        let envelope: ManagerEnvelopeV1<ManagerRequestV1> = read_envelope(self.pipe.raw())?;
+        let same_user = verify_client_same_user(self.pipe.raw())?;
         if !same_user {
             unsafe {
-                DisconnectNamedPipe(pipe.raw());
+                DisconnectNamedPipe(self.pipe.raw());
             }
             return Err(WindowsPipeError::Identity(
                 "Named Pipe client SID does not match Runtime Manager user SID",
@@ -108,11 +113,11 @@ impl ReadOnlyWindowsPipeServer {
         }
         let response = dispatch_read_only(&self.manager, envelope.body);
         write_envelope(
-            pipe.raw(),
+            self.pipe.raw(),
             &ManagerEnvelopeV1::new(envelope.request_id, response),
         )?;
         unsafe {
-            DisconnectNamedPipe(pipe.raw());
+            DisconnectNamedPipe(self.pipe.raw());
         }
         Ok(WindowsPipePeerIdentity { pid, same_user })
     }
@@ -359,6 +364,8 @@ mod tests {
             Arc::new(FailClosedServiceManager),
             Arc::new(DefaultInstallLayout::discover().expect("layout")),
         ));
+        // Server creation binds the pipe synchronously, so the client can connect
+        // immediately without a scheduler-dependent sleep or retry loop.
         let server = ReadOnlyWindowsPipeServer::new(&name, manager).expect("server");
         let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
 
