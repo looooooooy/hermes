@@ -46,7 +46,7 @@ class ShortLivedDownloadGrantIssuer:
                 object_key=artifact.object_key,
                 expires_at=expires_at,
             )
-        except Exception as exc:  # noqa: BLE001 - backend details must stay behind the port
+        except Exception as exc:
             raise UpdateCheckUnavailable("download presign backend is unavailable") from exc
         _validate_presigned_url(url)
         return DownloadGrantV1(
