@@ -244,6 +244,7 @@ mod tests {
         use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
         use hermes_runtime_manager::RuntimeManager;
         use std::fs;
+        use std::path::Path;
         use std::sync::Arc;
         use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
