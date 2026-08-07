@@ -1,0 +1,36 @@
+import type { RuntimeSnapshot } from './types';
+
+export const mockRuntimeSnapshot: RuntimeSnapshot = {
+  deviceName: 'Loy’s MacBook Pro',
+  profileName: 'Work',
+  platform: 'macOS 15.6',
+  architecture: 'arm64',
+  desktopVersion: '0.1.0-dev',
+  runtimeVersion: '2026.08.07-r1',
+  runtimeGeneration: 'gen_8fb1a7',
+  state: 'healthy',
+  cloudConnected: true,
+  agentReady: true,
+  activeSessions: 3,
+  runningTasks: 2,
+  updateAvailable: true,
+  updateVersion: '2026.08.07-r2',
+  lastChecked: 'just now',
+  components: [
+    { id: 'cloud', name: 'Hermes Cloud', detail: 'WSS secure channel', state: 'healthy', latencyMs: 42 },
+    { id: 'connector', name: 'Connector', detail: 'Device-bound transport', state: 'healthy', latencyMs: 3 },
+    { id: 'plugin', name: 'Agent Plugin', detail: 'Observer + control authority', state: 'healthy', latencyMs: 1 },
+    { id: 'core', name: 'Hermes Core', detail: 'Authoritative local runtime', state: 'healthy' },
+  ],
+  providers: [
+    { name: 'DeepSeek', model: 'DeepSeek Reasoner', state: 'connected', note: 'Local credential · Keychain' },
+    { name: 'Kimi', model: 'Kimi K2', state: 'connected', note: 'Local credential · Keychain' },
+    { name: 'OpenAI compatible', model: 'Custom endpoint', state: 'not-configured', note: 'Optional provider slot' },
+  ],
+  events: [
+    { id: 'e1', at: '14:18', title: 'Runtime health verified', detail: 'Core, Plugin and Connector passed local authority checks.', tone: 'success' },
+    { id: 'e2', at: '14:11', title: 'Cloud transport resumed', detail: 'Sequence continuity restored after network transition.', tone: 'success' },
+    { id: 'e3', at: '13:52', title: 'Managed Runtime update available', detail: 'Candidate r2 is signed and ready for staged activation.', tone: 'neutral' },
+    { id: 'e4', at: '12:40', title: 'Provider credential checked', detail: 'DeepSeek credential remains local to this execution host.', tone: 'neutral' },
+  ],
+};
