@@ -1,4 +1,5 @@
 use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
+#[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
 use hermes_runtime_manager::RuntimeManager;
 use std::sync::Arc;
@@ -49,8 +50,6 @@ fn serve_read_only(
 ) {
     use hermes_runtime_manager::local_ipc::ReadOnlyUnixServer;
 
-    // Keep the leaf intentionally short: macOS AF_UNIX has a much smaller
-    // sun_path budget than Linux, and customer HOME prefixes are not fixed.
     let endpoint = match layout.state_root() {
         Ok(root) => root.join("rm.sock"),
         Err(error) => {
@@ -75,9 +74,31 @@ fn serve_read_only(
 
 #[cfg(windows)]
 fn serve_read_only(
-    _manager: Arc<RuntimeManager>,
+    manager: Arc<RuntimeManager>,
     _layout: Arc<DefaultInstallLayout>,
 ) {
-    eprintln!("runtime_manager_ipc_unavailable: Windows Named Pipe transport is not implemented yet");
-    std::process::exit(6);
+    use hermes_runtime_manager::windows_pipe::{
+        current_user_pipe_name, ReadOnlyWindowsPipeServer,
+    };
+
+    let pipe_name = match current_user_pipe_name() {
+        Ok(name) => name,
+        Err(error) => {
+            eprintln!("runtime_manager_pipe_identity_error: {error}");
+            std::process::exit(4);
+        }
+    };
+    let server = match ReadOnlyWindowsPipeServer::new(&pipe_name, manager) {
+        Ok(server) => server,
+        Err(error) => {
+            eprintln!("runtime_manager_pipe_bind_error: {error}");
+            std::process::exit(5);
+        }
+    };
+    eprintln!("runtime_manager_read_only_pipe_ready: {pipe_name}");
+    loop {
+        if let Err(error) = server.serve_once() {
+            eprintln!("runtime_manager_pipe_request_error: {error}");
+        }
+    }
 }
