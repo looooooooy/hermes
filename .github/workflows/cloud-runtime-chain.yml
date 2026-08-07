@@ -59,6 +59,36 @@ jobs:
           cd hermes-cloud
           uv build --wheel --out-dir "$RUNNER_TEMP/cloud-dist"
           test -n "$(find "$RUNNER_TEMP/cloud-dist" -maxdepth 1 -name 'hermes_cloud-*.whl' -print -quit)"
+      - name: Assemble Cloud staging bundle
+        env:
+          RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/cloud-staging"
+          mkdir -p "$bundle"
+          cp "$RUNNER_TEMP"/cloud-dist/hermes_cloud-*.whl "$bundle/"
+          cp -a hermes-cloud/deploy/test_server "$bundle/deploy"
+          cat > "$bundle/RELEASE.txt" <<EOF
+          repository_commit=$RELEASE_COMMIT
+          cloud_version=0.1.0
+          python=3.12
+          platform=linux-x86_64
+          EOF
+          (
+            cd "$bundle"
+            find . -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+          )
+          test -s "$bundle/SHA256SUMS"
+      - name: Upload Cloud staging bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-cloud-staging-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/cloud-staging
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
 
   connector-cloud-wss:
     name: Real TLS WSS Connector Cloud interop
