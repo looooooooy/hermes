@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -29,6 +28,10 @@ from hermes_local_release import (
 from hermes_offline_wheelhouse import VerifiedWheelhouseV1
 from hermes_private_toolchain import PinnedToolchainRunner, PrivateToolchainV1
 from hermes_target_runtime_plan import VerifiedTargetRuntimePlanV1
+from hermes_wheelhouse_provenance import (
+    WheelhouseProvenanceError,
+    verify_wheelhouse_direct_urls,
+)
 
 _PORTABLE_PLUGIN_FIELDS = {
     "schema_version",
@@ -150,8 +153,8 @@ class ManagedReleaseBuilder(ReleaseBuilder):
             )
 
         # chmod(0400) maps to the Windows read-only attribute. A failed command would
-        # otherwise make shutil.rmtree mask the real resolver error with AccessDenied.
-        # Keep staging files writable until ReleaseBuilder's final immutable freeze.
+        # otherwise make cleanup mask the real resolver error with AccessDenied.
+        # Keep staging Plugin files writable until ReleaseBuilder's final freeze.
         if os.name == "nt":
             for path in (staging / "plugin").rglob("*"):
                 if path.is_file() and not path.is_symlink():
@@ -180,6 +183,7 @@ class ManagedReleaseBuilder(ReleaseBuilder):
                     staging / runtime / "venv",
                     release_dir / runtime / "venv",
                     command.argv[-3],
+                    runtime_plan=self._runtime_plan,
                 )
         if set(verification) != {"host", "connector"}:
             raise RuntimeError("managed runtime verification receipts are incomplete")
@@ -332,22 +336,31 @@ def _target_runtime_commands(
             release_dir=release_dir,
         )
 
-    create_venv = lambda destination: (
-        str(private_python),
-        "-I",
-        "-m",
-        "venv",
-        "--without-pip",
-        "--copies",
-        str(destination),
-    )
+    def create_venv(destination: Path) -> tuple[str, ...]:
+        return (
+            str(private_python),
+            "-I",
+            "-m",
+            "venv",
+            "--without-pip",
+            "--copies",
+            str(destination),
+        )
+
     return (
         command("create-host-venv", create_venv(host_venv), release_dir),
         command(
             "install-host-dependencies",
             (
-                "uv", "pip", "install", "--offline", "--python", str(host_python),
-                "--require-hashes", "--no-deps", "--requirement",
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(host_python),
+                "--require-hashes",
+                "--no-deps",
+                "--requirement",
                 str(host_project / "runtime-requirements.txt"),
             ),
             host_project,
@@ -355,17 +368,28 @@ def _target_runtime_commands(
         command(
             "install-final-core-wheel",
             (
-                "uv", "pip", "install", "--offline", "--python", str(host_python),
-                "--no-deps", str(host_wheel),
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(host_python),
+                "--no-deps",
+                str(host_wheel),
             ),
             release_dir,
         ),
         command(
             "verify-host-runtime",
             (
-                str(host_python), "-I", "-c", _VERIFY_RUNTIME_CROSS_PLATFORM,
-                inputs.core.launch_module, inputs.core.console_script,
-                inputs.core.entrypoint, inputs.core.project_name,
+                str(host_python),
+                "-I",
+                "-c",
+                _VERIFY_RUNTIME_CROSS_PLATFORM,
+                inputs.core.launch_module,
+                inputs.core.console_script,
+                inputs.core.entrypoint,
+                inputs.core.project_name,
             ),
             release_dir,
         ),
@@ -373,8 +397,15 @@ def _target_runtime_commands(
         command(
             "install-connector-dependencies",
             (
-                "uv", "pip", "install", "--offline", "--python", str(connector_python),
-                "--require-hashes", "--no-deps", "--requirement",
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(connector_python),
+                "--require-hashes",
+                "--no-deps",
+                "--requirement",
                 str(connector_project / "runtime-requirements.txt"),
             ),
             connector_project,
@@ -382,17 +413,28 @@ def _target_runtime_commands(
         command(
             "install-final-connector-wheel",
             (
-                "uv", "pip", "install", "--offline", "--python", str(connector_python),
-                "--no-deps", str(connector_wheel),
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--python",
+                str(connector_python),
+                "--no-deps",
+                str(connector_wheel),
             ),
             release_dir,
         ),
         command(
             "verify-connector-runtime",
             (
-                str(connector_python), "-I", "-c", _VERIFY_RUNTIME_CROSS_PLATFORM,
-                inputs.connector.launch_module, inputs.connector.console_script,
-                inputs.connector.entrypoint, inputs.connector.project_name,
+                str(connector_python),
+                "-I",
+                "-c",
+                _VERIFY_RUNTIME_CROSS_PLATFORM,
+                inputs.connector.launch_module,
+                inputs.connector.console_script,
+                inputs.connector.entrypoint,
+                inputs.connector.project_name,
             ),
             release_dir,
         ),
@@ -447,13 +489,20 @@ def _verify_runtime_plan_receipt(
     runtime_plan: VerifiedTargetRuntimePlanV1,
 ) -> None:
     expected = {
-        release_dir / "host/project/runtime-requirements.txt": runtime_plan.requirement("core").sha256,
-        release_dir / "connector/project/runtime-requirements.txt": runtime_plan.requirement("connector").sha256,
+        release_dir / "host/project/runtime-requirements.txt": runtime_plan.requirement(
+            "core"
+        ).sha256,
+        release_dir
+        / "connector/project/runtime-requirements.txt": runtime_plan.requirement(
+            "connector"
+        ).sha256,
         release_dir / "receipts/runtime-install-plan.json": runtime_plan.plan_sha256,
     }
     for path, digest in expected.items():
         if path.is_symlink() or not path.is_file() or _sha256_file(path) != digest:
-            raise RuntimeError(f"managed runtime install-plan receipt mismatch: {path.name}")
+            raise RuntimeError(
+                f"managed runtime install-plan receipt mismatch: {path.name}"
+            )
 
 
 def _validate_managed_verification(
@@ -461,24 +510,60 @@ def _validate_managed_verification(
     staging_venv: Path,
     final_venv: Path,
     console_script: str,
+    *,
+    runtime_plan: VerifiedTargetRuntimePlanV1 | None,
 ) -> Mapping[str, Any]:
     try:
         value = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise RuntimeError("managed runtime verification did not return valid JSON") from exc
-    if not isinstance(value, dict) or value.get("unexpected_direct_urls") or value.get("pth_escapes"):
+        raise RuntimeError(
+            "managed runtime verification did not return valid JSON"
+        ) from exc
+    if not isinstance(value, dict):
+        raise RuntimeError("managed runtime verification is not an object")
+    pth_escapes = value.get("pth_escapes")
+    direct_urls = value.get("unexpected_direct_urls")
+    if (
+        not isinstance(pth_escapes, list)
+        or any(not isinstance(item, str) for item in pth_escapes)
+        or pth_escapes
+        or not isinstance(direct_urls, list)
+        or any(not isinstance(item, str) for item in direct_urls)
+    ):
         raise RuntimeError("managed runtime verification detected an unsafe installation")
+    if direct_urls:
+        if runtime_plan is None:
+            raise RuntimeError(
+                "legacy managed runtime contains unexpected direct-url dependencies"
+            )
+        try:
+            verify_wheelhouse_direct_urls(
+                direct_urls,
+                venv_root=staging_venv,
+                wheelhouse_root=runtime_plan.root,
+                expected_manifest_sha256=runtime_plan.wheelhouse_manifest_sha256,
+            )
+        except WheelhouseProvenanceError as exc:
+            raise RuntimeError(
+                "managed runtime dependency provenance failed wheelhouse verification"
+            ) from exc
+
     module_origin = _path_inside(value.get("module_origin"), staging_venv)
     console = _path_inside(value.get("console_entrypoint"), staging_venv)
     candidates = [_venv_console(staging_venv, console_script)]
     if os.name == "nt":
         candidates.append(_venv_console(staging_venv, f"{console_script}.exe"))
-    resolved_candidates = {candidate.resolve(strict=False) for candidate in candidates}
+    resolved_candidates = {
+        candidate.resolve(strict=False) for candidate in candidates
+    }
     if console not in resolved_candidates:
-        raise RuntimeError("managed console entrypoint is not the exact isolated venv executable")
+        raise RuntimeError(
+            "managed console entrypoint is not the exact isolated venv executable"
+        )
     return {
         "module_origin": str(
-            final_venv / module_origin.relative_to(staging_venv.resolve(strict=False))
+            final_venv
+            / module_origin.relative_to(staging_venv.resolve(strict=False))
         ),
         "console_entrypoint": str(
             final_venv / console.relative_to(staging_venv.resolve(strict=False))
@@ -496,7 +581,9 @@ def _path_inside(raw: object, root: Path) -> Path:
     try:
         path.relative_to(expected)
     except ValueError as exc:
-        raise RuntimeError("managed runtime verification path escaped isolated venv") from exc
+        raise RuntimeError(
+            "managed runtime verification path escaped isolated venv"
+        ) from exc
     return path
 
 
@@ -529,10 +616,18 @@ def _validate_portable_plugin_manifest(inputs: ReleaseInputs) -> None:
     manifest = inputs.signed_plugin_manifest
     if not isinstance(manifest, Mapping) or set(manifest) != _PORTABLE_PLUGIN_FIELDS:
         raise RuntimeError("portable Plugin manifest does not match schema v2")
-    if manifest["schema_version"] != 2 or manifest["plugin_id"] != "hermes-agent-plugin":
+    if (
+        manifest["schema_version"] != 2
+        or manifest["plugin_id"] != "hermes-agent-plugin"
+    ):
         raise RuntimeError("portable Plugin identity is invalid")
     version = manifest["version"]
-    if not isinstance(version, str) or not version or version != version.strip() or len(version) > 64:
+    if (
+        not isinstance(version, str)
+        or not version
+        or version != version.strip()
+        or len(version) > 64
+    ):
         raise RuntimeError("portable Plugin version is invalid")
     filename = manifest["artifact_filename"]
     if (
