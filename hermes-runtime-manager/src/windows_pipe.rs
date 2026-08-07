@@ -13,18 +13,24 @@ use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::{
-    EqualSid, GetTokenInformation, OpenProcessToken, OpenThreadToken, RevertToSelf, TokenUser,
-    TOKEN_QUERY, TOKEN_USER,
+    EqualSid, GetTokenInformation, RevertToSelf, TokenUser, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE, OPEN_EXISTING,
 };
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
-    ImpersonateNamedPipeClient, PIPE_ACCESS_DUPLEX, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
-    PIPE_TYPE_BYTE, PIPE_WAIT,
+    ImpersonateNamedPipeClient, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE,
+    PIPE_WAIT,
 };
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetCurrentThread};
+use windows_sys::Win32::System::Threading::{
+    GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
+};
+
+// Win32 `PIPE_ACCESS_DUPLEX` is defined as 0x00000003. Keeping this one open-mode
+// constant local avoids depending on a windows-sys re-export location that has moved
+// across generated projections while preserving the documented Win32 contract.
+const PIPE_ACCESS_DUPLEX_MODE: u32 = 0x0000_0003;
 
 #[derive(Debug, Error)]
 pub enum WindowsPipeError {
@@ -145,7 +151,7 @@ fn create_pipe(name: &[u16]) -> Result<OwnedHandle, WindowsPipeError> {
     let handle = unsafe {
         CreateNamedPipeW(
             name.as_ptr(),
-            PIPE_ACCESS_DUPLEX,
+            PIPE_ACCESS_DUPLEX_MODE,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
             1,
             (MAX_MANAGER_FRAME_BYTES + 4) as u32,
