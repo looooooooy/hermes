@@ -1,8 +1,8 @@
 """Pinned Hermes toolchain execution for blank-machine Managed Runtime builds.
 
-This runner is intentionally independent of shell PATH discovery.  The caller supplies
-content-addressed private Python and uv executables, and every uv project sync is bound
-to that exact Python interpreter before a command is allowed to execute.
+The runner is independent of shell PATH discovery and can be bound to a verified,
+closed wheelhouse.  Every uv project sync uses the declared private Python, disables
+network/index/config discovery, and searches only the verified local wheel set.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping, Protocol
+
+from hermes_offline_wheelhouse import VerifiedWheelhouseV1
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -78,15 +80,17 @@ class SubprocessExecutor:
 
 
 class PinnedToolchainRunner:
-    """Execute local-release commands using only the declared Hermes toolchain."""
+    """Execute local-release commands using only declared Hermes release inputs."""
 
     def __init__(
         self,
         toolchain: PrivateToolchainV1,
         *,
+        wheelhouse: VerifiedWheelhouseV1 | None = None,
         executor: Executor | None = None,
     ) -> None:
         self._toolchain = toolchain
+        self._wheelhouse = wheelhouse
         self._executor = executor or SubprocessExecutor()
         _validate_executable("private Python", toolchain.python)
         _validate_executable("private uv", toolchain.uv)
@@ -99,6 +103,8 @@ class PinnedToolchainRunner:
         if argv[0] == "uv":
             argv[0] = str(self._toolchain.uv.path)
             _bind_uv_python(argv, self._toolchain.python.path)
+            if self._wheelhouse is not None:
+                _bind_wheelhouse(argv)
         else:
             executable = Path(argv[0])
             if not executable.is_absolute():
@@ -108,9 +114,12 @@ class PinnedToolchainRunner:
 
         environment = _sanitized_environment(command.environment)
         environment["UV_OFFLINE"] = "1"
-        environment["UV_NO_SYSTEM_CONFIG"] = "1"
+        environment["UV_NO_CONFIG"] = "1"
+        environment["UV_NO_PYTHON_DOWNLOADS"] = "1"
         environment["UV_NO_PROGRESS"] = "1"
         environment["UV_PYTHON"] = str(self._toolchain.python.path)
+        if self._wheelhouse is not None:
+            environment["UV_FIND_LINKS"] = str(self._wheelhouse.root)
 
         return self._executor.run(
             tuple(argv),
@@ -136,14 +145,24 @@ def _bind_uv_python(argv: list[str], python: Path) -> None:
         return
 
     if subcommand == "pip":
+        if len(argv) < 3 or argv[2] != "install":
+            raise PrivateToolchainError("only uv pip install is approved")
         if "--python" not in argv:
             raise PrivateToolchainError("uv pip command must target an explicit Python")
-        target = argv[argv.index("--python") + 1]
-        if not Path(target).is_absolute():
+        target_index = argv.index("--python") + 1
+        if target_index >= len(argv) or not Path(argv[target_index]).is_absolute():
             raise PrivateToolchainError("uv pip target Python must be an absolute path")
         return
 
     raise PrivateToolchainError(f"unapproved uv subcommand: {subcommand}")
+
+
+def _bind_wheelhouse(argv: list[str]) -> None:
+    if "--no-index" not in argv:
+        if argv[1] == "pip":
+            argv[3:3] = ["--no-index"]
+        else:
+            argv[2:2] = ["--no-index"]
 
 
 def _sanitized_environment(declared: Mapping[str, str]) -> dict[str, str]:
