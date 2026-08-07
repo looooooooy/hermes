@@ -284,8 +284,9 @@ jobs:
           --output "${{ runner.temp }}/runtime-wheelhouse"
       - name: Cross-language verify portable Plugin vendor signature
         run: >-
-          "${{ github.workspace }}/${{ matrix.runtime_manager }}"
-          verify-plugin-signature
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- verify-plugin-signature
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/portable-plugin-manifest.json"
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/trust-store.json"
           "${{ runner.temp }}/managed-source-inputs/plugin/portable/plugin/hermes_agent_plugin-0.1.0-py3-none-any.whl"
@@ -312,14 +313,16 @@ jobs:
           --expected-target ${{ matrix.target }}
       - name: Pack deterministic production-shape Managed Release tar.zst
         run: >-
-          "${{ github.workspace }}/${{ matrix.runtime_manager }}"
-          pack-managed-payload
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- pack-managed-payload
           "${{ runner.temp }}/managed-release-payload"
           "${{ runner.temp }}/managed-release-${{ matrix.target }}.tar.zst"
       - name: Stage downloaded-shape archive with Private Python and trusted zipapp
         run: >-
-          "${{ github.workspace }}/${{ matrix.runtime_manager }}"
-          stage-managed-payload
+          python hermes-desktop/managed-release/invoke_runtime_manager.py
+          --runtime-manager "${{ github.workspace }}/${{ matrix.runtime_manager }}"
+          -- stage-managed-payload
           "${{ runner.temp }}/managed-release-${{ matrix.target }}.tar.zst"
           "${{ runner.temp }}/hermes-toolchain-qualified/${{ matrix.private_python }}"
           "${{ runner.temp }}/hermes-managed-release-installer.pyz"
