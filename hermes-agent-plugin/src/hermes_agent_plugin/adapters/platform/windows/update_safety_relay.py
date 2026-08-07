@@ -1,8 +1,4 @@
-"""Private same-user Windows Named Pipe relay for update-safety evidence.
-
-The endpoint is intentionally separate from Runtime Manager's read-only control
-pipe.  It exposes exactly one body-free request and one aggregate-only response.
-"""
+"""Private same-user Windows Named Pipe relay for update-safety evidence."""
 
 from __future__ import annotations
 
@@ -49,6 +45,7 @@ _GENERIC_WRITE = 0x40000000
 _OPEN_EXISTING = 3
 _SDDL_REVISION_1 = 1
 _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+_LIBRARIES: tuple[Any, Any] | None = None
 
 
 class _SidAndAttributes(ctypes.Structure):
@@ -72,13 +69,19 @@ def _require_windows() -> None:
         raise RuntimeError("Windows update-safety relay requires Windows")
 
 
-def _libraries() -> tuple[Any, Any, Any]:
+def _libraries() -> tuple[Any, Any]:
+    global _LIBRARIES  # noqa: PLW0603
     _require_windows()
-    return (
-        ctypes.WinDLL("kernel32", use_last_error=True),
-        ctypes.WinDLL("advapi32", use_last_error=True),
-        ctypes.WinDLL("kernel32", use_last_error=True),
-    )
+    if _LIBRARIES is None:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
+        kernel32.CreateFileW.restype = wintypes.HANDLE
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.GetCurrentThread.restype = wintypes.HANDLE
+        kernel32.LocalFree.restype = ctypes.c_void_p
+        _LIBRARIES = kernel32, advapi32
+    return _LIBRARIES
 
 
 def _close_handle(kernel32: Any, handle: int | None) -> None:
@@ -110,7 +113,7 @@ def _token_user_buffer(advapi32: Any, token: int) -> ctypes.Array[ctypes.c_char]
 
 
 def _current_user_sid_string() -> str:
-    kernel32, advapi32, local = _libraries()
+    kernel32, advapi32 = _libraries()
     token = wintypes.HANDLE()
     if not advapi32.OpenProcessToken(
         kernel32.GetCurrentProcess(),
@@ -135,7 +138,7 @@ def _current_user_sid_string() -> str:
                 raise RuntimeError("Windows SID string is invalid")
             return value
         finally:
-            local.LocalFree(ctypes.cast(string_sid, ctypes.c_void_p))
+            kernel32.LocalFree(ctypes.cast(string_sid, ctypes.c_void_p))
     finally:
         _close_handle(kernel32, token.value)
 
@@ -155,7 +158,7 @@ def resolve_update_safety_pipe_name(
         sid = user_sid if user_sid is not None else _current_user_sid_string()
         value = rf"\\.\pipe\HermesUpdateSafety-{sid}"
     if (
-        not value.startswith(r"\\.\pipe\")
+        not value.startswith("\\\\.\\pipe\\")
         or len(value) > 240
         or "\x00" in value
         or value.endswith("\\")
@@ -164,14 +167,13 @@ def resolve_update_safety_pipe_name(
     return value
 
 
-def _security_attributes() -> tuple[_SecurityAttributes, int, Any]:
-    kernel32, advapi32, local = _libraries()
+def _security_attributes() -> tuple[_SecurityAttributes, int]:
+    kernel32, advapi32 = _libraries()
     sid = _current_user_sid_string()
     descriptor = ctypes.c_void_p()
     descriptor_size = wintypes.DWORD()
-    sddl = f"D:P(A;;GA;;;{sid})"
     if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        sddl,
+        f"D:P(A;;GA;;;{sid})",
         _SDDL_REVISION_1,
         ctypes.byref(descriptor),
         ctypes.byref(descriptor_size),
@@ -182,18 +184,20 @@ def _security_attributes() -> tuple[_SecurityAttributes, int, Any]:
         )
     if not descriptor.value or descriptor_size.value == 0:
         if descriptor.value:
-            local.LocalFree(descriptor)
+            kernel32.LocalFree(descriptor)
         raise RuntimeError("Windows update-safety security descriptor is empty")
-    attributes = _SecurityAttributes(
-        nLength=ctypes.sizeof(_SecurityAttributes),
-        lpSecurityDescriptor=descriptor.value,
-        bInheritHandle=False,
+    return (
+        _SecurityAttributes(
+            nLength=ctypes.sizeof(_SecurityAttributes),
+            lpSecurityDescriptor=descriptor.value,
+            bInheritHandle=False,
+        ),
+        int(descriptor.value),
     )
-    return attributes, descriptor.value, local
 
 
 def _same_user_client(pipe: int) -> bool:
-    kernel32, advapi32, _local = _libraries()
+    kernel32, advapi32 = _libraries()
     if not advapi32.ImpersonateNamedPipeClient(wintypes.HANDLE(pipe)):
         raise OSError(ctypes.get_last_error(), "ImpersonateNamedPipeClient failed")
     try:
@@ -227,10 +231,7 @@ def _same_user_client(pipe: int) -> bool:
                 if not client_user.User.Sid or not server_user.User.Sid:
                     raise RuntimeError("Windows Named Pipe TokenUser SID is null")
                 return bool(
-                    advapi32.EqualSid(
-                        client_user.User.Sid,
-                        server_user.User.Sid,
-                    )
+                    advapi32.EqualSid(client_user.User.Sid, server_user.User.Sid)
                 )
             finally:
                 _close_handle(kernel32, server_token.value)
@@ -375,6 +376,10 @@ class WindowsUpdateSafetyRelay:
             raise TypeError("snapshot_provider must be callable")
         self._snapshot_provider = snapshot_provider
         self._pipe_name = pipe_name or resolve_update_safety_pipe_name()
+        resolve_update_safety_pipe_name(
+            {"HERMES_UPDATE_SAFETY_PIPE": self._pipe_name},
+            user_sid="validation-only",
+        )
         self._handle: int | None = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -385,12 +390,11 @@ class WindowsUpdateSafetyRelay:
         return self._pipe_name
 
     def start(self) -> WindowsUpdateSafetyRelay:
-        _require_windows()
+        kernel32, _advapi32 = _libraries()
         with self._lock:
             if self._handle is not None:
                 return self
-            kernel32, _advapi32, _local = _libraries()
-            attributes, descriptor, descriptor_owner = _security_attributes()
+            attributes, descriptor = _security_attributes()
             try:
                 handle = kernel32.CreateNamedPipeW(
                     self._pipe_name,
@@ -406,18 +410,17 @@ class WindowsUpdateSafetyRelay:
                     ctypes.byref(attributes),
                 )
             finally:
-                descriptor_owner.LocalFree(ctypes.c_void_p(descriptor))
+                kernel32.LocalFree(ctypes.c_void_p(descriptor))
             if handle in (None, 0, _INVALID_HANDLE_VALUE):
                 raise OSError(ctypes.get_last_error(), "CreateNamedPipeW failed")
             self._handle = int(handle)
             self._stop.clear()
-            thread = threading.Thread(
+            self._thread = threading.Thread(
                 target=self._serve,
                 name="hermes-windows-update-safety-relay",
                 daemon=True,
             )
-            self._thread = thread
-            thread.start()
+            self._thread.start()
             return self
 
     def close(self) -> None:
@@ -431,19 +434,19 @@ class WindowsUpdateSafetyRelay:
         if thread is not None:
             thread.join(_CLOSE_TIMEOUT_S)
             if thread.is_alive():
-                kernel32, _advapi32, _local = _libraries()
+                kernel32, _advapi32 = _libraries()
                 _close_handle(kernel32, handle)
                 thread.join(0.5)
                 if thread.is_alive():
                     raise RuntimeError("Windows update-safety relay did not stop")
         with self._lock:
-            kernel32, _advapi32, _local = _libraries()
+            kernel32, _advapi32 = _libraries()
             _close_handle(kernel32, self._handle)
             self._handle = None
             self._thread = None
 
     def _wake_listener(self) -> None:
-        kernel32, _advapi32, _local = _libraries()
+        kernel32, _advapi32 = _libraries()
         handle = kernel32.CreateFileW(
             self._pipe_name,
             _GENERIC_READ | _GENERIC_WRITE,
@@ -457,7 +460,7 @@ class WindowsUpdateSafetyRelay:
             _close_handle(kernel32, int(handle))
 
     def _serve(self) -> None:
-        kernel32, _advapi32, _local = _libraries()
+        kernel32, _advapi32 = _libraries()
         while not self._stop.is_set():
             with self._lock:
                 handle = self._handle
