@@ -1,3 +1,12 @@
+from .doctor import (
+    BucketEvidence,
+    DoctorCheck,
+    LifecycleEvidence,
+    OssDoctorPolicyV1,
+    OssDoctorReportV1,
+    OssRepositoryDoctor,
+    OssV2DoctorBackend,
+)
 from .repository import (
     BucketMap,
     ObjectAlreadyExists,
@@ -16,20 +25,31 @@ from .signing import (
     sign_control_payload,
     write_json_new,
 )
+from .state_machine import ReleaseState, ReleaseStateMachine, ReleaseStateRecordV1
 
 __all__ = [
+    "BucketEvidence",
     "BucketMap",
+    "DoctorCheck",
+    "LifecycleEvidence",
     "ObjectAlreadyExists",
+    "OssDoctorPolicyV1",
+    "OssDoctorReportV1",
+    "OssRepositoryDoctor",
     "OssV2Backend",
+    "OssV2DoctorBackend",
     "PublishReceipt",
     "PublisherError",
     "ReleasePublisher",
+    "ReleaseSigningError",
+    "ReleaseState",
+    "ReleaseStateMachine",
+    "ReleaseStateRecordV1",
     "RemoteObject",
     "UploadResult",
-    "content_addressed_key",
-    "ReleaseSigningError",
     "build_release_trust_store",
     "canonical_envelope_bytes",
+    "content_addressed_key",
     "sign_control_payload",
     "write_json_new",
 ]
