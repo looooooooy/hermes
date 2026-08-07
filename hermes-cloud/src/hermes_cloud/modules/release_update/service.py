@@ -229,21 +229,21 @@ def _validate_candidate(candidate: ReleaseUpdateCandidateV1) -> None:
 
 def _validate_grants(candidate, grants, now: datetime) -> None:
     if len(grants) != len(candidate.artifacts):
-        raise UpdateCheckPolicyError("grant count does not match candidate artifacts")
+        raise UpdateCheckPolicyError("download-grant count does not match candidate artifacts")
     expected = {artifact.object_key: artifact for artifact in candidate.artifacts}
     observed: set[str] = set()
     for grant in grants:
         artifact = expected.get(grant.object_key)
         if artifact is None or grant.object_key in observed:
-            raise UpdateCheckPolicyError("grant object key is missing or duplicated")
+            raise UpdateCheckPolicyError("download-grant object key is missing or duplicated")
         observed.add(grant.object_key)
         if grant.sha256 != artifact.sha256 or grant.size_bytes != artifact.size_bytes:
-            raise UpdateCheckPolicyError("grant digest/size does not match signed artifact")
+            raise UpdateCheckPolicyError("download-grant digest/size does not match signed artifact")
         if not grant.url.startswith("https://") or len(grant.url) > 4096:
             raise UpdateCheckPolicyError("download grant URL must be bounded HTTPS")
         expires_at = _utc(grant.expires_at)
         if expires_at <= now or expires_at > now + timedelta(minutes=20):
-            raise UpdateCheckPolicyError("download grant expiry must be short-lived")
+            raise UpdateCheckPolicyError("download-grant expiry must be short-lived")
 
 
 def _candidate_decision(
@@ -299,13 +299,16 @@ def _utc(value: datetime) -> datetime:
 
 def _safe_identifier(value: str, maximum: int) -> bool:
     return bool(value) and len(value) <= maximum and all(
-        ch.isascii() and (ch.isalnum() or ch in ".:_+-") for ch in value
+        ch.isalnum() or ch in ".:_+-" for ch in value
     )
 
 
 def _safe_text(value: str, maximum: int) -> bool:
-    return bool(value) and len(value) <= maximum and all(
-        ch.isascii() and (ch == " " or 0x21 <= ord(ch) <= 0x7E) for ch in value
+    return (
+        bool(value)
+        and len(value) <= maximum
+        and "\x00" not in value
+        and all(character.isprintable() for character in value)
     )
 
 
