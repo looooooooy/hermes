@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "profile": "default",
+  "runtime_generation": "generation-42",
+  "active_tasks": 2,
+  "pending_approvals": 1,
+  "pending_clarifications": 3,
+  "evidence_complete": true
+}
