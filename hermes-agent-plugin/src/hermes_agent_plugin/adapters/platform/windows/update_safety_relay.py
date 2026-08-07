@@ -597,9 +597,12 @@ class WindowsUpdateSafetyRelay:
                 ctypes.byref(client_pid),
             ) or client_pid.value == 0:
                 raise RuntimeError("Windows update-safety client PID is unavailable")
+            # Windows binds ImpersonateNamedPipeClient to the last message read from
+            # the pipe.  Perform only the bounded 1 KiB read first; no Host action is
+            # dispatched until the client SID has been verified below.
+            request = _read_request(kernel32, pipe)
             if not _same_user_client(pipe):
                 return
-            request = _read_request(kernel32, pipe)
             if request != _REQUEST:
                 raise ValueError("unsupported Windows update-safety request")
             response = _encode_snapshot(self._snapshot_provider())
