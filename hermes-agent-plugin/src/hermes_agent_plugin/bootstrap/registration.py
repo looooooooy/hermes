@@ -14,7 +14,10 @@ from ..host_compatibility import (
     REQUIRED_HOST_CAPABILITIES,
     validate_host_context,
 )
-from .platform_adapters import configure_platform_adapters
+from .platform_adapters import (
+    configure_platform_adapters,
+    select_platform_update_safety_opener,
+)
 
 INCOMPATIBLE_HOST_MESSAGE = (
     "Hermes Agent Host SPI v1 is unavailable; "
@@ -59,6 +62,7 @@ def register(context: Any) -> HermesAgentPluginExtension:
     extension = HermesAgentPluginExtension(
         host_spi_factories=host_spi_factories,
         endpoint_opener=endpoint_opener,
+        update_safety_opener=select_platform_update_safety_opener(),
     )
     register_extension(
         extension,
