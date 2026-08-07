@@ -5,6 +5,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from ....ports.local_relay import OwnerActionDispatcherPort
 from ...host.owner_actions import (
     DEFAULT_OWNER_ACTION_MAX_QUEUED,
     DEFAULT_OWNER_ACTION_MAX_WORKERS,
@@ -19,10 +20,12 @@ from ...local_protocol.control_relay import (
 )
 from ...local_protocol.control_v1 import CONTROL_ERROR_CODES
 from ...local_protocol.frame_codec import encode_frame, try_decode_frame
-from ....ports.local_relay import OwnerActionDispatcherPort
 from .framed_pipe import WindowsFramedPipeConnection, WindowsFramedPipeServer
 from .named_pipe_security import profile_pipe_name
-from .runtime_authority import WindowsRuntimeAuthorityV2, require_current_process_authority
+from .runtime_authority import (
+    WindowsRuntimeAuthorityV2,
+    require_current_process_authority,
+)
 
 _ATTACH_METHOD = "relay.control.attach"
 _OWNER_ACTION_MAX_WORKERS = DEFAULT_OWNER_ACTION_MAX_WORKERS
