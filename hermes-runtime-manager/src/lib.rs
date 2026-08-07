@@ -10,6 +10,8 @@ pub mod toolchain;
 pub mod windows_pipe;
 #[cfg(windows)]
 pub mod windows_secret_store;
+#[cfg(windows)]
+pub mod windows_task_scheduler;
 
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
@@ -19,3 +21,7 @@ pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, Too
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
+#[cfg(windows)]
+pub use windows_task_scheduler::{
+    WindowsScheduledAction, WindowsTaskRegistration, WindowsTaskSchedulerBootstrap,
+};
