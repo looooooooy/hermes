@@ -5,15 +5,24 @@ on:
     branches:
       - "feature/hermes-release-update-safety-*"
       - "feature/hermes-authoritative-update-safety-*"
+      - "feature/hermes-update-safety-uds-*"
     paths:
       - "contracts/fixtures/valid/update-safety-snapshot-v1.json"
       - "contracts/schemas/local/update-safety-snapshot-v1.schema.json"
       - "hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/managed_extension.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/update_safety_relay.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/registration.py"
       - "hermes-agent-plugin/tests/unit/application/test_update_safety.py"
+      - "hermes-agent-plugin/tests/unit/adapters/host/test_managed_extension.py"
+      - "hermes-agent-plugin/tests/unit/adapters/platform/macos/test_update_safety_relay.py"
+      - "hermes-runtime-manager/src/host_update_safety_ipc.rs"
       - "hermes-runtime-manager/src/update_safe_window.rs"
       - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/tests/host_update_safety_ipc.rs"
       - "hermes-runtime-manager/tests/update_safe_window.rs"
       - ".github/workflows/hermes-update-safe-window.yml"
   pull_request:
@@ -21,11 +30,19 @@ on:
       - "contracts/fixtures/valid/update-safety-snapshot-v1.json"
       - "contracts/schemas/local/update-safety-snapshot-v1.schema.json"
       - "hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/managed_extension.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/update_safety_relay.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/registration.py"
       - "hermes-agent-plugin/tests/unit/application/test_update_safety.py"
+      - "hermes-agent-plugin/tests/unit/adapters/host/test_managed_extension.py"
+      - "hermes-agent-plugin/tests/unit/adapters/platform/macos/test_update_safety_relay.py"
+      - "hermes-runtime-manager/src/host_update_safety_ipc.rs"
       - "hermes-runtime-manager/src/update_safe_window.rs"
       - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/tests/host_update_safety_ipc.rs"
       - "hermes-runtime-manager/tests/update_safe_window.rs"
       - ".github/workflows/hermes-update-safe-window.yml"
 
@@ -54,17 +71,25 @@ jobs:
           jsonschema
           referencing
           ruff==0.16.1
-      - name: Lint authoritative Host aggregation
+      - name: Lint Host authority and private relay
         run: >-
           ruff check
           hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/managed_extension.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/update_safety_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py
+          hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/registration.py
           hermes-agent-plugin/tests/unit/application/test_update_safety.py
+          hermes-agent-plugin/tests/unit/adapters/host/test_managed_extension.py
+          hermes-agent-plugin/tests/unit/adapters/platform/macos/test_update_safety_relay.py
       - name: Validate shared update-safety schema
         run: python -m pytest contracts/tests/test_contract_packet.py
-      - name: Test authoritative Host aggregation
+      - name: Test authoritative Host aggregation and private relay
         run: >-
           python -m pytest
           hermes-agent-plugin/tests/unit/application/test_update_safety.py
+          hermes-agent-plugin/tests/unit/adapters/host/test_managed_extension.py
+          hermes-agent-plugin/tests/unit/adapters/platform/macos/test_update_safety_relay.py
 
   safe-window:
     name: Draining safe window / ${{ matrix.os }}
@@ -80,6 +105,9 @@ jobs:
         run: rustup default stable
       - name: Test draining Host-authoritative safe-window contract
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --test update_safe_window
+      - name: Test same-user Host update-safety transport
+        if: runner.os != 'Windows'
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --test host_update_safety_ipc
       - name: Test idempotent Connector drain/reconcile
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests
       - name: Re-run coordinator transaction contract
