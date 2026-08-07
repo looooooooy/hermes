@@ -24,6 +24,8 @@ pub mod update_http;
 pub mod update_runtime;
 pub mod update_safe_window;
 #[cfg(windows)]
+pub mod windows_host_update_safety_pipe;
+#[cfg(windows)]
 pub mod windows_pipe;
 #[cfg(windows)]
 pub mod windows_secret_store;
@@ -88,8 +90,14 @@ pub use update_runtime::{
 };
 #[cfg(target_os = "macos")]
 pub use update_runtime::compose_macos_authoritative_update_safe_window;
+#[cfg(windows)]
+pub use update_runtime::compose_windows_authoritative_update_safe_window;
 pub use update_safe_window::{
     DrainingSafeWindowProbe, HostUpdateSafetySnapshotV1, HostUpdateSafetySource,
+};
+#[cfg(windows)]
+pub use windows_host_update_safety_pipe::{
+    default_update_safety_pipe_name, WindowsHostUpdateSafetySource,
 };
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
