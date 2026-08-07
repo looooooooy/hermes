@@ -66,6 +66,39 @@
     return key;
   }
 
+  function runtimeReady() {
+    return snapshot.state === 'healthy' && snapshot.agentReady && snapshot.cloudConnected;
+  }
+
+  function heroStatus() {
+    if (runtimeReady()) return 'Runtime ready';
+    if (snapshot.agentReady) return 'Agent ready · Cloud offline';
+    return nativeSource ? 'Runtime not ready' : 'Runtime design preview';
+  }
+
+  function heroTitle() {
+    if (runtimeReady()) return 'Your Agent is ready to work.';
+    if (snapshot.agentReady) return 'Your Agent is running locally.';
+    return nativeSource ? 'Finish connecting your Hermes Runtime.' : 'Your Agent is ready to work.';
+  }
+
+  function heroDescription() {
+    if (runtimeReady()) {
+      return 'Execution stays on this computer. Cloud access is connected through the managed Connector.';
+    }
+    if (snapshot.agentReady) {
+      return 'Local execution is available, but remote Cloud control is not currently established.';
+    }
+    if (nativeSource) {
+      return 'The desktop shell is healthy, but a verified Runtime Manager authority has not attached yet.';
+    }
+    return 'Design preview data demonstrates the healthy customer experience before native runtime attachment.';
+  }
+
+  function statusColor(healthy: boolean) {
+    return healthy ? 'var(--accent)' : 'var(--warning)';
+  }
+
   const stateLabel = (state: string) => {
     if (state === 'healthy' || state === 'connected') return 'Healthy';
     if (state === 'not-configured') return 'Not configured';
@@ -123,8 +156,8 @@
     </div>
 
     <div class="sidebar-footer">
-      <span class="secure-dot"></span>
-      <span>Local authority protected</span>
+      <span class="secure-dot" style:background={statusColor(snapshot.agentReady)}></span>
+      <span>{snapshot.agentReady ? 'Local authority protected' : 'Waiting for local authority'}</span>
     </div>
   </aside>
 
@@ -150,26 +183,36 @@
         <section class="hero-row">
           <div>
             <div class="hero-state">
-              <span class="hero-state-dot"></span>
-              Runtime ready
+              <span
+                class="hero-state-dot"
+                style:background={statusColor(runtimeReady())}
+                style:box-shadow={runtimeReady() ? '0 0 14px rgba(111,227,189,.43)' : '0 0 12px rgba(242,199,119,.24)'}
+              ></span>
+              {heroStatus()}
             </div>
-            <h1>Your Agent is ready to work.</h1>
-            <p>Execution stays on this computer. Cloud access is connected through the managed Connector.</p>
+            <h1>{heroTitle()}</h1>
+            <p>{heroDescription()}</p>
           </div>
           <div class="hero-actions">
             <button class="button secondary"><Activity size={16} /> View activity</button>
-            <button class="button primary">Open Agent <ArrowUpRight size={16} /></button>
+            <button class="button primary" disabled={!snapshot.agentReady}>Open Agent <ArrowUpRight size={16} /></button>
           </div>
         </section>
 
         <section class="signal-strip" aria-label="Runtime summary">
           <div class="signal-cell">
             <span class="signal-label">Agent</span>
-            <div class="signal-value healthy"><span></span>{snapshot.agentReady ? 'Ready' : 'Unavailable'}</div>
+            <div class="signal-value">
+              <span style:background={statusColor(snapshot.agentReady)}></span>
+              {snapshot.agentReady ? 'Ready' : 'Unavailable'}
+            </div>
           </div>
           <div class="signal-cell">
             <span class="signal-label">Cloud</span>
-            <div class="signal-value healthy"><span></span>{snapshot.cloudConnected ? 'Secure' : 'Offline'}</div>
+            <div class="signal-value">
+              <span style:background={statusColor(snapshot.cloudConnected)}></span>
+              {snapshot.cloudConnected ? 'Secure' : 'Offline'}
+            </div>
           </div>
           <div class="signal-cell">
             <span class="signal-label">Active sessions</span>
@@ -190,9 +233,11 @@
             <div class="panel-heading">
               <div>
                 <h2>Runtime path</h2>
-                <p>One verified authority chain from Cloud to local execution.</p>
+                <p>One authority chain from Cloud transport to local execution.</p>
               </div>
-              <div class="verified-mark"><ShieldCheck size={16} /> Verified</div>
+              <div class="verified-mark">
+                <ShieldCheck size={16} /> {runtimeReady() ? 'Verified' : 'Verification pending'}
+              </div>
             </div>
 
             <div class="topology">
@@ -207,7 +252,10 @@
                   <div class="node-copy">
                     <div class="node-title-row">
                       <strong>{component.name}</strong>
-                      <span class="node-status"><span></span>{stateLabel(component.state)}</span>
+                      <span class="node-status">
+                        <span style:background={statusColor(component.state === 'healthy')}></span>
+                        {stateLabel(component.state)}
+                      </span>
                     </div>
                     <p>{component.detail}</p>
                     {#if component.latencyMs !== undefined}<small>{component.latencyMs} ms</small>{/if}
@@ -263,7 +311,9 @@
                   <div class="provider-monogram">{provider.name.slice(0, 1)}</div>
                   <div class="provider-copy"><strong>{provider.name}</strong><span>{provider.model}</span></div>
                   <div class="provider-security"><KeyRound size={13} /> {provider.note}</div>
-                  <div class="connected-text"><span></span>Connected</div>
+                  <div class:muted={provider.state !== 'connected'} class="connected-text">
+                    <span></span>{provider.state === 'connected' ? 'Connected' : stateLabel(provider.state)}
+                  </div>
                 </div>
               {/each}
             </div>
@@ -280,17 +330,28 @@
           </section>
         </div>
       {:else if selected === 'agents'}
-        <section class="page-heading"><div><span>Execution authority</span><h1>Agent</h1><p>The local Hermes Core remains the only authority allowed to execute work.</p></div><button class="button primary">Open Agent <ArrowUpRight size={16} /></button></section>
+        <section class="page-heading">
+          <div><span>Execution authority</span><h1>Agent</h1><p>The local Hermes Core remains the only authority allowed to execute work.</p></div>
+          <button class="button primary" disabled={!snapshot.agentReady}>Open Agent <ArrowUpRight size={16} /></button>
+        </section>
         <section class="detail-panel panel">
-          <div class="agent-identity"><div class="agent-glyph"><Bot size={28} /></div><div><h2>{snapshot.deviceName}</h2><p>{snapshot.profileName} profile · {snapshot.platform}</p></div><div class="large-health"><span></span>Ready</div></div>
+          <div class="agent-identity">
+            <div class="agent-glyph"><Bot size={28} /></div>
+            <div><h2>{snapshot.deviceName}</h2><p>{snapshot.profileName} profile · {snapshot.platform}</p></div>
+            <div class="large-health"><span style:background={statusColor(snapshot.agentReady)}></span>{snapshot.agentReady ? 'Ready' : 'Unavailable'}</div>
+          </div>
           <div class="detail-metrics"><div><span>Runtime</span><strong>{snapshot.runtimeVersion}</strong></div><div><span>Generation</span><strong>{snapshot.runtimeGeneration}</strong></div><div><span>Sessions</span><strong>{snapshot.activeSessions}</strong></div><div><span>Tasks</span><strong>{snapshot.runningTasks}</strong></div></div>
         </section>
       {:else if selected === 'sessions'}
         <section class="page-heading"><div><span>Live work</span><h1>Sessions</h1><p>Sessions remain authoritative on the local Agent and are safely projected to Cloud.</p></div></section>
         <section class="list-panel panel">
-          {#each ['Operations planning', 'PIM product strategy', 'Supplier analysis'] as name, index}
-            <button class="session-row"><div class="session-dot"></div><div class="session-main"><strong>{name}</strong><span>Live · generation {snapshot.runtimeGeneration}</span></div><div class="session-meta">{index === 0 ? 'Controlling' : 'Observing'}</div><ChevronRight size={16} /></button>
-          {/each}
+          {#if snapshot.activeSessions > 0}
+            {#each ['Operations planning', 'PIM product strategy', 'Supplier analysis'].slice(0, snapshot.activeSessions) as name, index}
+              <button class="session-row"><div class="session-dot"></div><div class="session-main"><strong>{name}</strong><span>Live · generation {snapshot.runtimeGeneration}</span></div><div class="session-meta">{index === 0 ? 'Controlling' : 'Observing'}</div><ChevronRight size={16} /></button>
+            {/each}
+          {:else}
+            <button class="session-row" disabled><div class="session-dot" style:background="var(--muted-2)"></div><div class="session-main"><strong>No live sessions</strong><span>Connect a verified local Agent before sessions can be projected.</span></div><div class="session-meta">Offline</div><ChevronRight size={16} /></button>
+          {/if}
         </section>
       {:else if selected === 'providers'}
         <section class="page-heading"><div><span>Local credentials</span><h1>Model services</h1><p>Configure providers without moving API keys off this execution host.</p></div><button class="button secondary"><KeyRound size={16} /> Add provider</button></section>
@@ -301,7 +362,7 @@
         </section>
       {:else if selected === 'updates'}
         <section class="page-heading"><div><span>Release control</span><h1>Updates</h1><p>Desktop and Managed Runtime releases are verified separately and activated atomically.</p></div></section>
-        <div class="update-layout"><section class="release-card panel"><div class="release-status"><div class="release-orb"><RefreshCw size={24} /></div><div><span>Candidate release</span><h2>{snapshot.updateVersion ?? snapshot.runtimeVersion}</h2></div><div class="verified-mark"><ShieldCheck size={16} /> Signed</div></div><div class="release-flow"><div><span>Current</span><strong>{snapshot.runtimeVersion}</strong></div><ChevronRight size={18} /><div><span>Candidate</span><strong>{snapshot.updateVersion}</strong></div><ChevronRight size={18} /><div><span>Rollback</span><strong>Automatic</strong></div></div><button class="button primary full">Stage update</button></section><section class="panel guardrail-panel"><ShieldCheck size={22} /><h2>Health-gated activation</h2><p>Hermes will not promote a candidate until Host, Plugin, Connector, Cloud transport and runtime authority all pass verification.</p><ul><li><Check size={14} /> Immutable release digest</li><li><Check size={14} /> Private toolchain validation</li><li><Check size={14} /> Previous release retained</li></ul></section></div>
+        <div class="update-layout"><section class="release-card panel"><div class="release-status"><div class="release-orb"><RefreshCw size={24} /></div><div><span>Candidate release</span><h2>{snapshot.updateVersion ?? snapshot.runtimeVersion}</h2></div><div class="verified-mark"><ShieldCheck size={16} /> Signed</div></div><div class="release-flow"><div><span>Current</span><strong>{snapshot.runtimeVersion}</strong></div><ChevronRight size={18} /><div><span>Candidate</span><strong>{snapshot.updateVersion ?? 'None'}</strong></div><ChevronRight size={18} /><div><span>Rollback</span><strong>Automatic</strong></div></div><button class="button primary full" disabled={!snapshot.updateAvailable}>Stage update</button></section><section class="panel guardrail-panel"><ShieldCheck size={22} /><h2>Health-gated activation</h2><p>Hermes will not promote a candidate until Host, Plugin, Connector, Cloud transport and runtime authority all pass verification.</p><ul><li><Check size={14} /> Immutable release digest</li><li><Check size={14} /> Private toolchain validation</li><li><Check size={14} /> Previous release retained</li></ul></section></div>
       {:else if selected === 'diagnostics'}
         <section class="page-heading"><div><span>Local verification</span><h1>Diagnostics</h1><p>Evidence-first checks for the complete local execution and Cloud path.</p></div><button class="button secondary" on:click={refreshSnapshot}><RefreshCw size={16} /> Run checks</button></section>
         <section class="diagnostic-panel panel">
@@ -312,7 +373,11 @@
             ['Credential boundary', 'Provider credentials remain in the platform secret store.'],
             ['Release integrity', 'Manifest, toolchain and executable paths are inside Hermes roots.'],
           ] as check}
-            <div class="diagnostic-row"><div class="diagnostic-check"><Check size={14} /></div><div><strong>{check[0]}</strong><p>{check[1]}</p></div><span>Passed</span></div>
+            <div class="diagnostic-row">
+              <div class="diagnostic-check">{#if runtimeReady()}<Check size={14} />{:else}<CircleDot size={13} />{/if}</div>
+              <div><strong>{check[0]}</strong><p>{check[1]}</p></div>
+              <span>{runtimeReady() ? 'Passed' : 'Pending'}</span>
+            </div>
           {/each}
         </section>
       {/if}
