@@ -367,8 +367,8 @@ def _bounded_add(left: int, right: int) -> int:
 
 
 __all__ = [
+    "MAX_OBSERVED_COUNT",
     "AuthoritativeUpdateSafetySnapshotV1",
     "HostUpdateSafetyAggregator",
-    "MAX_OBSERVED_COUNT",
     "UpdateSafetyViolation",
 ]
