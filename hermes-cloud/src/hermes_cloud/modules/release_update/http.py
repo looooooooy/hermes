@@ -35,7 +35,6 @@ _ALLOWED_FIELDS = frozenset(
         "active_release_generation",
         "highest_release_generation",
         "requested_channel",
-        "enterprise_pin_release_id",
     }
 )
 
@@ -65,9 +64,7 @@ def register_update_check_route(
                     body, "highest_release_generation"
                 ),
                 requested_channel=_required_string(body, "requested_channel"),
-                enterprise_pin_release_id=_optional_string(
-                    body, "enterprise_pin_release_id"
-                ),
+                enterprise_pin_release_id=None,
             )
             decision = await run_in_threadpool(updates.check, context)
         except UpdateCheckUnavailable:
