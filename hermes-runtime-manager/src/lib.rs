@@ -21,6 +21,7 @@ pub mod update_connector_lane;
 pub mod update_coordinator;
 pub mod update_download;
 pub mod update_http;
+pub mod update_runtime;
 pub mod update_safe_window;
 #[cfg(windows)]
 pub mod windows_pipe;
@@ -82,6 +83,11 @@ pub use update_download::{
     UpdateDownloadError,
 };
 pub use update_http::{HttpDownloadGrantV1, HttpRangeSource};
+pub use update_runtime::{
+    compose_managed_update_safe_window, ManagedUpdateSafeWindow,
+};
+#[cfg(target_os = "macos")]
+pub use update_runtime::compose_macos_authoritative_update_safe_window;
 pub use update_safe_window::{
     DrainingSafeWindowProbe, HostUpdateSafetySnapshotV1, HostUpdateSafetySource,
 };
