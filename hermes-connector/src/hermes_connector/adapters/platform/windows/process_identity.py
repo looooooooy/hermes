@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ctypes
-import os
 import stat
 from ctypes import wintypes
 from pathlib import Path
@@ -82,7 +81,11 @@ def _snapshot_process(kernel32: object, pid: int) -> tuple[int, Path] | None:
         if not 1 <= length.value < len(buffer):
             return None
         executable = Path(buffer.value)
-        if not executable.is_absolute() or ".." in executable.parts or "\x00" in str(executable):
+        if (
+            not executable.is_absolute()
+            or ".." in executable.parts
+            or "\x00" in str(executable)
+        ):
             return None
         return creation_ticks * 100, executable
     finally:
@@ -92,7 +95,7 @@ def _snapshot_process(kernel32: object, pid: int) -> tuple[int, Path] | None:
 def current_process_identity(pid: int) -> ProcessIdentityEvidence | None:
     """Return immutable Windows process evidence or fail closed."""
 
-    if os.name != "nt" or type(pid) is not int or pid <= 0:
+    if type(pid) is not int or pid <= 0:
         return None
     try:
         kernel32 = _kernel32()
