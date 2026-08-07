@@ -9,6 +9,8 @@ on:
       - "hermes-runtime-manager/src/release_control.rs"
       - "hermes-runtime-manager/src/update_download.rs"
       - "hermes-runtime-manager/src/update_http.rs"
+      - "hermes-runtime-manager/src/update_coordinator.rs"
+      - "hermes-runtime-manager/src/manager.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -23,6 +25,8 @@ on:
       - "hermes-runtime-manager/src/release_control.rs"
       - "hermes-runtime-manager/src/update_download.rs"
       - "hermes-runtime-manager/src/update_http.rs"
+      - "hermes-runtime-manager/src/update_coordinator.rs"
+      - "hermes-runtime-manager/src/manager.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -58,6 +62,8 @@ jobs:
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_download::tests
       - name: Test strict HTTPS Range grant and transport contracts
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_http::tests
+      - name: Test transactional update coordinator, safe-window, rollback, and recovery contracts
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_coordinator::tests
       - name: Compile Runtime Manager verification CLI
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
