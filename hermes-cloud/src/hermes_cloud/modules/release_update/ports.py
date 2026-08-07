@@ -30,6 +30,17 @@ class DownloadGrantIssuerPort(Protocol):
     ) -> DownloadGrantV1: ...
 
 
+class PresignDownloadPort(Protocol):
+    """Issue one bearer download URL without exposing storage credentials."""
+
+    def presign_get(
+        self,
+        *,
+        object_key: str,
+        expires_at: datetime,
+    ) -> str: ...
+
+
 class OsCompatibilityPort(Protocol):
     def is_compatible(
         self,
