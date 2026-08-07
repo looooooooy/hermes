@@ -20,6 +20,12 @@ class ReleaseCatalogPort(Protocol):
     ) -> ReleaseUpdateCandidateV1 | None: ...
 
 
+class ReleaseControlReaderPort(Protocol):
+    """Read one bounded release-control object from trusted server-side storage."""
+
+    def read_control_object(self, object_key: str) -> bytes: ...
+
+
 class DownloadGrantIssuerPort(Protocol):
     def issue_grant(
         self,
