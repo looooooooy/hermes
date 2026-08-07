@@ -16,13 +16,12 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from cryptography.hazmat.primitives import serialization
 
 from plugin_store_bundle import (
     PluginStoreBundleError,
-    _canonical_manifest_bytes,
     _fsync_directory,
     _inspect_wheel,
     _json_bytes,
@@ -50,6 +49,22 @@ class PortablePluginBundlePaths:
     wheel_path: Path
     manifest_path: Path
     trust_store_path: Path
+
+
+def _portable_canonical_manifest_bytes(payload: Mapping[str, Any]) -> bytes:
+    """Freeze portable-v2 signature semantics independently of Plugin Store v1."""
+
+    unsigned = {key: value for key, value in payload.items() if key != "signature"}
+    try:
+        return json.dumps(
+            unsigned,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise PluginStoreBundleError("portable manifest is not canonical JSON") from error
 
 
 def assemble_portable_plugin_bundle_v2(
@@ -137,7 +152,7 @@ def assemble_portable_plugin_bundle_v2(
         "signature": "",
     }
     manifest["signature"] = base64.b64encode(
-        private_key.sign(_canonical_manifest_bytes(manifest))
+        private_key.sign(_portable_canonical_manifest_bytes(manifest))
     ).decode("ascii")
 
     partial = Path(tempfile.mkdtemp(prefix=f".{output.name}.partial-", dir=parent))
