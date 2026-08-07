@@ -3,7 +3,7 @@
 use crate::ports::PortError;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
-use std::ptr::null_mut;
+use std::ptr::{null, null_mut};
 use std::thread;
 use std::time::Duration;
 use windows::core::{BSTR, Error as WindowsError};
@@ -26,10 +26,20 @@ const WAIT_ATTEMPTS: usize = 100;
 const WAIT_INTERVAL: Duration = Duration::from_millis(100);
 const SCHED_E_TASK_NOT_FOUND: i32 = 0x8004_130f_u32 as i32;
 const HRESULT_FILE_NOT_FOUND: i32 = 0x8007_0002_u32 as i32;
+const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 
 #[link(name = "advapi32")]
 unsafe extern "system" {
     fn ConvertSidToStringSidW(sid: *mut c_void, string_sid: *mut *mut u16) -> i32;
+    fn LookupAccountSidW(
+        system_name: *const u16,
+        sid: *mut c_void,
+        name: *mut u16,
+        name_chars: *mut u32,
+        referenced_domain_name: *mut u16,
+        domain_chars: *mut u32,
+        sid_name_use: *mut i32,
+    ) -> i32;
 }
 
 #[link(name = "kernel32")]
@@ -64,6 +74,13 @@ pub struct WindowsTaskRegistration {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WindowsTaskSchedulerBootstrap;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CurrentUserIdentity {
+    sid: String,
+    account: String,
+    domain: String,
+}
+
 impl WindowsTaskSchedulerBootstrap {
     pub fn new() -> Self {
         Self
@@ -77,12 +94,12 @@ impl WindowsTaskSchedulerBootstrap {
     ) -> Result<WindowsTaskRegistration, PortError> {
         validate_task_name(task_name)?;
         validate_runtime_manager(runtime_manager)?;
-        let user_sid = current_user_sid_string()?;
-        let xml = render_task_xml(&user_sid, runtime_manager, action);
+        let identity = current_user_identity()?;
+        let xml = render_task_xml(&identity.sid, runtime_manager, action);
         let apartment = TaskSchedulerApartment::connect()?;
         let root = apartment.root_folder()?;
         let empty = VARIANT::default();
-        let user = VARIANT::from(BSTR::from(user_sid.as_str()));
+        let user = VARIANT::from(BSTR::from(identity.sid.as_str()));
         let registered = unsafe {
             root.RegisterTask(
                 &BSTR::from(task_name),
@@ -96,11 +113,11 @@ impl WindowsTaskSchedulerBootstrap {
         }
         .map_err(|error| windows_operation("ITaskFolder::RegisterTask", error))?;
         let actual_xml = task_xml(&registered)?;
-        validate_registered_xml(&actual_xml, &user_sid, runtime_manager, action)?;
-        validate_registered_principal(&registered, &user_sid)?;
+        validate_registered_xml(&actual_xml, &identity.sid, runtime_manager, action)?;
+        validate_registered_principal(&registered, &identity)?;
         Ok(WindowsTaskRegistration {
             task_name: task_name.to_owned(),
-            user_sid,
+            user_sid: identity.sid,
             executable: runtime_manager.to_path_buf(),
             arguments: action.arguments().to_owned(),
             xml: actual_xml,
@@ -223,7 +240,7 @@ fn task_xml(task: &IRegisteredTask) -> Result<String, PortError> {
 
 fn validate_registered_principal(
     task: &IRegisteredTask,
-    expected_user_sid: &str,
+    expected_identity: &CurrentUserIdentity,
 ) -> Result<(), PortError> {
     let definition = unsafe { task.Definition() }
         .map_err(|error| windows_operation("IRegisteredTask::Definition", error))?;
@@ -243,9 +260,10 @@ fn validate_registered_principal(
     unsafe { principal.RunLevel(&mut run_level) }
         .map_err(|error| windows_operation("IPrincipal::RunLevel", error))?;
 
-    if user_id != expected_user_sid {
+    if !principal_user_matches(&user_id, expected_identity) {
         return Err(PortError::Operation(format!(
-            "registered Task Scheduler principal user SID mismatch: expected {expected_user_sid}, got {user_id}"
+            "registered Task Scheduler principal user mismatch: expected SID {} / account {}\\{}, got {}",
+            expected_identity.sid, expected_identity.domain, expected_identity.account, user_id
         )));
     }
     if logon_type != TASK_LOGON_INTERACTIVE_TOKEN {
@@ -259,6 +277,17 @@ fn validate_registered_principal(
         ));
     }
     Ok(())
+}
+
+fn principal_user_matches(value: &str, expected: &CurrentUserIdentity) -> bool {
+    if value.eq_ignore_ascii_case(&expected.sid)
+        || value.eq_ignore_ascii_case(&expected.account)
+        || value.eq_ignore_ascii_case(&format!(r".\{}", expected.account))
+    {
+        return true;
+    }
+    !expected.domain.is_empty()
+        && value.eq_ignore_ascii_case(&format!(r"{}\{}", expected.domain, expected.account))
 }
 
 fn render_task_xml(
@@ -387,7 +416,7 @@ fn validate_runtime_manager(path: &Path) -> Result<(), PortError> {
     Ok(())
 }
 
-fn current_user_sid_string() -> Result<String, PortError> {
+fn current_user_identity() -> Result<CurrentUserIdentity, PortError> {
     let mut token: HANDLE = null_mut();
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
         return Err(win32_operation("OpenProcessToken"));
@@ -417,7 +446,76 @@ fn current_user_sid_string() -> Result<String, PortError> {
     if user.User.Sid.is_null() {
         return Err(PortError::Operation("TokenUser SID is null".to_owned()));
     }
-    sid_to_string(user.User.Sid)
+    let sid = sid_to_string(user.User.Sid)?;
+    let (account, domain) = lookup_account_sid(user.User.Sid)?;
+    Ok(CurrentUserIdentity {
+        sid,
+        account,
+        domain,
+    })
+}
+
+fn lookup_account_sid(sid: *mut c_void) -> Result<(String, String), PortError> {
+    let mut name_chars = 0u32;
+    let mut domain_chars = 0u32;
+    let mut sid_name_use = 0i32;
+    unsafe {
+        LookupAccountSidW(
+            null(),
+            sid,
+            null_mut(),
+            &mut name_chars,
+            null_mut(),
+            &mut domain_chars,
+            &mut sid_name_use,
+        )
+    };
+    let first_error = unsafe { GetLastError() };
+    if first_error != ERROR_INSUFFICIENT_BUFFER || name_chars == 0 {
+        return Err(PortError::Operation(format!(
+            "LookupAccountSidW size query failed with Win32 error {first_error}"
+        )));
+    }
+
+    let mut name = vec![0u16; name_chars as usize];
+    let mut domain = vec![0u16; domain_chars.max(1) as usize];
+    let domain_ptr = if domain_chars == 0 {
+        null_mut()
+    } else {
+        domain.as_mut_ptr()
+    };
+    if unsafe {
+        LookupAccountSidW(
+            null(),
+            sid,
+            name.as_mut_ptr(),
+            &mut name_chars,
+            domain_ptr,
+            &mut domain_chars,
+            &mut sid_name_use,
+        )
+    } == 0
+    {
+        return Err(win32_operation("LookupAccountSidW"));
+    }
+    let account = utf16_nul_terminated(&name, "account name")?;
+    let domain = if domain_chars == 0 {
+        String::new()
+    } else {
+        utf16_nul_terminated(&domain, "account domain")?
+    };
+    Ok((account, domain))
+}
+
+fn utf16_nul_terminated(buffer: &[u16], label: &str) -> Result<String, PortError> {
+    let length = buffer.iter().position(|value| *value == 0).unwrap_or(buffer.len());
+    if length == 0 {
+        return Err(PortError::Operation(format!(
+            "Windows {label} is empty"
+        )));
+    }
+    String::from_utf16(&buffer[..length])
+        .map_err(|_| PortError::Operation(format!("Windows {label} is invalid UTF-16")))
 }
 
 fn sid_to_string(sid: *mut c_void) -> Result<String, PortError> {
@@ -513,5 +611,19 @@ mod tests {
         assert!(validate_task_name("OtherTask").is_err());
         assert!(validate_task_name("HermesRuntimeManager-bad/name").is_err());
         assert_eq!(WindowsScheduledAction::VersionProbe.arguments(), "version");
+    }
+
+    #[test]
+    fn principal_user_match_accepts_sid_and_windows_account_normalizations() {
+        let identity = CurrentUserIdentity {
+            sid: "S-1-5-21-1-2-3-1001".to_owned(),
+            account: "Loy".to_owned(),
+            domain: "WORKSTATION".to_owned(),
+        };
+        assert!(principal_user_matches(&identity.sid, &identity));
+        assert!(principal_user_matches("loy", &identity));
+        assert!(principal_user_matches(r".\LOY", &identity));
+        assert!(principal_user_matches(r"workstation\loy", &identity));
+        assert!(!principal_user_matches("another-user", &identity));
     }
 }
