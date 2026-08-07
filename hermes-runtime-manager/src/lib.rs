@@ -10,6 +10,7 @@ pub mod model;
 pub mod platform;
 pub mod portable_plugin_signature;
 pub mod ports;
+pub mod release_control;
 pub mod toolchain;
 #[cfg(windows)]
 pub mod windows_pipe;
@@ -34,6 +35,14 @@ pub use portable_plugin_signature::{
     PluginTrustKeyV1, PluginTrustStoreV1, PortablePluginEntrypointV2,
     PortablePluginManifestV2, PortablePluginVerificationError,
     PortablePluginVerificationReportV2,
+};
+pub use release_control::{
+    verify_release_control, verify_release_control_files, verify_release_control_files_at,
+    BlockManifestV1, BlockedReleaseV1, ChannelManifestV1, ProductReleaseManifestV1,
+    ProductTargetV1, ReleaseArtifactV1, ReleaseChannelV1, ReleaseControlError,
+    ReleaseControlObservedStateV1, ReleaseControlVerificationReportV1,
+    ReleaseSecurityPolicyV1, ReleaseSourceV1, ReleaseTrustKeyV1, ReleaseTrustStoreV1,
+    RollbackAuthorizationV1, SignedReleaseEnvelopeV1,
 };
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 #[cfg(windows)]
