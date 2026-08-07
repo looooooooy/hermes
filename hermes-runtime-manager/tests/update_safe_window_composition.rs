@@ -438,10 +438,7 @@ fn current_target() -> &'static str {
 
 fn temp_root() -> PathBuf {
     let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-    let root = std::env::temp_dir().join(format!(
-        "hermes-update-safety-composition-{}-{id}",
-        std::process::id()
-    ));
+    let root = PathBuf::from(format!("/tmp/husc-{}-{id}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).unwrap();
     root
