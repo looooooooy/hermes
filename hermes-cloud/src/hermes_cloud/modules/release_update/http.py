@@ -166,7 +166,7 @@ def _mapping_or_none(value: object) -> object:
 
 def _rfc3339(value: datetime) -> str:
     if value.tzinfo is None:
-        raise UpdateCheckPolicyError("grant expiry must be timezone-aware")
+        raise UpdateCheckPolicyError("download-grant expiry must be timezone-aware")
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
