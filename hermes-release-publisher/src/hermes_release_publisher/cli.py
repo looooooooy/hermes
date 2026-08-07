@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+from .doctor import OssDoctorPolicyV1, OssRepositoryDoctor, OssV2DoctorBackend
 from .repository import BucketMap, OssV2Backend, PublisherError, ReleasePublisher, content_addressed_key
 from .signing import (
     ReleaseSigningError,
@@ -22,6 +23,17 @@ def main() -> int:
     plan = subparsers.add_parser("plan-artifact")
     plan.add_argument("file", type=Path)
     plan.add_argument("--namespace", choices=("artifacts", "evidence"), default="artifacts")
+
+    doctor = subparsers.add_parser("oss-doctor")
+    _add_oss_arguments(doctor)
+    doctor.add_argument("--required-cname", default=os.environ.get("HERMES_OSS_UPDATES_CNAME"))
+    doctor.add_argument(
+        "--expected-encryption",
+        action="append",
+        choices=("AES256", "KMS"),
+        dest="expected_encryption",
+        help="Allowed bucket SSE method; repeat to allow both AES256 and KMS.",
+    )
 
     sign = subparsers.add_parser("sign-control")
     sign.add_argument("payload", type=Path)
@@ -97,6 +109,16 @@ def main() -> int:
             return 0
 
         buckets = _bucket_map(args)
+        if args.command == "oss-doctor":
+            policy = OssDoctorPolicyV1(
+                expected_encryption=tuple(args.expected_encryption or ("AES256", "KMS")),
+                required_cname=args.required_cname.lower() if args.required_cname else None,
+            )
+            backend = OssV2DoctorBackend.from_environment(region=args.region, endpoint=args.endpoint)
+            report = OssRepositoryDoctor(backend, buckets, policy).run()
+            print(json.dumps(report.to_json(), sort_keys=True))
+            return 0 if report.passed else 12
+
         backend = OssV2Backend.from_environment(
             region=args.region,
             endpoint=args.endpoint,
