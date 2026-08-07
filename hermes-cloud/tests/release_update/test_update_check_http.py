@@ -64,12 +64,13 @@ class _Updates:
         )
 
 
-class _UnavailableUpdates:
-    def check(self, _context: DeviceUpdateContextV1) -> UpdateDecisionV1:
-        raise UpdateCheckUnavailable("signed release catalog unavailable")
+class _UnavailableUpdates(_Updates):
+    def check(self, context: DeviceUpdateContextV1) -> UpdateDecisionV1:
+        self.calls.append(context)
+        raise UpdateCheckUnavailable("release catalog unavailable")
 
 
-def _app(updates: object) -> BusinessApiApplication:
+def _app(updates: _Updates) -> BusinessApiApplication:
     return BusinessApiApplication(
         service=_Authentication(),  # type: ignore[arg-type]
         update_check_service=updates,  # type: ignore[arg-type]
@@ -85,7 +86,6 @@ def _valid_body() -> dict[str, object]:
         "active_release_generation": 100,
         "highest_release_generation": 100,
         "requested_channel": "stable",
-        "enterprise_pin_release_id": None,
     }
 
 
@@ -106,6 +106,7 @@ def test_update_check_requires_bearer_and_derives_organization_from_principal() 
     assert context.organization_id == str(TENANT_ID)
     assert context.device_id == "77777777-7777-4777-8777-777777777777"
     assert context.requested_channel == "stable"
+    assert context.enterprise_pin_release_id is None
     payload = response.json()
     assert payload["schema_version"] == 1
     assert payload["status"] == "available"
@@ -122,38 +123,32 @@ def test_update_check_requires_bearer_and_derives_organization_from_principal() 
     ]
 
 
-def test_update_check_returns_503_when_signed_control_or_grants_are_unavailable() -> None:
-    with TestClient(_app(_UnavailableUpdates())) as client:
-        response = client.post(
-            "/api/desktop/update-check",
-            headers={"Authorization": "Bearer owner-access-token"},
-            json=_valid_body(),
-        )
-
-    assert response.status_code == 503
-    assert response.json() == {
-        "code": "UPDATE_CHECK_UNAVAILABLE",
-        "reason": "release control is temporarily unavailable",
-    }
-
-
-def test_update_check_rejects_client_supplied_organization_and_duplicate_json_keys() -> None:
+def test_update_check_rejects_client_supplied_org_enterprise_pin_and_duplicate_keys() -> None:
     updates = _Updates()
     supplied_org = {**_valid_body(), "organization_id": "attacker-org"}
+    supplied_pin = {
+        **_valid_body(),
+        "enterprise_pin_release_id": "1.0.1+20260807.1.gabcdef12",
+    }
     duplicate = (
         '{"device_id":"77777777-7777-4777-8777-777777777777",'
         '"device_id":"88888888-8888-4888-8888-888888888888",'
         '"target":"windows-x86_64","os_version":"10.0.26100",'
         '"active_release_id":"1.0.0+20260801.1.g00000000",'
         '"active_release_generation":100,"highest_release_generation":100,'
-        '"requested_channel":"stable","enterprise_pin_release_id":null}'
+        '"requested_channel":"stable"}'
     )
 
     with TestClient(_app(updates)) as client:
-        extra = client.post(
+        extra_org = client.post(
             "/api/desktop/update-check",
             headers={"Authorization": "Bearer owner-access-token"},
             json=supplied_org,
+        )
+        extra_pin = client.post(
+            "/api/desktop/update-check",
+            headers={"Authorization": "Bearer owner-access-token"},
+            json=supplied_pin,
         )
         duplicated = client.post(
             "/api/desktop/update-check",
@@ -164,7 +159,8 @@ def test_update_check_rejects_client_supplied_organization_and_duplicate_json_ke
             content=duplicate,
         )
 
-    assert extra.status_code == 400
+    assert extra_org.status_code == 400
+    assert extra_pin.status_code == 400
     assert duplicated.status_code == 400
     assert updates.calls == []
 
@@ -200,3 +196,17 @@ def test_update_check_rejects_wrong_media_type_oversize_and_invalid_generation()
     assert oversized.status_code == 400
     assert invalid.status_code == 400
     assert updates.calls == []
+
+
+def test_update_check_returns_503_for_server_side_release_control_failure() -> None:
+    updates = _UnavailableUpdates()
+    with TestClient(_app(updates)) as client:
+        response = client.post(
+            "/api/desktop/update-check",
+            headers={"Authorization": "Bearer owner-access-token"},
+            json=_valid_body(),
+        )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "UPDATE_CHECK_UNAVAILABLE"
+    assert len(updates.calls) == 1
