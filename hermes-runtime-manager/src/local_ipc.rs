@@ -1,4 +1,7 @@
-use crate::ipc::{decode_frame, encode_frame, DoctorCheckV1, IpcCodecError, ManagerEnvelopeV1, ManagerRequestV1, ManagerResponseV1, MAX_MANAGER_FRAME_BYTES};
+use crate::ipc::{
+    decode_frame, encode_frame, DoctorCheckV1, IpcCodecError, ManagerEnvelopeV1,
+    ManagerRequestV1, ManagerResponseV1, MAX_MANAGER_FRAME_BYTES,
+};
 use crate::RuntimeManager;
 use std::sync::Arc;
 use thiserror::Error;
@@ -73,10 +76,15 @@ mod unix_transport {
     }
 
     impl ReadOnlyUnixServer {
-        pub fn bind(endpoint: impl Into<PathBuf>, manager: Arc<RuntimeManager>) -> Result<Self, LocalIpcError> {
+        pub fn bind(
+            endpoint: impl Into<PathBuf>,
+            manager: Arc<RuntimeManager>,
+        ) -> Result<Self, LocalIpcError> {
             let endpoint = endpoint.into();
             if !endpoint.is_absolute() {
-                return Err(LocalIpcError::Unavailable("Unix IPC endpoint must be absolute"));
+                return Err(LocalIpcError::Unavailable(
+                    "Unix IPC endpoint must be absolute",
+                ));
             }
             let parent = endpoint
                 .parent()
@@ -86,7 +94,9 @@ mod unix_transport {
 
             if let Ok(metadata) = fs::symlink_metadata(&endpoint) {
                 if metadata.file_type().is_symlink() || !metadata.file_type().is_socket() {
-                    return Err(LocalIpcError::Unavailable("refusing to replace non-socket IPC endpoint"));
+                    return Err(LocalIpcError::Unavailable(
+                        "refusing to replace non-socket IPC endpoint",
+                    ));
                 }
                 fs::remove_file(&endpoint)?;
             }
@@ -133,7 +143,9 @@ mod unix_transport {
         write_envelope(&mut stream, &envelope)?;
         let response: ManagerEnvelopeV1<ManagerResponseV1> = read_envelope(&mut stream)?;
         if response.request_id != request_id {
-            return Err(LocalIpcError::Unavailable("IPC response request_id mismatch"));
+            return Err(LocalIpcError::Unavailable(
+                "IPC response request_id mismatch",
+            ));
         }
         Ok(response.body)
     }
@@ -201,6 +213,7 @@ mod tests {
     #[test]
     fn unix_status_round_trip_uses_real_socket_and_shared_framing() {
         use std::fs;
+        use std::os::unix::fs::PermissionsExt;
         use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
 
