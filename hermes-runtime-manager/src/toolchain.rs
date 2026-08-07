@@ -11,7 +11,9 @@ use thiserror::Error;
 const BUNDLE_SCHEMA_V1: u8 = 1;
 const BUNDLE_MANIFEST_NAME: &str = "TOOLCHAIN-BUNDLE.json";
 const INSTALLED_MANIFEST_NAME: &str = "TOOLCHAIN-MANIFEST.json";
-const MAX_MANIFEST_BYTES: u64 = 512 * 1024;
+// Real CPython distributions contain thousands of files. Keep complete per-file SHA
+// evidence, but still bound manifest parsing to a small, explicit release-input size.
+const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
