@@ -11,6 +11,7 @@ on:
       - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/managed_payload_archive.rs"
       - "hermes-runtime-manager/src/managed_release_stager.rs"
       - "hermes-runtime-manager/src/manager.rs"
@@ -30,6 +31,7 @@ on:
       - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/managed_payload_archive.rs"
       - "hermes-runtime-manager/src/managed_release_stager.rs"
       - "hermes-runtime-manager/src/manager.rs"
@@ -76,6 +78,8 @@ jobs:
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_coordinator::tests
       - name: Test concrete HTTPS fetcher, exact-release activation, health, and rollback adapters
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_adapters::tests
+      - name: Test graceful Connector drain and active-release reconciliation
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests
       - name: Compile Runtime Manager verification CLI
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
