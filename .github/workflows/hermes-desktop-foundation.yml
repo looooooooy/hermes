@@ -7,11 +7,15 @@ on:
     paths:
       - "hermes-desktop/**"
       - "hermes-runtime-manager/**"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
       - ".github/workflows/hermes-desktop-foundation.yml"
   pull_request:
     paths:
       - "hermes-desktop/**"
       - "hermes-runtime-manager/**"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
       - ".github/workflows/hermes-desktop-foundation.yml"
 
 permissions:
@@ -40,6 +44,20 @@ jobs:
       - name: Build frontend
         working-directory: hermes-desktop
         run: npm run build
+
+  private-toolchain:
+    name: Private Python/uv execution contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test runner
+        run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Prove PATH-independent toolchain binding
+        run: python -m pytest -q hermes-connector/tests/packaging/test_private_toolchain_runner.py
 
   runtime-manager:
     name: Runtime Manager / ${{ matrix.os }}
