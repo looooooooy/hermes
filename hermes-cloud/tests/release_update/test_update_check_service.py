@@ -10,8 +10,8 @@ from hermes_cloud.modules.release_update import (
     DownloadGrantV1,
     ReleaseArtifactRefV1,
     ReleaseUpdateCandidateV1,
-    UpdateCheckPolicyError,
     UpdateCheckService,
+    UpdateCheckUnavailable,
     UpdateDecisionStatusV1,
 )
 from hermes_cloud.modules.release_update.service import deterministic_rollout_bucket
@@ -160,14 +160,14 @@ def test_os_incompatibility_fails_closed_before_grant_issue() -> None:
     assert issuer.calls == []
 
 
-def test_grant_must_be_https_and_expire_within_twenty_minutes() -> None:
-    with pytest.raises(UpdateCheckPolicyError, match="bounded HTTPS"):
+def test_invalid_server_grant_is_unavailable() -> None:
+    with pytest.raises(UpdateCheckUnavailable, match="bounded HTTPS"):
         service(
             candidate_fixture(),
             issuer=ShortLivedGrantIssuer(url_prefix="http://updates.example.com/"),
         ).check(context_fixture(), now=NOW)
 
-    with pytest.raises(UpdateCheckPolicyError, match="short-lived"):
+    with pytest.raises(UpdateCheckUnavailable, match="short-lived"):
         service(
             candidate_fixture(),
             issuer=ShortLivedGrantIssuer(minutes=21),
@@ -238,10 +238,10 @@ def candidate_fixture(
     )
     return ReleaseUpdateCandidateV1(
         release_id=release_id,
-        product_version="1.0.5",
+        product_version=f"1.0.{release_generation - 100}",
         release_generation=release_generation,
         channel="stable",
-        channel_generation=42,
+        channel_generation=205,
         target="linux-x86_64",
         minimum_os="Ubuntu 24.04 LTS",
         rollout_basis_points=rollout_basis_points,
