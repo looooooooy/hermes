@@ -2,7 +2,7 @@
 
 The route is intentionally thin: bearer authentication establishes tenant identity,
 strict JSON becomes a DeviceUpdateContextV1, and all rollout/update decisions stay in
-UpdateCheckService.  No OSS credentials or storage SDK types cross this boundary.
+UpdateCheckService. No OSS credentials or storage SDK types cross this boundary.
 """
 
 from __future__ import annotations
@@ -19,7 +19,11 @@ from hermes_cloud.modules.cloud_api.adapters.http_auth import authenticate_beare
 from hermes_cloud.modules.cloud_api.application.service import CloudApiService
 
 from .domain import DeviceUpdateContextV1, UpdateDecisionV1
-from .service import UpdateCheckPolicyError, UpdateCheckService
+from .service import (
+    UpdateCheckPolicyError,
+    UpdateCheckService,
+    UpdateCheckUnavailable,
+)
 
 _MAX_BODY_BYTES = 32 * 1024
 _ALLOWED_FIELDS = frozenset(
@@ -66,9 +70,15 @@ def register_update_check_route(
                 ),
             )
             decision = await run_in_threadpool(updates.check, context)
+        except UpdateCheckUnavailable:
+            return _service_unavailable()
         except (UpdateCheckPolicyError, TypeError, ValueError):
             return _invalid_request()
-        return JSONResponse(_decision_payload(decision))
+        try:
+            payload = _decision_payload(decision)
+        except UpdateCheckUnavailable:
+            return _service_unavailable()
+        return JSONResponse(payload)
 
     application.add_api_route(
         "/api/desktop/update-check",
@@ -166,7 +176,7 @@ def _mapping_or_none(value: object) -> object:
 
 def _rfc3339(value: datetime) -> str:
     if value.tzinfo is None:
-        raise UpdateCheckPolicyError("download-grant expiry must be timezone-aware")
+        raise UpdateCheckUnavailable("download-grant expiry is not timezone-aware")
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
@@ -177,4 +187,14 @@ def _invalid_request() -> JSONResponse:
             "reason": "invalid update-check request",
         },
         status_code=400,
+    )
+
+
+def _service_unavailable() -> JSONResponse:
+    return JSONResponse(
+        {
+            "code": "UPDATE_CHECK_UNAVAILABLE",
+            "reason": "release control is temporarily unavailable",
+        },
+        status_code=503,
     )
