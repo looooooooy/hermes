@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
-import os
 import re
 import time
 from ctypes import wintypes
@@ -108,8 +107,6 @@ def _configure(kernel32: object, advapi32: object) -> None:
 
 def libraries() -> tuple[object, object]:
     global _LIBRARIES
-    if os.name != "nt":
-        raise RuntimeError("Windows Named Pipe client requires Windows")
     if _LIBRARIES is None:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
