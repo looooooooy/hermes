@@ -69,17 +69,124 @@ def _require_windows() -> None:
         raise RuntimeError("Windows update-safety relay requires Windows")
 
 
+def _configure_win32(kernel32: Any, advapi32: Any) -> None:
+    handle_pointer = ctypes.POINTER(wintypes.HANDLE)
+    dword_pointer = ctypes.POINTER(wintypes.DWORD)
+
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.GetCurrentThread.argtypes = []
+    kernel32.GetCurrentThread.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    kernel32.CreateNamedPipeW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(_SecurityAttributes),
+    ]
+    kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.ConnectNamedPipe.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    kernel32.ConnectNamedPipe.restype = wintypes.BOOL
+    kernel32.DisconnectNamedPipe.argtypes = [wintypes.HANDLE]
+    kernel32.DisconnectNamedPipe.restype = wintypes.BOOL
+    kernel32.GetNamedPipeClientProcessId.argtypes = [
+        wintypes.HANDLE,
+        dword_pointer,
+    ]
+    kernel32.GetNamedPipeClientProcessId.restype = wintypes.BOOL
+    kernel32.PeekNamedPipe.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        dword_pointer,
+        dword_pointer,
+        dword_pointer,
+    ]
+    kernel32.PeekNamedPipe.restype = wintypes.BOOL
+    kernel32.ReadFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        dword_pointer,
+        ctypes.c_void_p,
+    ]
+    kernel32.ReadFile.restype = wintypes.BOOL
+    kernel32.WriteFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        dword_pointer,
+        ctypes.c_void_p,
+    ]
+    kernel32.WriteFile.restype = wintypes.BOOL
+    kernel32.FlushFileBuffers.argtypes = [wintypes.HANDLE]
+    kernel32.FlushFileBuffers.restype = wintypes.BOOL
+
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        handle_pointer,
+    ]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.OpenThreadToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.BOOL,
+        handle_pointer,
+    ]
+    advapi32.OpenThreadToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        dword_pointer,
+    ]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    advapi32.ConvertSidToStringSidW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(wintypes.LPWSTR),
+    ]
+    advapi32.ConvertSidToStringSidW.restype = wintypes.BOOL
+    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        dword_pointer,
+    ]
+    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    advapi32.ImpersonateNamedPipeClient.argtypes = [wintypes.HANDLE]
+    advapi32.ImpersonateNamedPipeClient.restype = wintypes.BOOL
+    advapi32.EqualSid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    advapi32.EqualSid.restype = wintypes.BOOL
+    advapi32.RevertToSelf.argtypes = []
+    advapi32.RevertToSelf.restype = wintypes.BOOL
+
+
 def _libraries() -> tuple[Any, Any]:
     global _LIBRARIES  # noqa: PLW0603
     _require_windows()
     if _LIBRARIES is None:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
-        kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
-        kernel32.CreateFileW.restype = wintypes.HANDLE
-        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
-        kernel32.GetCurrentThread.restype = wintypes.HANDLE
-        kernel32.LocalFree.restype = ctypes.c_void_p
+        _configure_win32(kernel32, advapi32)
         _LIBRARIES = kernel32, advapi32
     return _LIBRARIES
 
@@ -349,11 +456,11 @@ def _write_all(kernel32: Any, pipe: int, payload: bytes) -> None:
     offset = 0
     while offset < len(payload):
         written = wintypes.DWORD()
-        view = payload[offset:]
+        chunk = ctypes.create_string_buffer(payload[offset:])
         if not kernel32.WriteFile(
             wintypes.HANDLE(pipe),
-            view,
-            len(view),
+            chunk,
+            len(payload) - offset,
             ctypes.byref(written),
             None,
         ):
@@ -484,7 +591,7 @@ class WindowsUpdateSafetyRelay:
 
     def _serve_connection(self, kernel32: Any, pipe: int) -> None:
         try:
-            client_pid = wintypes.ULONG()
+            client_pid = wintypes.DWORD()
             if not kernel32.GetNamedPipeClientProcessId(
                 wintypes.HANDLE(pipe),
                 ctypes.byref(client_pid),
