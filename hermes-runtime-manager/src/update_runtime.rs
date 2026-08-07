@@ -80,7 +80,10 @@ mod tests {
     use crate::update_safe_window::HostUpdateSafetySnapshotV1;
     use std::fs;
     use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     struct StaticHost(HostUpdateSafetySnapshotV1);
 
@@ -277,10 +280,10 @@ mod tests {
     }
 
     fn temp_root() -> PathBuf {
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
         let root = std::env::temp_dir().join(format!(
-            "hermes-update-safe-window-composition-{}-{}",
+            "hermes-update-safe-window-composition-{}-{id}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
         ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
