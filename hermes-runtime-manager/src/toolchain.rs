@@ -53,8 +53,8 @@ impl PrivateToolchainInstaller {
         source_root: &Path,
         toolchains_root: &Path,
     ) -> Result<ToolchainManifestV1, ToolchainInstallError> {
-        validate_absolute_root(source_root, "source root")?;
-        validate_absolute_root(toolchains_root, "toolchains root")?;
+        validate_absolute_root(source_root)?;
+        validate_absolute_root(toolchains_root)?;
         let bundle = load_bundle(source_root)?;
         validate_bundle(&bundle)?;
         verify_source_tree(source_root, &bundle)?;
@@ -95,9 +95,16 @@ impl PrivateToolchainInstaller {
                 copy_verified(&source, &destination, &file.sha256, file.executable)?;
             }
 
-            let installed = build_installed_manifest(&stage_root, &bundle)?;
+            // The manifest always records the immutable final path.  It is written into
+            // staging before the atomic rename so no published manifest can point back
+            // into a temporary directory.
+            let installed = build_installed_manifest(&final_root, &bundle)?;
             let manifest_bytes = serde_json::to_vec_pretty(&installed)?;
-            write_private_file(&stage_root.join(INSTALLED_MANIFEST_NAME), &manifest_bytes, false)?;
+            write_private_file(
+                &stage_root.join(INSTALLED_MANIFEST_NAME),
+                &manifest_bytes,
+                false,
+            )?;
             fs::rename(&stage_root, &final_root)?;
             verify_existing_install(&final_root, &bundle)
         })();
@@ -284,7 +291,7 @@ fn copy_verified(
         output.write_all(&buffer[..read])?;
     }
     output.flush()?;
-    let actual = hex_digest(digest.finalize().as_slice());
+    let actual = hex_digest(&digest.finalize());
     if actual != expected_sha256 {
         return Err(ToolchainInstallError::Integrity(
             destination.display().to_string(),
@@ -323,18 +330,27 @@ fn safe_relative(value: &str) -> Result<PathBuf, ToolchainInstallError> {
     if value.is_empty() || path.is_absolute() {
         return Err(ToolchainInstallError::Invalid("toolchain path must be relative"));
     }
-    if path.components().any(|component| !matches!(component, Component::Normal(_))) {
-        return Err(ToolchainInstallError::Invalid("unsafe toolchain relative path"));
+    if path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(ToolchainInstallError::Invalid(
+            "unsafe toolchain relative path",
+        ));
     }
     Ok(path.to_path_buf())
 }
 
-fn validate_absolute_root(path: &Path, _label: &'static str) -> Result<(), ToolchainInstallError> {
+fn validate_absolute_root(path: &Path) -> Result<(), ToolchainInstallError> {
     if !path.is_absolute() {
-        return Err(ToolchainInstallError::Invalid("toolchain root must be absolute"));
+        return Err(ToolchainInstallError::Invalid(
+            "toolchain root must be absolute",
+        ));
     }
     if path.exists() && path.is_symlink() {
-        return Err(ToolchainInstallError::Invalid("toolchain root cannot be a symlink"));
+        return Err(ToolchainInstallError::Invalid(
+            "toolchain root cannot be a symlink",
+        ));
     }
     Ok(())
 }
@@ -350,7 +366,7 @@ fn sha256_file(path: &Path) -> Result<String, ToolchainInstallError> {
         }
         digest.update(&buffer[..read]);
     }
-    Ok(hex_digest(digest.finalize().as_slice()))
+    Ok(hex_digest(&digest.finalize()))
 }
 
 fn hex_digest(bytes: &[u8]) -> String {
@@ -364,7 +380,10 @@ fn hex_digest(bytes: &[u8]) -> String {
 }
 
 fn is_sha256(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 #[cfg(unix)]
@@ -404,7 +423,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        std::env::temp_dir().join(format!("hermes-{name}-{}-{unique}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "hermes-{name}-{}-{unique}",
+            std::process::id()
+        ))
     }
 
     fn write_bundle(source: &Path) -> PrivateToolchainBundleV1 {
@@ -450,10 +472,14 @@ mod tests {
         let source = root.join("source");
         let destination = root.join("managed/toolchains");
         let bundle = write_bundle(&source);
-        let manifest = PrivateToolchainInstaller::install(&source, &destination).expect("install");
+        let manifest =
+            PrivateToolchainInstaller::install(&source, &destination).expect("install");
         assert_eq!(manifest.python.version, bundle.python_version);
         assert_eq!(manifest.uv.version, bundle.uv_version);
-        assert!(manifest.python.path.starts_with(destination.join(&bundle.bundle_id)));
+        assert!(manifest
+            .python
+            .path
+            .starts_with(destination.join(&bundle.bundle_id)));
         assert!(manifest.offline_only);
 
         let reused = PrivateToolchainInstaller::install(&source, &destination).expect("reuse");
