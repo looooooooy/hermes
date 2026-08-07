@@ -17,29 +17,47 @@ from .named_pipe import (
     read_exact,
     write_all,
 )
-from .process_identity import current_process_identity
+from .process_identity import current_process_identity, normalize_process_identity
 
 _MAX_FRAME_BYTES = 1024 * 1024
 _ATTACH_METHOD = "relay.control.attach"
 
 
 class WindowsControlRelayClient:
-    """Bound current-user control channel to one Local Runtime authority."""
+    """Bind one current-user Control Pipe to one Local Runtime authority and session."""
 
     def __init__(
         self,
         authority: LocalRuntimeAuthority,
         *,
+        user_id: str,
+        provider: str,
         client_instance_id: UUID,
+        session_key: str,
         connect_timeout_seconds: float = 1.5,
         io_timeout_seconds: float = 3.0,
     ) -> None:
         if not isinstance(client_instance_id, UUID):
             raise TypeError("client_instance_id must be UUID")
+        for field_name, value in (
+            ("user_id", user_id),
+            ("provider", provider),
+            ("session_key", session_key),
+        ):
+            if (
+                not isinstance(value, str)
+                or not value
+                or value != value.strip()
+                or "\x00" in value
+            ):
+                raise ValueError(f"{field_name} is invalid")
         if connect_timeout_seconds <= 0 or io_timeout_seconds <= 0:
             raise ValueError("Windows control relay timeouts must be positive")
         self._authority = authority
+        self._user_id = user_id
+        self._provider = provider
         self._client_instance_id = client_instance_id
+        self._session_key = session_key
         self._connect_timeout_seconds = connect_timeout_seconds
         self._io_timeout_seconds = io_timeout_seconds
         self._connection: WindowsPipeConnection | None = None
@@ -65,16 +83,25 @@ class WindowsControlRelayClient:
         try:
             if connection.server_pid != self._authority.pid:
                 raise PermissionError("Windows control relay server PID changed")
-            if current_process_identity(self._authority.pid) != self._authority.process_identity:
+            expected_identity = normalize_process_identity(
+                self._authority.process_identity
+            )
+            observed_identity = normalize_process_identity(
+                current_process_identity(self._authority.pid)
+            )
+            if expected_identity is None or observed_identity != expected_identity:
                 raise PermissionError("Windows control relay process identity changed")
             self._connection = connection
             response = self._request_sync(
                 _ATTACH_METHOD,
                 {
                     "claims": {
+                        "user_id": self._user_id,
+                        "provider": self._provider,
+                        "connection_role": "control",
                         "client_instance_id": str(self._client_instance_id),
+                        "session_key": self._session_key,
                         "profile": self._authority.profile,
-                        "runtime_generation": self._authority.runtime_generation,
                     }
                 },
                 request_id="attach-1",
