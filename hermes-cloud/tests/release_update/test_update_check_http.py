@@ -12,6 +12,7 @@ from hermes_cloud.modules.release_update.domain import (
     UpdateDecisionStatusV1,
     UpdateDecisionV1,
 )
+from hermes_cloud.modules.release_update.service import UpdateCheckUnavailable
 
 TENANT_ID = UUID("33333333-3333-4333-8333-333333333333")
 
@@ -63,7 +64,12 @@ class _Updates:
         )
 
 
-def _app(updates: _Updates) -> BusinessApiApplication:
+class _UnavailableUpdates:
+    def check(self, _context: DeviceUpdateContextV1) -> UpdateDecisionV1:
+        raise UpdateCheckUnavailable("signed release catalog unavailable")
+
+
+def _app(updates: object) -> BusinessApiApplication:
     return BusinessApiApplication(
         service=_Authentication(),  # type: ignore[arg-type]
         update_check_service=updates,  # type: ignore[arg-type]
@@ -114,6 +120,21 @@ def test_update_check_requires_bearer_and_derives_organization_from_principal() 
             "expires_at": "2026-08-07T16:10:00Z",
         }
     ]
+
+
+def test_update_check_returns_503_when_signed_control_or_grants_are_unavailable() -> None:
+    with TestClient(_app(_UnavailableUpdates())) as client:
+        response = client.post(
+            "/api/desktop/update-check",
+            headers={"Authorization": "Bearer owner-access-token"},
+            json=_valid_body(),
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "UPDATE_CHECK_UNAVAILABLE",
+        "reason": "release control is temporarily unavailable",
+    }
 
 
 def test_update_check_rejects_client_supplied_organization_and_duplicate_json_keys() -> None:
