@@ -1,0 +1,46 @@
+name: Hermes Release Update Plane
+
+on:
+  push:
+    branches:
+      - "feature/hermes-release-update-plane-*"
+    paths:
+      - "hermes-runtime-manager/src/release_control.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/src/main.rs"
+      - "hermes-release-publisher/**"
+      - ".github/workflows/hermes-release-update-plane.yml"
+  pull_request:
+    paths:
+      - "hermes-runtime-manager/src/release_control.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/src/main.rs"
+      - "hermes-release-publisher/**"
+      - ".github/workflows/hermes-release-update-plane.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-release-update-plane-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-control:
+    name: Signed release control / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Test Release / Channel / Block signature and anti-rollback contracts
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml release_control::tests
+      - name: Compile Runtime Manager verification CLI
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
+      - name: Verify CLI surface is present
+        run: cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml -- version
