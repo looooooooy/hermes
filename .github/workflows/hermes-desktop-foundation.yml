@@ -84,7 +84,7 @@ jobs:
           - os: windows-latest
             target: windows-x86_64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -149,6 +149,60 @@ jobs:
           $env:PATH = $poison
           & $gate blank-machine-toolchain-gate $qualified $blankRoot
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove Private Python can consume authenticated Runtime Manager UDS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate="$PWD/hermes-runtime-manager/target/debug/hermes-runtime-manager"
+          endpoint="$($gate ipc-endpoint)"
+          toolchains_root="${RUNNER_TEMP}/hermes-toolchains"
+          manifest="$(find "$toolchains_root" -mindepth 2 -maxdepth 2 -name TOOLCHAIN-MANIFEST.json -type f -print -quit)"
+          test -n "$manifest"
+          private_python="$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["python"]["path"])' "$manifest")"
+          test -x "$private_python"
+          poison="${RUNNER_TEMP}/hermes-empty-path"
+          server_log="${RUNNER_TEMP}/hermes-runtime-manager-ipc.log"
+          PATH="$poison" "$gate" serve-read-only >"$server_log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          PATH="$poison" "$private_python" -I \
+            "$PWD/hermes-runtime-manager/toolchains/private_ipc_test_host.py" \
+            --transport unix \
+            --endpoint "$endpoint" \
+            --toolchains-root "$toolchains_root" \
+            --expected-platform "${{ runner.os }}"
+      - name: Prove Private Python can consume authenticated Runtime Manager Named Pipe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gate = (Resolve-Path 'hermes-runtime-manager/target/debug/hermes-runtime-manager.exe').Path
+          $endpoint = (& $gate ipc-endpoint).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($endpoint)) { throw 'failed to resolve Runtime Manager Named Pipe' }
+          $toolchainsRoot = Join-Path $env:RUNNER_TEMP 'hermes-toolchains'
+          $manifest = Get-ChildItem -Path $toolchainsRoot -Recurse -Filter 'TOOLCHAIN-MANIFEST.json' -File | Select-Object -First 1
+          if (-not $manifest) { throw 'installed toolchain manifest not found' }
+          $privatePython = ((Get-Content -Raw $manifest.FullName | ConvertFrom-Json).python.path)
+          if (-not (Test-Path -LiteralPath $privatePython -PathType Leaf)) { throw 'private Python not found' }
+          $poison = Join-Path $env:RUNNER_TEMP 'hermes-empty-path'
+          $serverOut = Join-Path $env:RUNNER_TEMP 'hermes-runtime-manager-ipc.out.log'
+          $serverErr = Join-Path $env:RUNNER_TEMP 'hermes-runtime-manager-ipc.err.log'
+          $oldPath = $env:PATH
+          $env:PATH = $poison
+          $server = Start-Process -FilePath $gate -ArgumentList 'serve-read-only' -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+          try {
+            & $privatePython -I 'hermes-runtime-manager/toolchains/private_ipc_test_host.py' --transport windows-pipe --endpoint $endpoint --toolchains-root $toolchainsRoot --expected-platform Windows
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+            $env:PATH = $oldPath
+          }
 
   runtime-manager:
     name: Runtime Manager / ${{ matrix.os }}

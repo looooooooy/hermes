@@ -27,6 +27,12 @@ fn main() {
             std::process::exit(2);
         }
     };
+
+    if command == "ipc-endpoint" {
+        print_read_only_ipc_endpoint(&layout);
+        return;
+    }
+
     let manager = Arc::new(RuntimeManager::new(
         Arc::new(FailClosedServiceManager),
         layout.clone(),
@@ -52,7 +58,7 @@ fn main() {
         other => {
             eprintln!("unsupported command: {other}");
             eprintln!(
-                "supported commands: status, doctor, serve-read-only, install-toolchain, blank-machine-toolchain-gate, version"
+                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, version"
             );
             std::process::exit(64);
         }
@@ -95,6 +101,28 @@ fn blank_machine_toolchain_gate_command(args: &[String]) {
         Err(error) => {
             eprintln!("runtime_manager_blank_machine_gate_error: {error}");
             std::process::exit(8);
+        }
+    }
+}
+
+#[cfg(unix)]
+fn print_read_only_ipc_endpoint(layout: &DefaultInstallLayout) {
+    match layout.state_root() {
+        Ok(root) => println!("{}", root.join("rm.sock").display()),
+        Err(error) => {
+            eprintln!("runtime_manager_ipc_layout_error: {error}");
+            std::process::exit(4);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn print_read_only_ipc_endpoint(_layout: &DefaultInstallLayout) {
+    match hermes_runtime_manager::windows_pipe::current_user_pipe_name() {
+        Ok(name) => println!("{name}"),
+        Err(error) => {
+            eprintln!("runtime_manager_pipe_identity_error: {error}");
+            std::process::exit(4);
         }
     }
 }
