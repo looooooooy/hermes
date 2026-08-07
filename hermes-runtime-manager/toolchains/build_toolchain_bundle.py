@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build one Hermes private Python/uv toolchain bundle from an immutable upstream lock.
 
-This script is CI-only.  Customer machines consume the resulting Hermes artifact and
+This script is CI-only. Customer machines consume the resulting Hermes artifact and
 never download Python or uv from upstream release sites.
 """
 
@@ -53,7 +53,12 @@ def main() -> int:
         raise BundleBuildError(f"output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="hermes-toolchain-") as temp_value:
+    # Staging must live on the same volume as the final destination so publication is
+    # an atomic rename on Windows as well as Unix. The default Windows TEMP directory
+    # may be on C: while runner.temp is on D:, which makes os.replace fail with WinError 17.
+    with tempfile.TemporaryDirectory(
+        prefix=".hermes-toolchain-", dir=output.parent
+    ) as temp_value:
         temp = Path(temp_value)
         python_archive = download_locked(target["python"], temp)
         uv_archive = download_locked(target["uv"], temp)
@@ -89,7 +94,9 @@ def main() -> int:
             "uv_path": uv_path.as_posix(),
             "files": files,
         }
-        write_json(stage / "TOOLCHAIN-BUNDLE.json", manifest)
+        # CPython carries thousands of files. Keep the integrity manifest compact so
+        # per-file SHA evidence stays bounded without wasting space on indentation.
+        write_json(stage / "TOOLCHAIN-BUNDLE.json", manifest, compact=True)
         write_json(
             stage / "UPSTREAM-SOURCE.json",
             {
@@ -109,6 +116,7 @@ def main() -> int:
         "python_sha256": sha256_file(output / python_path),
         "uv_sha256": sha256_file(output / uv_path),
         "manifest_sha256": sha256_file(output / "TOOLCHAIN-BUNDLE.json"),
+        "manifest_bytes": (output / "TOOLCHAIN-BUNDLE.json").stat().st_size,
     }
     print(json.dumps(summary, sort_keys=True))
     return 0
@@ -247,7 +255,7 @@ def validate_relative_link(member_name: str, link_name: str) -> None:
 
 def copy_python_tree(extracted: Path, destination: Path) -> None:
     source = find_python_root(extracted)
-    # Dereference safe in-archive symlinks into regular files/dirs.  The customer-side
+    # Dereference safe in-archive symlinks into regular files/dirs. The customer-side
     # installer therefore never needs to create symlinks from untrusted bundle data.
     shutil.copytree(source, destination, symlinks=False)
 
@@ -317,8 +325,12 @@ def enumerate_bundle_files(root: Path, explicit_executables: set[Path]) -> list[
     return artifacts
 
 
-def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def write_json(path: Path, value: Any, *, compact: bool = False) -> None:
+    if compact:
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    else:
+        payload = json.dumps(value, indent=2, sort_keys=True) + "\n"
+    path.write_text(payload, encoding="utf-8")
 
 
 def sha256_file(path: Path) -> str:
