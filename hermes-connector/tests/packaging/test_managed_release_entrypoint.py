@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-COMMON_PACKAGING = Path(__file__).parents[2] / "packaging" / "common"
+CONNECTOR_ROOT = Path(__file__).parents[2]
+COMMON_PACKAGING = CONNECTOR_ROOT / "packaging" / "common"
 sys.path.insert(0, str(COMMON_PACKAGING))
 
 import hermes_managed_release
@@ -154,3 +155,28 @@ def test_managed_release_rejects_wheelhouse_for_different_lock(
 
     with pytest.raises(WheelhouseError, match="lock mismatch"):
         assembler.build(_inputs())
+
+
+def test_production_code_cannot_bypass_managed_release_composition() -> None:
+    """Customer-runtime code must never instantiate the PATH-capable layout engine directly."""
+
+    allowed = {
+        (COMMON_PACKAGING / "hermes_local_release.py").resolve(),
+        (COMMON_PACKAGING / "hermes_managed_release.py").resolve(),
+    }
+    violations: list[str] = []
+    for path in CONNECTOR_ROOT.rglob("*.py"):
+        resolved = path.resolve()
+        if resolved in allowed or "tests" in path.parts:
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if "ReleaseBuilder(" in source:
+            violations.append(str(path.relative_to(CONNECTOR_ROOT)))
+
+    assert violations == [], (
+        "production code must assemble customer runtimes through ManagedReleaseAssembler; "
+        f"direct ReleaseBuilder use found in: {violations}"
+    )
