@@ -68,6 +68,7 @@ jobs:
           mkdir -p "$bundle"
           cp "$RUNNER_TEMP"/cloud-dist/hermes_cloud-*.whl "$bundle/"
           cp -a hermes-cloud/deploy/test_server "$bundle/deploy"
+          test -f "$bundle/deploy/.integration-snapshot.lock"
           cat > "$bundle/RELEASE.txt" <<EOF
           repository_commit=$RELEASE_COMMIT
           cloud_version=0.1.0
@@ -79,14 +80,15 @@ jobs:
             find . -type f ! -name SHA256SUMS -print0 \
               | sort -z \
               | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
           )
-          test -s "$bundle/SHA256SUMS"
       - name: Upload Cloud staging bundle
         uses: actions/upload-artifact@v4
         with:
           name: hermes-cloud-staging-${{ github.event.pull_request.head.sha || github.sha }}
           path: ${{ runner.temp }}/cloud-staging
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 14
           compression-level: 0
 
