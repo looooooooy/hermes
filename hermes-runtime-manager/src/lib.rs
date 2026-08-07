@@ -8,6 +8,8 @@ pub mod ports;
 pub mod toolchain;
 #[cfg(windows)]
 pub mod windows_pipe;
+#[cfg(windows)]
+pub mod windows_secret_store;
 
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
@@ -15,3 +17,5 @@ pub use blank_machine::{
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
+#[cfg(windows)]
+pub use windows_secret_store::WindowsCredentialSecretStore;
