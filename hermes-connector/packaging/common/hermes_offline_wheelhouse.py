@@ -58,6 +58,30 @@ class VerifiedWheelhouseV1:
     manifest_sha256: str
     manifest: WheelhouseManifestV1
 
+    # Compatibility accessors intentionally expose the original read API while the
+    # manifest remains the single source of truth.  Release tooling may therefore
+    # migrate to ``verified.manifest`` incrementally without duplicating target/lock
+    # state or breaking an older qualified payload helper.
+    @property
+    def platform(self) -> str:
+        return self.manifest.platform
+
+    @property
+    def architecture(self) -> str:
+        return self.manifest.architecture
+
+    @property
+    def python_tag(self) -> str:
+        return self.manifest.python_tag
+
+    @property
+    def locks(self) -> Mapping[str, str]:
+        return self.manifest.locks
+
+    @property
+    def artifacts(self) -> tuple[WheelArtifactV1, ...]:
+        return self.manifest.artifacts
+
     def require_lock(self, name: str, sha256: str) -> None:
         expected = self.manifest.locks.get(name)
         if expected != sha256:
