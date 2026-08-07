@@ -20,17 +20,20 @@ class InvalidTransition(ValueError):
 
 # State machine:
 #   CREATED -> STARTING -> READY -> STOPPING -> STOPPED
-#                  |          |          ^
-#                  +-> FAILED <-+          |
-#                        +-----------------+
+#      |              |          |          ^
+#      +-> FAILED <---+----------+----------+
+#          |
+#          +-----------------------------> STOPPING
 #
 # Invariants:
 #   - Lifecycle tracks component ownership and fatal failure, not dependency health.
+#   - A pre-start hook may fail before STARTING; CREATED -> FAILED preserves that
+#     original startup failure instead of replacing it with InvalidTransition.
 #   - External readiness additionally requires every critical dependency to be healthy.
 #   - STOPPED is terminal for a component instance.
 #   - FAILED components must pass through STOPPING before STOPPED.
 _ALLOWED_TRANSITIONS: dict[LifecycleState, frozenset[LifecycleState]] = {
-    LifecycleState.CREATED: frozenset({LifecycleState.STARTING}),
+    LifecycleState.CREATED: frozenset({LifecycleState.STARTING, LifecycleState.FAILED}),
     LifecycleState.STARTING: frozenset({LifecycleState.READY, LifecycleState.FAILED}),
     LifecycleState.READY: frozenset({LifecycleState.STOPPING, LifecycleState.FAILED}),
     LifecycleState.FAILED: frozenset({LifecycleState.STOPPING}),

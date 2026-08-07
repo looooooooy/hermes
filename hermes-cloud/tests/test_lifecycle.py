@@ -37,6 +37,7 @@ def _lifecycle_at(state: LifecycleState) -> ComponentLifecycle:
     ("source", "target"),
     [
         (LifecycleState.CREATED, LifecycleState.STARTING),
+        (LifecycleState.CREATED, LifecycleState.FAILED),
         (LifecycleState.STARTING, LifecycleState.READY),
         (LifecycleState.STARTING, LifecycleState.FAILED),
         (LifecycleState.READY, LifecycleState.STOPPING),
@@ -75,6 +76,22 @@ def test_lifecycle_rejects_undeclared_transitions(
         lifecycle.transition(target)
 
     assert lifecycle.state is source
+
+
+def test_pre_start_failure_can_be_stopped_without_masking_original_error() -> None:
+    lifecycle = ComponentLifecycle("test-component")
+
+    lifecycle.transition(LifecycleState.FAILED)
+    assert lifecycle.state is LifecycleState.FAILED
+    assert lifecycle.is_live is True
+    assert lifecycle.is_ready is False
+
+    lifecycle.transition(LifecycleState.STOPPING)
+    lifecycle.transition(LifecycleState.STOPPED)
+
+    assert lifecycle.state is LifecycleState.STOPPED
+    assert lifecycle.is_live is False
+    assert lifecycle.is_ready is False
 
 
 def test_readiness_is_true_only_in_ready_state() -> None:
