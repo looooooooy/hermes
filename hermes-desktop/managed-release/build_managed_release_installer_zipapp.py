@@ -19,6 +19,7 @@ MODULES = (
     "hermes_offline_wheelhouse.py",
     "hermes_private_toolchain.py",
     "hermes_target_runtime_plan.py",
+    "hermes_wheelhouse_provenance.py",
 )
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 
