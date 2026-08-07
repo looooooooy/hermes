@@ -6,7 +6,6 @@ use crate::ipc::{
 };
 use crate::local_ipc::dispatch_read_only;
 use crate::RuntimeManager;
-use std::ffi::c_void;
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
 use thiserror::Error;
@@ -183,17 +182,15 @@ fn client_pid(pipe: HANDLE) -> Result<u32, WindowsPipeError> {
 }
 
 fn verify_client_same_user(pipe: HANDLE) -> Result<bool, WindowsPipeError> {
-    // The server verifies identity after receiving a complete bounded request frame and
-    // before dispatching it. Impersonation is immediately reverted on every path.
+    // Identity is checked after a complete bounded request frame is read but before
+    // any request is dispatched. The impersonation is reverted on every exit path.
     if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
         return Err(last_error());
     }
     let result = (|| {
         let client_token = open_thread_token()?;
         let server_token = open_process_token()?;
-        let client_sid = token_user_sid(client_token.raw())?;
-        let server_sid = token_user_sid(server_token.raw())?;
-        Ok(unsafe { EqualSid(client_sid, server_sid) != 0 })
+        same_token_user(client_token.raw(), server_token.raw())
     })();
     let reverted = unsafe { RevertToSelf() };
     if reverted == 0 {
@@ -218,40 +215,6 @@ fn open_process_token() -> Result<OwnedHandle, WindowsPipeError> {
     } else {
         OwnedHandle::new(token)
     }
-}
-
-fn token_user_sid(token: HANDLE) -> Result<*mut c_void, WindowsPipeError> {
-    let mut required = 0u32;
-    unsafe {
-        GetTokenInformation(token, TokenUser, null_mut(), 0, &mut required);
-    }
-    if required == 0 || required > 64 * 1024 {
-        return Err(WindowsPipeError::Identity("invalid TokenUser size"));
-    }
-    let mut buffer = vec![0u8; required as usize];
-    if unsafe {
-        GetTokenInformation(
-            token,
-            TokenUser,
-            buffer.as_mut_ptr().cast(),
-            required,
-            &mut required,
-        )
-    } == 0
-    {
-        return Err(last_error());
-    }
-    let token_user = unsafe { &*(buffer.as_ptr().cast::<TOKEN_USER>()) };
-    let sid = token_user.User.Sid;
-    if sid.is_null() {
-        return Err(WindowsPipeError::Identity("TokenUser SID is null"));
-    }
-    // The caller compares the SID immediately while `buffer` is alive.  Returning a
-    // raw pointer from this helper would outlive the buffer, so this function is only
-    // used through `same_token_user` below in the final implementation.
-    Err(WindowsPipeError::Identity(
-        "internal SID lifetime guard must use same_token_user",
-    ))
 }
 
 fn same_token_user(left: HANDLE, right: HANDLE) -> Result<bool, WindowsPipeError> {
