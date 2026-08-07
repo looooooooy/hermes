@@ -100,4 +100,27 @@ impl RuntimeManager {
             .map_err(|_| ManagerError::StateLock)? = Some(generation.into());
         Ok(())
     }
+
+    pub fn record_rollback(
+        &self,
+        restored_release_id: impl Into<String>,
+        failed_release_id: impl Into<String>,
+        restored_generation: Option<String>,
+    ) -> Result<(), ManagerError> {
+        let restored_release_id = restored_release_id.into();
+        let failed_release_id = failed_release_id.into();
+        *self
+            .active_release
+            .write()
+            .map_err(|_| ManagerError::StateLock)? = Some(restored_release_id);
+        *self
+            .previous_release
+            .write()
+            .map_err(|_| ManagerError::StateLock)? = Some(failed_release_id);
+        *self
+            .runtime_generation
+            .write()
+            .map_err(|_| ManagerError::StateLock)? = restored_generation;
+        Ok(())
+    }
 }
