@@ -15,6 +15,7 @@ const INSTALLED_MANIFEST_NAME: &str = "TOOLCHAIN-MANIFEST.json";
 // evidence, but still bound manifest parsing to a small, explicit release-input size.
 const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+const COPY_BUFFER_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolchainBundleFileV1 {
@@ -277,7 +278,9 @@ fn copy_verified(
         .write(true)
         .create_new(true)
         .open(destination)?;
-    let mut buffer = [0u8; 1024 * 1024];
+    // Heap allocation avoids overflowing the smaller default Windows thread stack
+    // while retaining a 1 MiB copy/hash chunk size.
+    let mut buffer = vec![0u8; COPY_BUFFER_BYTES];
     let mut digest = Sha256::new();
     let mut total = 0u64;
     loop {
@@ -360,7 +363,9 @@ fn validate_absolute_root(path: &Path) -> Result<(), ToolchainInstallError> {
 fn sha256_file(path: &Path) -> Result<String, ToolchainInstallError> {
     let mut file = fs::File::open(path)?;
     let mut digest = Sha256::new();
-    let mut buffer = [0u8; 1024 * 1024];
+    // Hashing every file in a real CPython tree is intentionally complete, but the
+    // scratch buffer belongs on the heap so Windows is not sensitive to thread-stack size.
+    let mut buffer = vec![0u8; COPY_BUFFER_BYTES];
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
