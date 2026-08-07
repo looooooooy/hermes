@@ -13,6 +13,7 @@ from urllib.request import url2pathname
 from hermes_offline_wheelhouse import load_verified_wheelhouse
 
 _MAX_DIRECT_URL_BYTES = 64 * 1024
+_RELEASE_PROJECT_DIST_INFO = ("hermes_agent-", "hermes_connector-")
 
 
 class WheelhouseProvenanceError(RuntimeError):
@@ -60,7 +61,11 @@ def _verify_wheelhouse_direct_urls(
 
     for raw_path in direct_url_paths:
         metadata_path = Path(raw_path)
-        if metadata_path.is_symlink() or not metadata_path.is_file():
+        if (
+            metadata_path.is_symlink()
+            or not metadata_path.is_file()
+            or metadata_path.parent.is_symlink()
+        ):
             raise WheelhouseProvenanceError(
                 "dependency direct_url metadata is missing or symlinked"
             )
@@ -73,6 +78,17 @@ def _verify_wheelhouse_direct_urls(
             ) from exc
         if metadata_path.stat().st_size > _MAX_DIRECT_URL_BYTES:
             raise WheelhouseProvenanceError("dependency direct_url metadata is oversized")
+
+        # Core and Connector are installed as the two final release project wheels, not
+        # from the dependency wheelhouse. Their exact wheel SHA-256 values are already
+        # bound and verified independently by ReleaseInputs / the release manifest.
+        # The runtime verifier historically attempted to exclude these records itself,
+        # but normalized '-' to '_' and then tested a '-' separator, making the filter
+        # impossible to match. Exclude only these exact project dist-info families here;
+        # every third-party dependency continues through strict wheelhouse provenance.
+        if _is_release_project_metadata(metadata_path):
+            continue
+
         try:
             value = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -148,6 +164,13 @@ def _verify_wheelhouse_direct_urls(
                     raise WheelhouseProvenanceError(
                         "dependency PEP 610 SHA-256 disagrees with wheelhouse"
                     )
+
+
+def _is_release_project_metadata(metadata_path: Path) -> bool:
+    parent_name = metadata_path.parent.name.casefold()
+    return parent_name.endswith(".dist-info") and any(
+        parent_name.startswith(prefix) for prefix in _RELEASE_PROJECT_DIST_INFO
+    )
 
 
 def _sha256(path: Path) -> str:
