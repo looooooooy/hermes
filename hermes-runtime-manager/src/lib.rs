@@ -13,6 +13,7 @@ pub mod ports;
 pub mod release_control;
 pub mod toolchain;
 pub mod update_download;
+pub mod update_http;
 #[cfg(windows)]
 pub mod windows_pipe;
 #[cfg(windows)]
@@ -51,6 +52,7 @@ pub use update_download::{
     ArtifactDownloadSpecV1, ArtifactRangeSource, DownloadChunkV1, ReleaseArtifactKindV1,
     UpdateDownloadError,
 };
+pub use update_http::{HttpDownloadGrantV1, HttpRangeSource};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
 #[cfg(windows)]
