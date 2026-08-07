@@ -10,6 +10,8 @@ on:
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
+      - "hermes-cloud/src/hermes_cloud/modules/release_update/**"
+      - "hermes-cloud/tests/release_update/**"
       - ".github/workflows/hermes-release-update-plane.yml"
   pull_request:
     paths:
@@ -18,6 +20,8 @@ on:
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
+      - "hermes-cloud/src/hermes_cloud/modules/release_update/**"
+      - "hermes-cloud/tests/release_update/**"
       - ".github/workflows/hermes-release-update-plane.yml"
 
 permissions:
@@ -48,6 +52,22 @@ jobs:
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
         run: cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml -- version
+
+  cloud-update-policy:
+    name: Cloud update rollout policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install policy test runner
+        run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Test deterministic cohort, enterprise pin, mandatory update, rollback and grant policy
+        env:
+          PYTHONPATH: hermes-cloud/src
+        run: python -m pytest -q hermes-cloud/tests/release_update/test_update_check_service.py
 
   oss-publisher:
     name: Alibaba OSS immutable publisher contract
