@@ -44,3 +44,19 @@ jobs:
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
         run: cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml -- version
+
+  oss-publisher:
+    name: Alibaba OSS immutable publisher contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pinned OSS SDK V2 and publisher tests
+        run: python -m pip install --disable-pip-version-check -e "./hermes-release-publisher[dev]"
+      - name: Test immutable artifacts, monotonic control pointers, and SDK request surface
+        run: python -m pytest -q hermes-release-publisher/tests
+      - name: Exercise content-addressed publication planning CLI
+        run: hermes-release-publisher plan-artifact hermes-release-publisher/pyproject.toml --namespace evidence
