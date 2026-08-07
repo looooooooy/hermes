@@ -1,7 +1,7 @@
 """Pinned Hermes toolchain execution for blank-machine Managed Runtime builds.
 
 The runner is independent of shell PATH discovery and can be bound to a verified,
-closed wheelhouse.  Every uv project sync uses the declared private Python, disables
+closed wheelhouse. Every uv project sync uses the declared private Python, disables
 network/index/config discovery, and searches only the verified local wheel set.
 """
 
@@ -20,6 +20,7 @@ from typing import Mapping, Protocol
 from hermes_offline_wheelhouse import VerifiedWheelhouseV1
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_MAX_FAILURE_DIAGNOSTIC = 4096
 
 
 class PrivateToolchainError(RuntimeError):
@@ -72,10 +73,15 @@ class SubprocessExecutor:
             argv,
             cwd=cwd,
             env=dict(environment),
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
+        if completed.returncode != 0:
+            diagnostic = _bounded_diagnostic(completed.stderr or completed.stdout)
+            raise PrivateToolchainError(
+                f"private toolchain command failed with exit {completed.returncode}: {diagnostic}"
+            )
         return ToolchainCommandResult(stdout=completed.stdout)
 
 
@@ -126,6 +132,18 @@ class PinnedToolchainRunner:
             cwd=Path(command.cwd),
             environment=MappingProxyType(environment),
         )
+
+
+def _bounded_diagnostic(value: str) -> str:
+    # Toolchain commands run without shell interpolation and without credentials.
+    # Still keep failure material bounded and single-line so CI cannot accidentally
+    # turn a resolver diagnostic into an unbounded log surface.
+    normalized = " ".join(value.replace("\x00", "").split())
+    if not normalized:
+        return "no diagnostic output"
+    if len(normalized) > _MAX_FAILURE_DIAGNOSTIC:
+        normalized = normalized[-_MAX_FAILURE_DIAGNOSTIC:]
+    return normalized
 
 
 def _bind_uv_python(argv: list[str], python: Path) -> None:
