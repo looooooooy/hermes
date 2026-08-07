@@ -1,0 +1,120 @@
+name: Hermes Desktop bootstrap payload
+
+on:
+  push:
+    branches:
+      - "feature/hermes-desktop-foundation-*"
+    paths:
+      - "hermes-desktop/bootstrap/**"
+      - "hermes-desktop/src-tauri/**"
+      - "hermes-runtime-manager/**"
+      - ".github/workflows/hermes-desktop-bootstrap-payload.yml"
+  pull_request:
+    paths:
+      - "hermes-desktop/bootstrap/**"
+      - "hermes-desktop/src-tauri/**"
+      - "hermes-runtime-manager/**"
+      - ".github/workflows/hermes-desktop-bootstrap-payload.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-desktop-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap-payload:
+    name: Bootstrap payload / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x86_64
+            desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+          - os: macos-latest
+            target: macos-aarch64
+            desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+          - os: windows-latest
+            target: windows-x86_64
+            desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop.exe
+            runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Linux Desktop prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Install Desktop frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Build Desktop frontend
+        working-directory: hermes-desktop
+        run: npm run build
+      - name: Build Hermes Desktop release binary
+        run: >-
+          cargo build --release
+          --manifest-path hermes-desktop/src-tauri/Cargo.toml
+          --bin hermes-desktop
+      - name: Build standalone Runtime Manager release binary
+        run: >-
+          cargo build --release
+          --manifest-path hermes-runtime-manager/Cargo.toml
+          --bin hermes-runtime-manager
+      - name: Build unqualified Private Toolchain
+        run: >-
+          python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
+          --lock hermes-runtime-manager/toolchains/upstream-lock-v1.json
+          --target ${{ matrix.target }}
+          --output "${{ runner.temp }}/hermes-toolchain-unqualified"
+      - name: Qualify Private Toolchain source and license evidence
+        run: >-
+          python hermes-runtime-manager/toolchains/qualify_toolchain_bundle.py
+          --bundle "${{ runner.temp }}/hermes-toolchain-unqualified"
+          --license-lock hermes-runtime-manager/toolchains/license-source-lock-v1.json
+          --output "${{ runner.temp }}/hermes-toolchain-qualified"
+      - name: Assemble Desktop bootstrap qualification payload
+        run: >-
+          python hermes-desktop/bootstrap/assemble_bootstrap_payload.py
+          --target ${{ matrix.target }}
+          --desktop-version 0.1.0
+          --desktop-binary "${{ matrix.desktop_binary }}"
+          --runtime-manager "${{ matrix.runtime_manager }}"
+          --qualified-toolchain "${{ runner.temp }}/hermes-toolchain-qualified"
+          --output "${{ runner.temp }}/hermes-bootstrap-payload"
+      - name: Verify payload with poisoned host PATH
+        run: >-
+          python hermes-desktop/bootstrap/validate_bootstrap_payload.py
+          --payload "${{ runner.temp }}/hermes-bootstrap-payload"
+          --expected-target ${{ matrix.target }}
+      - name: Upload unsigned qualification payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-bootstrap-qualification-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ runner.temp }}/hermes-bootstrap-payload
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
