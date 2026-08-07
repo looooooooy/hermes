@@ -23,3 +23,20 @@ def test_pinned_oss_sdk_v2_exposes_required_object_operations() -> None:
     assert hasattr(oss.Client, "put_object_from_file")
     assert hasattr(oss.Client, "head_object")
     assert hasattr(oss.exceptions, "OperationError")
+
+
+def test_pinned_oss_sdk_v2_exposes_repository_doctor_operations() -> None:
+    assert oss.GetBucketAclRequest(bucket="hermes-release-artifacts").bucket == "hermes-release-artifacts"
+    assert oss.GetBucketVersioningRequest(bucket="hermes-release-artifacts").bucket == "hermes-release-artifacts"
+    assert oss.GetBucketEncryptionRequest(bucket="hermes-release-artifacts").bucket == "hermes-release-artifacts"
+    assert oss.GetBucketLifecycleRequest(bucket="hermes-release-staging").bucket == "hermes-release-staging"
+    assert oss.ListCnameRequest(bucket="hermes-release-artifacts").bucket == "hermes-release-artifacts"
+
+    for method in (
+        "get_bucket_acl",
+        "get_bucket_versioning",
+        "get_bucket_encryption",
+        "get_bucket_lifecycle",
+        "list_cname",
+    ):
+        assert hasattr(oss.Client, method), method
