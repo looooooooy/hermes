@@ -2,8 +2,8 @@ use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceMa
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
 use hermes_runtime_manager::{
-    run_blank_machine_toolchain_gate, verify_portable_plugin_signature, PrivateToolchainInstaller,
-    RuntimeManager,
+    run_blank_machine_toolchain_gate, verify_portable_plugin_signature,
+    verify_release_control_files, PrivateToolchainInstaller, RuntimeManager,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,6 +22,10 @@ fn main() {
     }
     if command == "verify-plugin-signature" {
         verify_plugin_signature_command(&args);
+        return;
+    }
+    if command == "verify-release-control" {
+        verify_release_control_command(&args);
         return;
     }
 
@@ -63,7 +67,7 @@ fn main() {
         other => {
             eprintln!("unsupported command: {other}");
             eprintln!(
-                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, version"
+                "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, verify-release-control, version"
             );
             std::process::exit(64);
         }
@@ -128,6 +132,30 @@ fn verify_plugin_signature_command(args: &[String]) {
         Err(error) => {
             eprintln!("runtime_manager_plugin_signature_error: {error}");
             std::process::exit(9);
+        }
+    }
+}
+
+fn verify_release_control_command(args: &[String]) {
+    if args.len() != 7 {
+        eprintln!(
+            "usage: hermes-runtime-manager verify-release-control <release-envelope.json> <channel-envelope.json> <block-envelope.json> <release-trust-store.json> <observed-state.json>"
+        );
+        std::process::exit(64);
+    }
+    let release = PathBuf::from(&args[2]);
+    let channel = PathBuf::from(&args[3]);
+    let block = PathBuf::from(&args[4]);
+    let trust_store = PathBuf::from(&args[5]);
+    let observed = PathBuf::from(&args[6]);
+    match verify_release_control_files(&release, &channel, &block, &trust_store, &observed) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("release control report serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_release_control_error: {error}");
+            std::process::exit(10);
         }
     }
 }
