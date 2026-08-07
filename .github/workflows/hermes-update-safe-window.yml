@@ -32,6 +32,7 @@ on:
       - "hermes-runtime-manager/tests/windows_host_update_safety_pipe.rs"
       - "hermes-runtime-manager/tests/update_safe_window.rs"
       - "hermes-runtime-manager/tests/update_safe_window_composition.rs"
+      - "hermes-runtime-manager/tests/windows_update_safe_window_composition.rs"
       - ".github/workflows/hermes-update-safe-window.yml"
   pull_request:
     paths:
@@ -58,6 +59,7 @@ on:
       - "hermes-runtime-manager/tests/windows_host_update_safety_pipe.rs"
       - "hermes-runtime-manager/tests/update_safe_window.rs"
       - "hermes-runtime-manager/tests/update_safe_window_composition.rs"
+      - "hermes-runtime-manager/tests/windows_update_safe_window_composition.rs"
       - ".github/workflows/hermes-update-safe-window.yml"
 
 permissions:
@@ -110,18 +112,28 @@ jobs:
   windows-host-authority:
     name: Windows Host authority relay / windows-latest
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Use stable Rust for cross-language contract
+        run: rustup default stable
       - name: Install focused Windows relay dependencies
         run: python -m pip install -e hermes-agent-plugin pytest
       - name: Test SID-bound Windows update-safety relay
         run: >-
           python -m pytest
           hermes-agent-plugin/tests/unit/adapters/platform/windows/test_update_safety_relay.py
+          -k "not python_relay_to_rust_runtime_manager_contract"
+      - name: Test Python Agent relay to Rust Runtime Manager contract
+        env:
+          HERMES_RUN_WINDOWS_UPDATE_SAFETY_CROSS_LANGUAGE: "1"
+        run: >-
+          python -m pytest
+          hermes-agent-plugin/tests/unit/adapters/platform/windows/test_update_safety_relay.py
+          -k python_relay_to_rust_runtime_manager_contract
 
   safe-window:
     name: Draining safe window / ${{ matrix.os }}
@@ -148,6 +160,9 @@ jobs:
       - name: Test authoritative source through a complete Unix Coordinator transaction
         if: runner.os != 'Windows'
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --test update_safe_window_composition
+      - name: Test authoritative source through a complete Windows Coordinator transaction
+        if: runner.os == 'Windows'
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --test windows_update_safe_window_composition
       - name: Test idempotent Connector drain/reconcile
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests
       - name: Re-run coordinator transaction contract
