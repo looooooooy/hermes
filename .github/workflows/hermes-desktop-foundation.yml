@@ -1,0 +1,94 @@
+name: Hermes Desktop foundation
+
+on:
+  push:
+    branches:
+      - "feature/hermes-desktop-foundation-*"
+    paths:
+      - "hermes-desktop/**"
+      - "hermes-runtime-manager/**"
+      - ".github/workflows/hermes-desktop-foundation.yml"
+  pull_request:
+    paths:
+      - "hermes-desktop/**"
+      - "hermes-runtime-manager/**"
+      - ".github/workflows/hermes-desktop-foundation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-desktop-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Svelte desktop shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Static check
+        working-directory: hermes-desktop
+        run: npm run check
+      - name: Build frontend
+        working-directory: hermes-desktop
+        run: npm run build
+
+  runtime-manager:
+    name: Runtime Manager / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Test shared lifecycle core
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --all-targets
+      - name: Check status CLI
+        run: cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml -- status
+
+  tauri-shell:
+    name: Tauri native shell / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Linux Tauri prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Install frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Check native shell
+        run: cargo check --manifest-path hermes-desktop/src-tauri/Cargo.toml
