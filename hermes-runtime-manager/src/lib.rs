@@ -1,6 +1,8 @@
 pub mod blank_machine;
 pub mod ipc;
 #[cfg(target_os = "linux")]
+pub mod linux_secret_service;
+#[cfg(target_os = "linux")]
 pub mod linux_systemd_user;
 pub mod local_ipc;
 pub mod manager;
@@ -20,6 +22,8 @@ pub mod windows_task_scheduler;
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
 };
+#[cfg(target_os = "linux")]
+pub use linux_secret_service::LinuxSecretServiceStore;
 #[cfg(target_os = "linux")]
 pub use linux_systemd_user::{LinuxSystemdUserBootstrap, LinuxSystemdUserStatus};
 pub use manager::{ManagerError, RuntimeManager};
