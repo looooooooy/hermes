@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.hermes.local/local/update-safety-snapshot-v1.schema.json",
+  "title": "Hermes authoritative Host update safety snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile",
+    "runtime_generation",
+    "active_tasks",
+    "pending_approvals",
+    "pending_clarifications",
+    "evidence_complete"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_.-]+$"
+    },
+    "runtime_generation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "active_tasks": {
+      "$ref": "#/$defs/boundedCount"
+    },
+    "pending_approvals": {
+      "$ref": "#/$defs/boundedCount"
+    },
+    "pending_clarifications": {
+      "$ref": "#/$defs/boundedCount"
+    },
+    "evidence_complete": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "boundedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    }
+  }
+}
