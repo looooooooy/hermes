@@ -11,6 +11,8 @@ on:
       - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/managed_payload_archive.rs"
+      - "hermes-runtime-manager/src/managed_release_stager.rs"
       - "hermes-runtime-manager/src/manager.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
@@ -28,6 +30,8 @@ on:
       - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
       - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/managed_payload_archive.rs"
+      - "hermes-runtime-manager/src/managed_release_stager.rs"
       - "hermes-runtime-manager/src/manager.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
@@ -53,7 +57,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Use stable Rust
@@ -64,6 +68,10 @@ jobs:
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_download::tests
       - name: Test strict HTTPS Range grant and transport contracts
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_http::tests
+      - name: Test deterministic tar.zst packing and safe extraction contracts
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml managed_payload_archive::tests
+      - name: Test private-python Managed Release staging preconditions
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml managed_release_stager::tests
       - name: Test transactional update coordinator, safe-window, rollback, and recovery contracts
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_coordinator::tests
       - name: Test concrete HTTPS fetcher, exact-release activation, health, and rollback adapters
