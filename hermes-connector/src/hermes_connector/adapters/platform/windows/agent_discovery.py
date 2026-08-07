@@ -30,7 +30,13 @@ _PROFILE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 class WindowsAgentDiscovery:
     """Discover one Host authority through a SID-bound discovery Named Pipe."""
 
-    def __init__(self, *, timeout_seconds: float = 1.5) -> None:
+    def __init__(
+        self,
+        _registry_directory: Path | None = None,
+        _socket_directory: Path | None = None,
+        *,
+        timeout_seconds: float = 1.5,
+    ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         self._timeout_seconds = timeout_seconds
@@ -40,7 +46,14 @@ class WindowsAgentDiscovery:
             return ()
         try:
             endpoint = await asyncio.to_thread(self._discover_sync, profile)
-        except (OSError, TimeoutError, ValueError, PermissionError, UnicodeError):
+        except (
+            OSError,
+            TimeoutError,
+            TypeError,
+            ValueError,
+            PermissionError,
+            UnicodeError,
+        ):
             return ()
         return () if endpoint is None else (endpoint,)
 
@@ -70,6 +83,7 @@ class WindowsAgentDiscovery:
                 maximum=_MAX_DESCRIPTOR_BYTES,
                 deadline=time.monotonic() + self._timeout_seconds,
             )
+            server_pid = connection.server_pid
         finally:
             connection.close()
         value = json.loads(raw.decode("utf-8"))
@@ -78,7 +92,7 @@ class WindowsAgentDiscovery:
         if value.get("version") != DISCOVERY_DESCRIPTOR_VERSION:
             return None
         pid = value.get("pid")
-        if type(pid) is not int or pid != connection.server_pid or pid <= 0:
+        if type(pid) is not int or pid != server_pid or pid <= 0:
             return None
         if value.get("profile") != profile:
             return None
@@ -102,10 +116,13 @@ class WindowsAgentDiscovery:
         socket_path = value.get("socket_path")
         if socket_path != gateway_name:
             return None
+        executable = value.get("process_executable")
+        if not isinstance(executable, str):
+            return None
         process_identity = normalize_process_identity(
             ProcessIdentityEvidence(
                 start_time_ns=value.get("process_start_time_ns"),
-                executable_path=Path(value.get("process_executable", "")),
+                executable_path=Path(executable),
                 executable_device=value.get("process_executable_device"),
                 executable_inode=value.get("process_executable_inode"),
             )
