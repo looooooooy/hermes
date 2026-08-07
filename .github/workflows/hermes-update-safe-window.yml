@@ -1,0 +1,50 @@
+name: Hermes Update Safe Window
+
+on:
+  push:
+    branches:
+      - "feature/hermes-release-update-safety-*"
+    paths:
+      - "hermes-runtime-manager/src/update_safe_window.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
+      - "hermes-runtime-manager/src/update_coordinator.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/tests/update_safe_window.rs"
+      - ".github/workflows/hermes-update-safe-window.yml"
+  pull_request:
+    paths:
+      - "hermes-runtime-manager/src/update_safe_window.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
+      - "hermes-runtime-manager/src/update_coordinator.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/tests/update_safe_window.rs"
+      - ".github/workflows/hermes-update-safe-window.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-update-safe-window-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safe-window:
+    name: Draining safe window / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Test draining Host-authoritative safe-window contract
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --test update_safe_window
+      - name: Test idempotent Connector drain/reconcile
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests
+      - name: Re-run coordinator transaction contract
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_coordinator::tests
+      - name: Compile Runtime Manager
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
