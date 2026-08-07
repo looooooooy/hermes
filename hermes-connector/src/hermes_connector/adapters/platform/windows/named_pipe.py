@@ -107,7 +107,7 @@ def _configure(kernel32: object, advapi32: object) -> None:
 
 
 def libraries() -> tuple[object, object]:
-    global _LIBRARIES  # noqa: PLW0603
+    global _LIBRARIES
     if os.name != "nt":
         raise RuntimeError("Windows Named Pipe client requires Windows")
     if _LIBRARIES is None:
@@ -200,7 +200,7 @@ def profile_pipe_name(role: str, profile: str, *, user_sid: str | None = None) -
     if not isinstance(profile, str) or _PROFILE.fullmatch(profile) is None:
         raise ValueError("profile is invalid")
     sid = user_sid or current_user_sid_string()
-    digest = hashlib.sha256(f"{sid}\0{profile}".encode("utf-8")).hexdigest()[:24]
+    digest = hashlib.sha256(f"{sid}\0{profile}".encode()).hexdigest()[:24]
     return rf"\\.\pipe\HermesLocal-{role}-{digest}"
 
 
