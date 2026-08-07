@@ -84,7 +84,7 @@ jobs:
           - os: windows-latest
             target: windows-x86_64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -92,17 +92,23 @@ jobs:
           python-version: "3.13"
       - name: Use stable Rust
         run: rustup default stable
-      - name: Build Hermes toolchain bundle from pinned upstream assets
+      - name: Build unqualified Hermes toolchain bundle from pinned upstream assets
         run: >-
           python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
           --lock hermes-runtime-manager/toolchains/upstream-lock-v1.json
           --target ${{ matrix.target }}
-          --output "${{ runner.temp }}/hermes-toolchain-bundle"
-      - name: Install with the customer-side Runtime Manager installer
+          --output "${{ runner.temp }}/hermes-toolchain-unqualified"
+      - name: Qualify source and license evidence before publication
+        run: >-
+          python hermes-runtime-manager/toolchains/qualify_toolchain_bundle.py
+          --bundle "${{ runner.temp }}/hermes-toolchain-unqualified"
+          --license-lock hermes-runtime-manager/toolchains/license-source-lock-v1.json
+          --output "${{ runner.temp }}/hermes-toolchain-qualified"
+      - name: Install only the qualified bundle with the customer-side Runtime Manager
         run: >-
           cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml --
           install-toolchain
-          "${{ runner.temp }}/hermes-toolchain-bundle"
+          "${{ runner.temp }}/hermes-toolchain-qualified"
           "${{ runner.temp }}/hermes-toolchains"
       - name: Execute installed private Python and uv
         run: >-
