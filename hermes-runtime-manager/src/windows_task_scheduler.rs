@@ -12,7 +12,8 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::TaskScheduler::{
     IRegisteredTask, ITaskFolder, ITaskService, TaskScheduler, TASK_CREATE_OR_UPDATE,
-    TASK_LOGON_INTERACTIVE_TOKEN, TASK_RUNLEVEL_LUA, TASK_STATE_QUEUED, TASK_STATE_RUNNING,
+    TASK_LOGON_INTERACTIVE_TOKEN, TASK_LOGON_NONE, TASK_RUNLEVEL_LUA, TASK_STATE_QUEUED,
+    TASK_STATE_RUNNING,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE};
@@ -169,11 +170,6 @@ impl WindowsTaskSchedulerBootstrap {
     }
 }
 
-/// Owns one COM initialization together with the Task Scheduler service interface.
-///
-/// COM interfaces must be released while the apartment is still initialized. Rust
-/// runs a type's custom `Drop::drop` before automatically dropping its fields, so the
-/// service is held in an `Option` and explicitly released before `CoUninitialize`.
 struct TaskSchedulerApartment {
     service: Option<ITaskService>,
 }
@@ -233,12 +229,18 @@ fn validate_registered_principal(
         .map_err(|error| windows_operation("IRegisteredTask::Definition", error))?;
     let principal = unsafe { definition.Principal() }
         .map_err(|error| windows_operation("ITaskDefinition::Principal", error))?;
-    let user_id = unsafe { principal.UserId() }
-        .map_err(|error| windows_operation("IPrincipal::UserId", error))?
-        .to_string();
-    let logon_type = unsafe { principal.LogonType() }
+
+    let mut user_id = BSTR::default();
+    unsafe { principal.UserId(&mut user_id) }
+        .map_err(|error| windows_operation("IPrincipal::UserId", error))?;
+    let user_id = user_id.to_string();
+
+    let mut logon_type = TASK_LOGON_NONE;
+    unsafe { principal.LogonType(&mut logon_type) }
         .map_err(|error| windows_operation("IPrincipal::LogonType", error))?;
-    let run_level = unsafe { principal.RunLevel() }
+
+    let mut run_level = TASK_RUNLEVEL_LUA;
+    unsafe { principal.RunLevel(&mut run_level) }
         .map_err(|error| windows_operation("IPrincipal::RunLevel", error))?;
 
     if user_id != expected_user_sid {
