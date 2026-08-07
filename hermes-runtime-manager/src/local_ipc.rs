@@ -214,18 +214,18 @@ mod tests {
     fn unix_status_round_trip_uses_real_socket_and_shared_framing() {
         use std::fs;
         use std::os::unix::fs::PermissionsExt;
+        use std::path::Path;
         use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "hermes-runtime-manager-ipc-{}-{unique}",
-            std::process::id()
-        ));
-        let endpoint = root.join("runtime-manager.sock");
+            .subsec_nanos();
+        // `/tmp` plus a deliberately short leaf keeps the test inside macOS
+        // AF_UNIX SUN_LEN while still exercising a real filesystem socket.
+        let root = Path::new("/tmp").join(format!("hrm-{}-{unique}", std::process::id()));
+        let endpoint = root.join("rm.sock");
         let layout = Arc::new(DefaultInstallLayout::discover().expect("layout"));
         let manager = Arc::new(RuntimeManager::new(
             Arc::new(FailClosedServiceManager),
