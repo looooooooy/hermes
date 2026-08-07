@@ -11,6 +11,8 @@ pub mod windows_pipe;
 #[cfg(windows)]
 pub mod windows_secret_store;
 #[cfg(windows)]
+pub mod windows_task_execution;
+#[cfg(windows)]
 pub mod windows_task_scheduler;
 
 pub use blank_machine::{
@@ -21,6 +23,10 @@ pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, Too
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
+#[cfg(windows)]
+pub use windows_task_execution::{
+    run_registered_task_and_wait_for_fresh_completion, WindowsTaskRunEvidence,
+};
 #[cfg(windows)]
 pub use windows_task_scheduler::{
     WindowsScheduledAction, WindowsTaskRegistration, WindowsTaskSchedulerBootstrap,

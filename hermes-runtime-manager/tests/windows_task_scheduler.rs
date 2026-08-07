@@ -1,6 +1,9 @@
 #![cfg(windows)]
 
-use hermes_runtime_manager::{WindowsScheduledAction, WindowsTaskSchedulerBootstrap};
+use hermes_runtime_manager::{
+    run_registered_task_and_wait_for_fresh_completion, WindowsScheduledAction,
+    WindowsTaskSchedulerBootstrap,
+};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,13 +52,14 @@ fn current_user_logon_task_registers_runs_runtime_manager_and_cleans_up() {
         assert!(xml.contains("version"));
         assert!(!xml.to_ascii_lowercase().contains("<password>"));
         assert!(!xml.to_ascii_lowercase().contains("highestavailable"));
-        // Least-privilege semantics are verified by the adapter via the registered
-        // TaskDefinition Principal.RunLevel == TASK_RUNLEVEL_LUA. The Task Scheduler
-        // service is allowed to omit default-valued RunLevel from serialized XML.
+        // Least-privilege semantics are verified by the registration adapter through
+        // TaskDefinition Principal.RunLevel == TASK_RUNLEVEL_LUA. The service may omit
+        // default-valued RunLevel from the serialized XML.
 
-        scheduler
-            .run_and_wait(&task_name)
-            .expect("manually run scheduled Runtime Manager version probe");
+        let evidence = run_registered_task_and_wait_for_fresh_completion(&task_name)
+            .expect("fresh scheduled Runtime Manager run must complete");
+        assert!(evidence.last_run_time_after > evidence.last_run_time_before);
+        assert_eq!(evidence.last_task_result, 0);
         Ok::<(), Box<dyn std::error::Error>>(())
     })();
 
