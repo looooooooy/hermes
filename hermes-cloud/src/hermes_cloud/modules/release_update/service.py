@@ -21,7 +21,11 @@ from .ports import DownloadGrantIssuerPort, OsCompatibilityPort, ReleaseCatalogP
 
 
 class UpdateCheckPolicyError(RuntimeError):
-    """Release update policy or grant output is invalid."""
+    """Client-supplied update context is invalid."""
+
+
+class UpdateCheckUnavailable(RuntimeError):
+    """Server-side release control, catalog, or grant issuance is unavailable."""
 
 
 class UpdateCheckService:
@@ -43,7 +47,7 @@ class UpdateCheckService:
         now: datetime | None = None,
     ) -> UpdateDecisionV1:
         _validate_context(context)
-        observed_now = _utc(now or datetime.now(UTC))
+        observed_now = _utc(now or datetime.now(UTC), server_side=False)
         candidate = self._catalog.select_candidate(context)
         if candidate is None:
             return _empty_decision(context, UpdateDecisionStatusV1.UP_TO_DATE, "no_candidate")
@@ -171,7 +175,7 @@ def _is_mandatory(
         return False
     if candidate.mandatory_after is None:
         return True
-    return now >= _utc(candidate.mandatory_after)
+    return now >= _utc(candidate.mandatory_after, server_side=True)
 
 
 def _validate_context(context: DeviceUpdateContextV1) -> None:
@@ -203,47 +207,47 @@ def _validate_candidate(candidate: ReleaseUpdateCandidateV1) -> None:
         ("target", candidate.target, 64),
     ):
         if not _safe_identifier(value, maximum):
-            raise UpdateCheckPolicyError(f"invalid candidate {label}")
+            raise UpdateCheckUnavailable(f"release candidate {label} is invalid")
     if not _safe_text(candidate.minimum_os, 128):
-        raise UpdateCheckPolicyError("invalid candidate minimum_os")
+        raise UpdateCheckUnavailable("release candidate minimum_os is invalid")
     if candidate.release_generation <= 0 or candidate.channel_generation <= 0:
-        raise UpdateCheckPolicyError("candidate generations must be positive")
+        raise UpdateCheckUnavailable("release candidate generations are invalid")
     if not 0 <= candidate.rollout_basis_points <= 10_000:
-        raise UpdateCheckPolicyError("rollout_basis_points must be between 0 and 10000")
+        raise UpdateCheckUnavailable("release rollout basis points are invalid")
     if candidate.minimum_safe_release_generation <= 0:
-        raise UpdateCheckPolicyError("minimum safe generation must be positive")
+        raise UpdateCheckUnavailable("release minimum-safe generation is invalid")
     if not candidate.artifacts:
-        raise UpdateCheckPolicyError("candidate must contain at least one artifact")
+        raise UpdateCheckUnavailable("release candidate has no artifacts")
     kinds: set[str] = set()
     for artifact in candidate.artifacts:
         if not _safe_identifier(artifact.kind, 64) or artifact.kind in kinds:
-            raise UpdateCheckPolicyError("candidate artifact kinds must be unique and safe")
+            raise UpdateCheckUnavailable("release artifact kinds are invalid")
         kinds.add(artifact.kind)
         if not _safe_object_key(artifact.object_key):
-            raise UpdateCheckPolicyError("candidate artifact object_key is invalid")
+            raise UpdateCheckUnavailable("release artifact object key is invalid")
         if not _lower_sha256(artifact.sha256):
-            raise UpdateCheckPolicyError("candidate artifact sha256 is invalid")
+            raise UpdateCheckUnavailable("release artifact digest is invalid")
         if artifact.size_bytes <= 0 or artifact.size_bytes > 8 * 1024 * 1024 * 1024:
-            raise UpdateCheckPolicyError("candidate artifact size is invalid")
+            raise UpdateCheckUnavailable("release artifact size is invalid")
 
 
 def _validate_grants(candidate, grants, now: datetime) -> None:
     if len(grants) != len(candidate.artifacts):
-        raise UpdateCheckPolicyError("download-grant count does not match candidate artifacts")
+        raise UpdateCheckUnavailable("download-grant count does not match release artifacts")
     expected = {artifact.object_key: artifact for artifact in candidate.artifacts}
     observed: set[str] = set()
     for grant in grants:
         artifact = expected.get(grant.object_key)
         if artifact is None or grant.object_key in observed:
-            raise UpdateCheckPolicyError("download-grant object key is missing or duplicated")
+            raise UpdateCheckUnavailable("download-grant object key is missing or duplicated")
         observed.add(grant.object_key)
         if grant.sha256 != artifact.sha256 or grant.size_bytes != artifact.size_bytes:
-            raise UpdateCheckPolicyError("download-grant digest/size does not match signed artifact")
+            raise UpdateCheckUnavailable("download-grant identity does not match release artifact")
         if not grant.url.startswith("https://") or len(grant.url) > 4096:
-            raise UpdateCheckPolicyError("download grant URL must be bounded HTTPS")
-        expires_at = _utc(grant.expires_at)
+            raise UpdateCheckUnavailable("download URL is not bounded HTTPS")
+        expires_at = _utc(grant.expires_at, server_side=True)
         if expires_at <= now or expires_at > now + timedelta(minutes=20):
-            raise UpdateCheckPolicyError("download-grant expiry must be short-lived")
+            raise UpdateCheckUnavailable("download-grant expiry is outside the short-lived window")
 
 
 def _candidate_decision(
@@ -291,9 +295,11 @@ def _empty_decision(
     )
 
 
-def _utc(value: datetime) -> datetime:
+def _utc(value: datetime, *, server_side: bool) -> datetime:
     if value.tzinfo is None:
-        raise UpdateCheckPolicyError("timestamps must be timezone-aware")
+        if server_side:
+            raise UpdateCheckUnavailable("server-side timestamp is not timezone-aware")
+        raise UpdateCheckPolicyError("request timestamp is not timezone-aware")
     return value.astimezone(UTC)
 
 
