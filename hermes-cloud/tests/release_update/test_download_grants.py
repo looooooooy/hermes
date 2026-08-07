@@ -73,9 +73,10 @@ def test_grant_issuer_rejects_out_of_policy_ttl_and_naive_request_time() -> None
         ShortLivedDownloadGrantIssuer(_Presigner(), ttl=timedelta(seconds=10))
 
     issuer = ShortLivedDownloadGrantIssuer(_Presigner())
+    naive_now = datetime(2026, 8, 7, 16, 0, tzinfo=UTC).replace(tzinfo=None)
     with pytest.raises(UpdateCheckPolicyError):
         issuer.issue_grant(
             device_id="77777777-7777-4777-8777-777777777777",
             artifact=_artifact(),
-            now=datetime(2026, 8, 7, 16, 0),
+            now=naive_now,
         )
