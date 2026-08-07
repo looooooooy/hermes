@@ -25,10 +25,10 @@ async def test_high_level_control_client_attaches_and_dispatches() -> None:
         profile="default",
         host_bundle_id="com.hermes.windows-control-client-test",
     ).bind_runtime("generation-windows-control-client-1")
-    observed: list[dict] = []
+    observed: list[tuple[dict, object]] = []
 
-    def dispatcher(request: dict, _transport: object) -> dict:
-        observed.append(request)
+    def dispatcher(request: dict, transport: object) -> dict:
+        observed.append((request, transport))
         return {
             "jsonrpc": "2.0",
             "id": request.get("id"),
@@ -50,7 +50,10 @@ async def test_high_level_control_client_attaches_and_dispatches() -> None:
     )
     client = WindowsControlRelayClient(
         runtime_authority,
+        user_id="device-windows-control-test",
+        provider="hermes-cloud",
         client_instance_id=UUID("22222222-2222-4222-8222-222222222222"),
+        session_key="session-a",
     )
     try:
         await client.open()
@@ -64,7 +67,16 @@ async def test_high_level_control_client_attaches_and_dispatches() -> None:
             "relay_local_only": True,
         }
         assert len(observed) == 1
-        assert observed[0]["params"]["relay_local_only"] is True
+        relayed_request, transport = observed[0]
+        assert relayed_request["params"]["relay_local_only"] is True
+        assert transport.auth_claims == {
+            "user_id": "device-windows-control-test",
+            "provider": "hermes-cloud",
+            "connection_role": "control",
+            "client_instance_id": "22222222-2222-4222-8222-222222222222",
+            "session_key": "session-a",
+            "profile": "default",
+        }
     finally:
         await client.close()
         registration.close()
