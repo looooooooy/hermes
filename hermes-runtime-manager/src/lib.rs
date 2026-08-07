@@ -1,4 +1,5 @@
 pub mod ipc;
+pub mod local_ipc;
 pub mod manager;
 pub mod model;
 pub mod platform;
