@@ -19,6 +19,7 @@ pub mod update_connector_lane;
 pub mod update_coordinator;
 pub mod update_download;
 pub mod update_http;
+pub mod update_safe_window;
 #[cfg(windows)]
 pub mod windows_pipe;
 #[cfg(windows)]
@@ -75,6 +76,9 @@ pub use update_download::{
     UpdateDownloadError,
 };
 pub use update_http::{HttpDownloadGrantV1, HttpRangeSource};
+pub use update_safe_window::{
+    DrainingSafeWindowProbe, HostUpdateSafetySnapshotV1, HostUpdateSafetySource,
+};
 #[cfg(windows)]
 pub use windows_secret_store::WindowsCredentialSecretStore;
 #[cfg(windows)]
