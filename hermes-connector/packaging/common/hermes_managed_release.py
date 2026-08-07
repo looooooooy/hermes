@@ -8,6 +8,7 @@ an external cryptographic verifier mandatory.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import replace
@@ -43,12 +44,57 @@ _ENTRYPOINT = {
     "value": "hermes_agent_plugin",
 }
 _SAFE_FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,254}\Z")
+_VERIFY_RUNTIME_CROSS_PLATFORM = r"""
+import importlib.metadata
+import importlib.util
+import json
+import pathlib
+import sys
+
+module_name, console_name, expected_entrypoint, expected_project = sys.argv[1:]
+spec = importlib.util.find_spec(module_name)
+if spec is None or spec.origin is None:
+    raise SystemExit(f"module not found: {module_name}")
+matches = [ep for ep in importlib.metadata.entry_points(group="console_scripts") if ep.name == console_name]
+if len(matches) != 1 or matches[0].value != expected_entrypoint:
+    raise SystemExit(f"console entrypoint mismatch: {console_name}")
+console_root = pathlib.Path(sys.executable).parent
+console_candidates = [console_root / console_name]
+if sys.platform == "win32":
+    console_candidates.append(console_root / f"{console_name}.exe")
+existing_console = [path for path in console_candidates if path.is_file() and not path.is_symlink()]
+if len(existing_console) != 1:
+    raise SystemExit(f"console script missing or ambiguous: {console_candidates}")
+console_path = existing_console[0]
+site_roots = [pathlib.Path(value).resolve() for value in sys.path if "site-packages" in value]
+project_key = expected_project.lower().replace("-", "_")
+unexpected_direct_urls = []
+for direct_url in (item for root in site_roots for item in root.glob("*.dist-info/direct_url.json")):
+    if not direct_url.parent.name.lower().replace("-", "_").startswith(project_key + "-"):
+        unexpected_direct_urls.append(str(direct_url))
+pth_escapes = []
+for pth in (item for root in site_roots for item in root.glob("*.pth")):
+    for line in pth.read_text(encoding="utf-8").splitlines():
+        value = line.strip()
+        if not value or value.startswith("#") or value.startswith("import "):
+            continue
+        candidate = (pth.parent / value).resolve() if not pathlib.Path(value).is_absolute() else pathlib.Path(value).resolve()
+        if not any(candidate == root or root in candidate.parents for root in site_roots):
+            pth_escapes.append(str(candidate))
+print(json.dumps({
+    "module_origin": str(pathlib.Path(spec.origin).resolve()),
+    "console_entrypoint": str(console_path.resolve()),
+    "unexpected_direct_urls": unexpected_direct_urls,
+    "pth_escapes": pth_escapes,
+}, sort_keys=True))
+""".strip()
 
 
 class ManagedReleaseBuilder(ReleaseBuilder):
     """ReleaseBuilder specialization for customer runtime assembly.
 
     - `uv sync` installs runtime dependencies only (`--no-default-groups`).
+    - venv interpreter/console verification is platform-correct on macOS/Linux/Windows.
     - portable Plugin manifest v2 is accepted only as an artifact identity; customer
       absolute wheel/store paths are derived locally and are never part of the vendor
       signed payload.
@@ -59,11 +105,19 @@ class ManagedReleaseBuilder(ReleaseBuilder):
         commands = ReleaseBuilder._commands(inputs, release_dir)
         hardened: list[BuildCommand] = []
         for command in commands:
-            argv = command.argv
+            argv = tuple(_managed_venv_python(value) for value in command.argv)
             if len(argv) >= 2 and argv[:2] == ("uv", "sync"):
                 if "--no-default-groups" in argv:
                     raise RuntimeError("duplicate --no-default-groups in managed release command")
                 argv = (*argv, "--no-default-groups")
+            if command.purpose.startswith("verify-"):
+                values = list(argv)
+                try:
+                    code_index = values.index("-c") + 1
+                except (ValueError, IndexError) as error:
+                    raise RuntimeError("managed runtime verification command is malformed") from error
+                values[code_index] = _VERIFY_RUNTIME_CROSS_PLATFORM
+                argv = tuple(values)
             hardened.append(
                 BuildCommand(
                     purpose=command.purpose,
@@ -178,6 +232,15 @@ def build_managed_release(
         executor=executor,
         portable_plugin_verifier=portable_plugin_verifier,
     ).build(inputs, dry_run=dry_run)
+
+
+def _managed_venv_python(value: str) -> str:
+    if os.name != "nt":
+        return value
+    path = Path(value)
+    if path.name == "python" and path.parent.name == "bin":
+        return str(path.parent.parent / "Scripts" / "python.exe")
+    return value
 
 
 def _is_portable_plugin_manifest(value: object) -> bool:
