@@ -22,9 +22,7 @@ use std::thread;
 use windows_sys::Win32::Foundation::{
     CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, HANDLE, INVALID_HANDLE_VALUE,
 };
-use windows_sys::Win32::Storage::FileSystem::{
-    FlushFileBuffers, ReadFile, WriteFile,
-};
+use windows_sys::Win32::Storage::FileSystem::{FlushFileBuffers, ReadFile, WriteFile};
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -193,6 +191,12 @@ impl Clock for TestClock {
 struct OwnedPipe(HANDLE);
 
 unsafe impl Send for OwnedPipe {}
+
+impl OwnedPipe {
+    fn raw(&self) -> HANDLE {
+        self.0
+    }
+}
 
 impl Drop for OwnedPipe {
     fn drop(&mut self) {
@@ -392,16 +396,16 @@ fn one_snapshot_source(
     assert!(!raw.is_null() && raw != INVALID_HANDLE_VALUE);
     let pipe = OwnedPipe(raw);
     let server = thread::spawn(move || {
-        let connected = unsafe { ConnectNamedPipe(pipe.0, null_mut()) };
+        let connected = unsafe { ConnectNamedPipe(pipe.raw(), null_mut()) };
         if connected == 0 {
             assert_eq!(unsafe { GetLastError() }, ERROR_PIPE_CONNECTED);
         }
         let mut request = vec![0u8; REQUEST.len()];
-        read_exact(pipe.0, &mut request);
+        read_exact(pipe.raw(), &mut request);
         assert_eq!(request, REQUEST);
-        write_all(pipe.0, &response);
-        assert_ne!(unsafe { FlushFileBuffers(pipe.0) }, 0);
-        unsafe { DisconnectNamedPipe(pipe.0) };
+        write_all(pipe.raw(), &response);
+        assert_ne!(unsafe { FlushFileBuffers(pipe.raw()) }, 0);
+        unsafe { DisconnectNamedPipe(pipe.raw()) };
     });
     (
         Arc::new(WindowsHostUpdateSafetySource::new(name).unwrap()),
