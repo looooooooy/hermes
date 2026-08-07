@@ -13,6 +13,10 @@ use hermes_runtime_manager::windows_pipe::{
 use serde::Serialize;
 #[cfg(unix)]
 use std::path::Path;
+use tauri::{Manager, RunEvent};
+
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+mod tray;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -262,6 +266,37 @@ fn lifecycle_name(state: LifecycleState) -> &'static str {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let builder = tauri::Builder::default()
+        .setup(|app| {
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            tray::create_tray(app.handle())?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![runtime_snapshot]);
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("failed to build Hermes Desktop");
+
+    app.run(|app_handle, event| match event {
+        RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
+            api.prevent_exit();
+        }
+        RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == "main" => {
+            api.prevent_close();
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+            tray::hide_main_window(app_handle);
+        }
+        _ => {}
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
@@ -274,7 +309,6 @@ mod tests {
         use std::fs;
         use std::path::Path;
         use std::sync::Arc;
-        use std::thread;
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let unique = SystemTime::now()
@@ -289,10 +323,8 @@ mod tests {
         ));
         let server = ReadOnlyUnixServer::bind(endpoint.clone(), manager).expect("bind server");
         let server_thread = std::thread::spawn(move || server.serve_once().expect("serve"));
-
         let snapshot = fetch_manager_snapshot_from(&endpoint).expect("Desktop IPC snapshot");
         server_thread.join().expect("server thread");
-
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.components.len(), 4);
         assert!(snapshot.components.iter().all(|component| !component.ready));
@@ -309,7 +341,6 @@ mod tests {
         };
         use hermes_runtime_manager::RuntimeManager;
         use std::sync::Arc;
-        use std::thread;
 
         let base = current_user_pipe_name().expect("pipe name");
         let name = format!("{base}-desktop-test-{}", std::process::id());
@@ -318,23 +349,13 @@ mod tests {
             Arc::new(DefaultInstallLayout::discover().expect("layout")),
         ));
         let server = ReadOnlyWindowsPipeServer::new(&name, manager).expect("bind server");
-        let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
-
+        let server_thread = std::thread::spawn(move || server.serve_once().expect("serve"));
         let snapshot = fetch_manager_snapshot_from_pipe(&name).expect("Desktop pipe snapshot");
         let identity = server_thread.join().expect("server thread");
-
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.components.len(), 4);
         assert!(snapshot.components.iter().all(|component| !component.ready));
         assert_eq!(identity.pid, std::process::id());
         assert!(identity.same_user);
     }
-}
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![runtime_snapshot])
-        .run(tauri::generate_context!())
-        .expect("failed to run Hermes Desktop");
 }
