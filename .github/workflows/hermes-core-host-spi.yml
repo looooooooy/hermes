@@ -1,0 +1,221 @@
+name: Hermes Core Host SPI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "upstream/hermes-core-host-spi-v1/**"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/**"
+      - "hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py"
+      - "hermes-connector/src/hermes_connector/__init__.py"
+      - "hermes-connector/src/hermes_connector/application/__init__.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/__init__.py"
+      - ".github/workflows/hermes-core-host-spi.yml"
+  pull_request:
+    paths:
+      - "upstream/hermes-core-host-spi-v1/**"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/**"
+      - "hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py"
+      - "hermes-connector/src/hermes_connector/__init__.py"
+      - "hermes-connector/src/hermes_connector/application/__init__.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/__init__.py"
+      - ".github/workflows/hermes-core-host-spi.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-core-host-spi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stage3-replay:
+    name: Stage 3 replay and wheel contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BUNDLE_ROOT: upstream/hermes-core-host-spi-v1
+      UPSTREAM_COMMIT: 14db1a99e21e5523ee61f10f5c3300a5087e8449
+      RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install verification tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            build==1.3.0 \
+            pytest==8.4.2 \
+            ruff==0.16.1 \
+            uv==0.12.0
+          uv --version | grep -E '^uv 0\.12\.0([[:space:]]|$)'
+      - name: Lint rebuild and wheel contract gates
+        run: |
+          python -m ruff check \
+            "$BUNDLE_ROOT/tools/check_stage3_stabilization.py" \
+            "$BUNDLE_ROOT/tools/generate_stage3_stabilization_patch.py" \
+            "$BUNDLE_ROOT/tools/rebuild_locked_artifacts.py" \
+            "$BUNDLE_ROOT/tools/rebuild_locked_artifacts_verbose.py" \
+            "$BUNDLE_ROOT/tests/test_rebuild_locked_artifacts.py" \
+            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py \
+            hermes-connector/src/hermes_connector/__init__.py \
+            hermes-connector/src/hermes_connector/application/__init__.py \
+            hermes-connector/src/hermes_connector/bootstrap/__init__.py
+      - name: Test artifact rebuild gate
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m pytest -q tests/test_rebuild_locked_artifacts.py
+      - name: Checkout pinned Hermes Core
+        run: |
+          upstream="$RUNNER_TEMP/hermes-agent-upstream"
+          git init -q "$upstream"
+          git -C "$upstream" remote add origin https://github.com/NousResearch/hermes-agent.git
+          git -C "$upstream" fetch --depth=1 origin "$UPSTREAM_COMMIT"
+          git -C "$upstream" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$upstream" rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test -z "$(git -C "$upstream" status --porcelain=v1 --untracked-files=all)"
+      - name: Create locked Core verification environment
+        run: |
+          cd "$RUNNER_TEMP/hermes-agent-upstream"
+          uv sync \
+            --extra all \
+            --extra dev \
+            --locked \
+            --no-install-project
+      - name: Verify stabilization patch and provenance from real Stage 3 tree
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m tools.check_stage3_stabilization \
+            --source "$RUNNER_TEMP/hermes-agent-upstream"
+      - name: Rebuild locked Core artifacts
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m tools.rebuild_locked_artifacts_verbose \
+            --source "$RUNNER_TEMP/hermes-agent-upstream"
+      - name: Verify bundle tooling and retained artifact contracts
+        run: |
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python -m pytest -q tests
+      - name: Apply Stage 3 and run authoritative owner-action gates
+        run: |
+          workspace="$RUNNER_TEMP/core-replay"
+          mkdir -p "$workspace"
+          cd "$BUNDLE_ROOT"
+          PYTHONPATH=. python - <<'PY'
+          from __future__ import annotations
+
+          import os
+          import subprocess
+          from pathlib import Path
+
+          from tools.apply_and_verify import PatchBundle, PatchBundleError
+
+          original_run = PatchBundle._run
+
+          def verbose_run(command, **kwargs):
+              try:
+                  return original_run(command, **kwargs)
+              except PatchBundleError as error:
+                  cause = error.__cause__
+                  if isinstance(cause, subprocess.CalledProcessError):
+                      for label, value in (
+                          ("verification stdout", cause.stdout),
+                          ("verification stderr", cause.stderr),
+                      ):
+                          if not value:
+                              continue
+                          if isinstance(value, bytes):
+                              value = value.decode("utf-8", errors="replace")
+                          print(f"--- {label} ---\n{value}", flush=True)
+                  raise
+
+          PatchBundle._run = staticmethod(verbose_run)
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          try:
+              PatchBundle(Path.cwd()).apply_and_verify(
+                  source=runner_temp / "hermes-agent-upstream",
+                  workspace_root=runner_temp / "core-replay",
+                  target=runner_temp / "core-replay" / "patched",
+                  test_python=(
+                      runner_temp / "hermes-agent-upstream" / ".venv" / "bin" / "python"
+                  ),
+              )
+          except PatchBundleError as error:
+              raise SystemExit(str(error)) from error
+          PY
+      - name: Build Plugin and Connector wheels
+        run: |
+          python -m build --wheel --outdir "$RUNNER_TEMP/plugin-dist" hermes-agent-plugin
+          python -m build --wheel --outdir "$RUNNER_TEMP/connector-dist" hermes-connector
+      - name: Install isolated Core Plugin Connector wheel set
+        run: |
+          contract_venv="$RUNNER_TEMP/core-plugin-contract"
+          python -m venv "$contract_venv"
+          "$contract_venv/bin/python" -m pip install --upgrade pip
+          "$contract_venv/bin/python" -m pip install --no-deps \
+            "$BUNDLE_ROOT"/dist/hermes_agent-0.19.0-py3-none-any.whl \
+            "$RUNNER_TEMP"/plugin-dist/hermes_agent_plugin-0.1.0-py3-none-any.whl \
+            "$RUNNER_TEMP"/connector-dist/hermes_connector-0.1.0-py3-none-any.whl
+          "$contract_venv/bin/python" -m pip install \
+            pytest==8.4.2 \
+            websockets==15.0.1
+      - name: Test real patched Core wheel Host SPI contract
+        env:
+          HERMES_PATCHED_CORE_DISTRIBUTION: "1"
+        run: |
+          "$RUNNER_TEMP/core-plugin-contract/bin/python" -m pytest -q \
+            hermes-agent-plugin/tests/integration/host/test_patched_core_distribution.py
+      - name: Assemble verified runtime release bundle
+        env:
+          BUNDLE_DIR: ${{ runner.temp }}/hermes-runtime-bundle
+        run: |
+          mkdir -p "$BUNDLE_DIR"
+          cp "$BUNDLE_ROOT"/dist/hermes_agent-0.19.0-py3-none-any.whl "$BUNDLE_DIR/"
+          cp "$BUNDLE_ROOT"/dist/hermes_agent-0.19.0.tar.gz "$BUNDLE_DIR/"
+          cp "$RUNNER_TEMP"/plugin-dist/hermes_agent_plugin-0.1.0-py3-none-any.whl "$BUNDLE_DIR/"
+          cp "$RUNNER_TEMP"/connector-dist/hermes_connector-0.1.0-py3-none-any.whl "$BUNDLE_DIR/"
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["BUNDLE_DIR"])
+          release = root / "RELEASE.txt"
+          release.write_text(
+              "\n".join(
+                  (
+                      f"repository_commit={os.environ['RELEASE_COMMIT']}",
+                      f"upstream_core_commit={os.environ['UPSTREAM_COMMIT']}",
+                      "core_version=0.19.0",
+                      "plugin_version=0.1.0",
+                      "connector_version=0.1.0",
+                      "",
+                  )
+              ),
+              encoding="utf-8",
+          )
+          sums = []
+          for path in sorted(root.iterdir(), key=lambda item: item.name):
+              if not path.is_file() or path.name == "SHA256SUMS":
+                  continue
+              sums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+          (root / "SHA256SUMS").write_text(
+              "\n".join(sums) + "\n",
+              encoding="ascii",
+          )
+          PY
+          cat "$BUNDLE_DIR/SHA256SUMS"
+      - name: Upload verified runtime release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-runtime-bundle-${{ env.RELEASE_COMMIT }}
+          path: ${{ runner.temp }}/hermes-runtime-bundle
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

@@ -1,0 +1,90 @@
+name: Build Hermes Cloud offline bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/runtime-identity-extension-health
+    paths:
+      - ".github/cloud-offline-bundle.trigger"
+      - ".github/workflows/build-hermes-cloud-offline.yml"
+      - "hermes-cloud/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-cloud-offline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-offline-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build Cloud wheel and dependency wheelhouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install build==1.5.0 hatchling==1.31.0
+          mkdir -p "$RUNNER_TEMP/cloud-dist" "$RUNNER_TEMP/offline/wheelhouse"
+          python -m build --wheel --outdir "$RUNNER_TEMP/cloud-dist" hermes-cloud
+          python -m pip wheel \
+            --wheel-dir "$RUNNER_TEMP/offline/wheelhouse" \
+            "$RUNNER_TEMP/cloud-dist/hermes_cloud-0.1.0-py3-none-any.whl"
+          cp -a hermes-cloud/deploy/test_server "$RUNNER_TEMP/offline/deploy"
+      - name: Verify clean offline installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/verify-venv"
+          "$RUNNER_TEMP/verify-venv/bin/python" -m pip install \
+            --no-index \
+            --find-links "$RUNNER_TEMP/offline/wheelhouse" \
+            hermes-cloud==0.1.0
+          "$RUNNER_TEMP/verify-venv/bin/python" -m pip check
+          "$RUNNER_TEMP/verify-venv/bin/python" - <<'PY'
+          from importlib.metadata import version
+          from hermes_cloud.entrypoints.business_api.bootstrap import app as business
+          from hermes_cloud.entrypoints.connector_gateway.bootstrap import app as connector
+          from hermes_cloud.entrypoints.file_gateway.bootstrap import app as files
+
+          assert version("hermes-cloud") == "0.1.0"
+          assert business is not None
+          assert connector is not None
+          assert files is not None
+          print("offline cloud import contract: ok")
+          PY
+      - name: Assemble manifest and checksums
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/offline/RELEASE.txt" <<EOF
+          repository_commit=$RELEASE_COMMIT
+          python=3.13
+          platform=linux-x86_64
+          cloud_version=0.1.0
+          EOF
+          (
+            cd "$RUNNER_TEMP/offline"
+            find . -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum \
+              > SHA256SUMS
+          )
+          test -s "$RUNNER_TEMP/offline/SHA256SUMS"
+      - name: Upload offline Cloud bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-cloud-offline-${{ github.sha }}
+          path: ${{ runner.temp }}/offline
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hermes-runtime-control"
+version = "0.1.0"
+description = "Runtime-owned control-plane primitives for Hermes Agent"
+readme = { text = "Runtime-owned control-plane primitives for Hermes Agent.", content-type = "text/plain" }
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-only" }
+authors = [{ name = "Hermes contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9.0",
+  "ruff==0.16.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hermes_runtime"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "RUF022"]

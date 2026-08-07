@@ -1,0 +1,79 @@
+diff --git a/hermes_cli/plugins.py b/hermes_cli/plugins.py
+index 713b3bc7d50a8de7f60a09dad9a6a93d9294ed91..b8d468d958944e660244075bb7beb8fb0b9371be 100644
+--- a/hermes_cli/plugins.py
++++ b/hermes_cli/plugins.py
+@@ -2215,7 +2215,13 @@ class PluginManager:
+             else:
+                 group_eps = [ep for ep in eps if ep.group == ENTRY_POINTS_GROUP]
+
+-            for ep in group_eps:
++            for ep in sorted(
++                group_eps,
++                key=lambda entry_point: (
++                    entry_point.name,
++                    entry_point.value,
++                ),
++            ):
+                 manifest = PluginManifest(
+                     name=ep.name,
+                     source="entrypoint",
+diff --git a/pyproject.toml b/pyproject.toml
+index 32a29a9086cbd916f12346f2c48831ddab435a02..cb75d8349f46ad5562ac752bb184b022573a1433 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -346,7 +346,26 @@ hermes-acp = "acp_adapter.entry:main"
+ [tool.setuptools]
+ # Top-level single-file modules (not packages). Without this, uv2nix's
+ # sealed venv is missing hermes_constants, run_agent, etc.
+-py-modules = ["run_agent", "model_tools", "toolsets", "batch_runner", "trajectory_compressor", "toolset_distributions", "cli", "hermes_bootstrap", "hermes_constants", "hermes_state", "hermes_time", "hermes_logging", "utils", "mcp_serve"]
++py-modules = [
++  "run_agent",
++  "model_tools",
++  "toolsets",
++  "batch_runner",
++  "trajectory_compressor",
++  "toolset_distributions",
++  "cli",
++  "hermes_bootstrap",
++  "hermes_constants",
++  "hermes_state",
++  "hermes_state_common",
++  "hermes_state_portability",
++  "hermes_state_schema",
++  "hermes_state_search",
++  "hermes_time",
++  "hermes_logging",
++  "utils",
++  "mcp_serve",
++]
+
+ [tool.setuptools.packages.find]
+ include = ["agent", "agent.*", "tools", "tools.*", "hermes_cli", "hermes_cli.*", "gateway", "gateway.*", "tui_gateway", "tui_gateway.*", "cron", "cron.*", "acp_adapter", "plugins", "plugins.*", "providers", "providers.*"]
+diff --git a/tools/process_registry.py b/tools/process_registry.py
+index 0dfa331a37177ea52d3ff2d3ed2b09483366ffcb..45f4a665e8fcf813f7518c06ec1db38a14c5bb03 100644
+--- a/tools/process_registry.py
++++ b/tools/process_registry.py
+@@ -700,14 +700,20 @@ class ProcessRegistry:
+         except (OSError, PermissionError):
+             try:
+                 os.kill(pid, signal.SIGTERM)
+-            except (OSError, ProcessLookupError, PermissionError):
++            except ProcessLookupError:
++                return True
++            except (OSError, PermissionError):
+                 return False
+             deadline = time.monotonic() + 0.5
+             while time.monotonic() < deadline:
+-                if cls._host_pid_identity(pid, expected_start) == "gone_or_reused":
++                try:
++                    os.kill(pid, 0)
++                except ProcessLookupError:
+                     return True
++                except (OSError, PermissionError):
++                    return False
+                 time.sleep(0.05)
+-            return cls._host_pid_identity(pid, expected_start) == "gone_or_reused"
++            return False
+
+         # Snapshot the whole tree (children before parent) and SIGTERM each.
+         try:

@@ -334,8 +334,18 @@ class PatchBundle:
         if type(stage) is not int or stage not in _SUPPORTED_PATCH_STAGES:
             raise PatchBundleError("bundle stage is invalid")
         patches = lock.get("patches")
-        if not isinstance(patches, list) or len(patches) != stage:
-            raise PatchBundleError("bundle patch set does not match stage")
+        allowed_patch_counts = {
+            1: frozenset({1}),
+            2: frozenset({2}),
+            3: frozenset({3, 4}),
+        }
+        if (
+            not isinstance(patches, list)
+            or len(patches) not in allowed_patch_counts[stage]
+        ):
+            raise PatchBundleError(
+                "bundle patch set does not match stage"
+            )
         for ordinal, entry in enumerate(patches, start=1):
             relative = entry.get("path") if isinstance(entry, dict) else None
             prefix = f"patches/{ordinal:04d}-"
