@@ -9,7 +9,11 @@ from .domain import (
     UpdateDecisionV1,
 )
 from .grants import ShortLivedDownloadGrantIssuer
-from .service import UpdateCheckPolicyError, UpdateCheckService
+from .service import (
+    UpdateCheckPolicyError,
+    UpdateCheckService,
+    UpdateCheckUnavailable,
+)
 
 __all__ = [
     "DeviceUpdateContextV1",
@@ -19,6 +23,7 @@ __all__ = [
     "ShortLivedDownloadGrantIssuer",
     "UpdateCheckPolicyError",
     "UpdateCheckService",
+    "UpdateCheckUnavailable",
     "UpdateDecisionStatusV1",
     "UpdateDecisionV1",
 ]
