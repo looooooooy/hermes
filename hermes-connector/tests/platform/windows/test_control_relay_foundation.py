@@ -47,9 +47,12 @@ def _recv_frame(connection) -> dict:
 
 def _claims(authority) -> dict[str, str]:
     return {
+        "user_id": "device-windows-control-test",
+        "provider": "hermes-cloud",
+        "connection_role": "control",
         "client_instance_id": str(UUID("11111111-1111-4111-8111-111111111111")),
+        "session_key": "session-a",
         "profile": authority.profile,
-        "runtime_generation": authority.runtime_generation,
     }
 
 
