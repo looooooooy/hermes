@@ -25,7 +25,6 @@ from .named_pipe_security import profile_pipe_name
 from .runtime_authority import WindowsRuntimeAuthorityV2, require_current_process_authority
 
 _ATTACH_METHOD = "relay.control.attach"
-_ATTACH_ID = "relay-control-attach"
 _OWNER_ACTION_MAX_WORKERS = DEFAULT_OWNER_ACTION_MAX_WORKERS
 _OWNER_ACTION_MAX_QUEUED = DEFAULT_OWNER_ACTION_MAX_QUEUED
 _ENDPOINTS_LOCK = threading.RLock()
@@ -35,8 +34,12 @@ _ENDPOINTS: dict[str, ControlEndpoint] = {}
 class _ControlPipeTransport:
     connection_role = "control"
 
-    def __init__(self, connection: WindowsFramedPipeConnection) -> None:
-        self.auth_claims: Mapping[str, str] | None = None
+    def __init__(
+        self,
+        connection: WindowsFramedPipeConnection,
+        claims: Mapping[str, str],
+    ) -> None:
+        self.auth_claims = claims
         self.transport_id = uuid.uuid4().hex
         self._connection = connection
         self._closed = False
@@ -55,31 +58,22 @@ class _ControlPipeTransport:
 
 
 def _dispatch_request(
-    dispatcher: Callable[[dict, Any], dict | None],
     request: dict,
     transport: _ControlPipeTransport,
+    dispatcher: Callable[[dict, Any], dict | None],
 ) -> None:
-    request_id = request.get("id")
-    params = request.get("params")
-    if not isinstance(params, dict):
-        params = {}
-    relayed = dict(request)
-    relayed["params"] = {**params, "relay_local_only": True}
     try:
-        response = dispatcher(relayed, transport)
-        if response is not None:
-            transport.write(response)
-    except BaseException:
-        try:
-            transport.write(
-                _rpc_error(
-                    request_id,
-                    CONTROL_ERROR_CODES["internal_error"],
-                    "internal_error",
-                )
-            )
-        except BaseException:
-            return
+        params = request.get("params")
+        local_request = dict(request)
+        local_request["params"] = {
+            **(params if isinstance(params, dict) else {}),
+            "relay_local_only": True,
+        }
+        response = dispatcher(local_request, transport)
+    except Exception:
+        response = _rpc_error(request.get("id"), -32603, "internal error")
+    if response is not None:
+        transport.write(response)
 
 
 def _handle_control_connection(
@@ -89,63 +83,75 @@ def _handle_control_connection(
     transport_cleanup: Callable[[Any], None] | None,
     owner_action_dispatcher: OwnerActionDispatcherPort,
 ) -> None:
-    transport = _ControlPipeTransport(connection)
+    transport: _ControlPipeTransport | None = None
     try:
-        attach = try_decode_frame(connection.recv())
-        if not isinstance(attach, dict):
-            return
-        claims = _sanitize_claims(attach.get("params"))
-        if attach.get("method") != _ATTACH_METHOD or claims is None:
-            transport.write(
-                _rpc_error(
-                    attach.get("id"),
-                    CONTROL_ERROR_CODES["control_role_required"],
-                    "control_role_required",
-                )
-            )
-            return
-        transport.auth_claims = claims
-        transport.write(
-            {
-                "jsonrpc": "2.0",
-                "id": attach.get("id", _ATTACH_ID),
-                "result": {"attached": True, "connection_role": "control"},
-            }
-        )
-
         while True:
             try:
                 request = try_decode_frame(connection.recv())
             except (EOFError, OSError, TimeoutError, UnicodeError, ValueError):
                 return
-            if not isinstance(request, dict):
+            request_id = request.get("id") if isinstance(request, dict) else None
+            if request is None:
+                connection.send(encode_frame(_rpc_error(None, -32700, "parse error")))
                 continue
-            request_id = request.get("id")
+
+            if transport is None:
+                params = request.get("params")
+                claims = _sanitize_claims(
+                    params.get("claims") if isinstance(params, dict) else None
+                )
+                if request.get("method") != _ATTACH_METHOD or claims is None:
+                    connection.send(
+                        encode_frame(
+                            _rpc_error(
+                                request_id,
+                                CONTROL_ERROR_CODES["control_role_required"],
+                                "control_role_required",
+                            )
+                        )
+                    )
+                    return
+                transport = _ControlPipeTransport(connection, claims)
+                transport.write(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            "attached": True,
+                            "connection_role": "control",
+                        },
+                    }
+                )
+                continue
+
             method = request.get("method")
             if method not in _ALLOWED_METHODS:
                 transport.write(
                     _rpc_error(
                         request_id,
-                        CONTROL_ERROR_CODES["method_not_found"],
-                        "method_not_found",
+                        CONTROL_ERROR_CODES["method_not_allowed"],
+                        "method_not_allowed",
                     )
                 )
                 continue
-            future = owner_action_dispatcher.submit(
-                _dispatch_request,
-                dispatcher,
-                request,
-                transport,
-            )
-            if future is None:
+            if (
+                owner_action_dispatcher.submit(
+                    _dispatch_request,
+                    request,
+                    transport,
+                    dispatcher,
+                )
+                is None
+            ):
                 transport.write(_relay_overloaded(request_id))
     finally:
-        transport.disconnect()
-        if transport_cleanup is not None:
-            try:
-                transport_cleanup(transport)
-            except BaseException:
-                pass
+        if transport is not None:
+            transport.disconnect()
+            if transport_cleanup is not None:
+                try:
+                    transport_cleanup(transport)
+                except Exception:
+                    pass
 
 
 class WindowsControlEndpointRegistration:
