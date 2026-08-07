@@ -102,10 +102,23 @@ def create_macos_endpoint_opener(
     )
 
 
+def select_platform_update_safety_opener() -> Callable[..., object] | None:
+    """Return the dedicated same-user read-only update-safety relay opener."""
+
+    if sys.platform != "darwin":
+        return None
+    from ..adapters.platform.macos.update_safety_relay import (
+        start_update_safety_relay,
+    )
+
+    return start_update_safety_relay
+
+
 __all__ = [
     "LOCAL_GATEWAY_AVAILABLE",
     "LOCAL_GATEWAY_CAPABILITIES",
     "configure_platform_adapters",
     "create_macos_endpoint_opener",
     "select_platform_local_gateway_capabilities",
+    "select_platform_update_safety_opener",
 ]
