@@ -4,7 +4,12 @@ on:
   push:
     branches:
       - "feature/hermes-release-update-safety-*"
+      - "feature/hermes-authoritative-update-safety-*"
     paths:
+      - "contracts/fixtures/valid/update-safety-snapshot-v1.json"
+      - "contracts/schemas/local/update-safety-snapshot-v1.schema.json"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py"
+      - "hermes-agent-plugin/tests/unit/application/test_update_safety.py"
       - "hermes-runtime-manager/src/update_safe_window.rs"
       - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
@@ -13,6 +18,10 @@ on:
       - ".github/workflows/hermes-update-safe-window.yml"
   pull_request:
     paths:
+      - "contracts/fixtures/valid/update-safety-snapshot-v1.json"
+      - "contracts/schemas/local/update-safety-snapshot-v1.schema.json"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py"
+      - "hermes-agent-plugin/tests/unit/application/test_update_safety.py"
       - "hermes-runtime-manager/src/update_safe_window.rs"
       - "hermes-runtime-manager/src/update_connector_lane.rs"
       - "hermes-runtime-manager/src/update_coordinator.rs"
@@ -28,6 +37,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  host-authority-contract:
+    name: Host authority contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused contract test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          pytest
+          jsonschema
+          referencing
+          ruff==0.16.1
+      - name: Lint authoritative Host aggregation
+        run: >-
+          ruff check
+          hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py
+          hermes-agent-plugin/tests/unit/application/test_update_safety.py
+      - name: Validate shared update-safety schema
+        run: python -m pytest contracts/tests/test_contract_packet.py
+      - name: Test authoritative Host aggregation
+        run: >-
+          python -m pytest
+          hermes-agent-plugin/tests/unit/application/test_update_safety.py
+
   safe-window:
     name: Draining safe window / ${{ matrix.os }}
     strategy:
