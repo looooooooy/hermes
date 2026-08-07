@@ -137,17 +137,18 @@ def main() -> int:
         shutil.copytree(stage, output, symlinks=False, copy_function=shutil.copy2)
 
     verified = load_verified_wheelhouse(output)
+    wheelhouse_manifest = verified.manifest
     print(
         json.dumps(
             {
                 "schema_version": 1,
                 "target": args.target,
-                "platform": verified.platform,
-                "architecture": verified.architecture,
-                "python_tag": verified.python_tag,
+                "platform": wheelhouse_manifest.platform,
+                "architecture": wheelhouse_manifest.architecture,
+                "python_tag": wheelhouse_manifest.python_tag,
                 "core_lock_sha256": core_lock,
                 "connector_lock_sha256": connector_lock,
-                "wheel_count": len(verified.artifacts),
+                "wheel_count": len(wheelhouse_manifest.artifacts),
                 "wheelhouse_root": str(output),
                 "binary_only": True,
                 "verified": True,
