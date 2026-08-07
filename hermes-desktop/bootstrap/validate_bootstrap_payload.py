@@ -9,7 +9,8 @@ import json
 import os
 import subprocess
 import tempfile
-from pathlib import Path, PurePosixPath
+import zipfile
+from pathlib import Path
 from typing import Any
 
 from assemble_bootstrap_payload import (
@@ -51,15 +52,29 @@ def main() -> int:
     signing = manifest.get("signing")
     if signing != {"signed": False, "required_next_gate": "DESKTOP-020B3"}:
         raise BootstrapPayloadError("B1 payload must remain explicitly unsigned")
+    if manifest.get("update_installation") != {
+        "local_managed_release_installer_included": True,
+        "requires_private_python": True,
+        "requires_system_python": False,
+        "requires_network_dependency_install": False,
+    }:
+        raise BootstrapPayloadError("bootstrap update installation policy is invalid")
 
     components = manifest.get("components")
-    if not isinstance(components, dict) or set(components) != {"desktop", "runtime_manager", "toolchain"}:
+    expected_components = {
+        "desktop",
+        "runtime_manager",
+        "toolchain",
+        "managed_release_installer",
+    }
+    if not isinstance(components, dict) or set(components) != expected_components:
         raise BootstrapPayloadError("bootstrap payload component set is invalid")
 
     desktop = validate_file_component(root, components["desktop"], "Hermes Desktop", platform_name)
     manager = validate_file_component(root, components["runtime_manager"], "Runtime Manager", platform_name)
     manager_version = executable_version(manager)
     require_equal(manager_version, components["runtime_manager"].get("version"), "Runtime Manager version")
+    installer = validate_installer_component(root, components["managed_release_installer"])
 
     toolchain_component = components["toolchain"]
     if not isinstance(toolchain_component, dict):
@@ -110,6 +125,7 @@ def main() -> int:
         raise BootstrapPayloadError(
             f"executed Private uv version mismatch: expected {toolchain['uv_version']}, got {uv_version!r}"
         )
+    execute_installer_help(python_path, installer)
 
     result = {
         "schema_version": 1,
@@ -117,6 +133,8 @@ def main() -> int:
         "desktop_binary": str(desktop),
         "runtime_manager_binary": str(manager),
         "runtime_manager_version": manager_version,
+        "managed_release_installer": str(installer),
+        "managed_release_installer_sha256": sha256_file(installer),
         "toolchain_bundle_id": toolchain["bundle_id"],
         "private_python": private_python_executable,
         "private_python_version": private_python_version,
@@ -130,9 +148,7 @@ def main() -> int:
     return 0
 
 
-def validate_file_component(
-    root: Path, value: Any, label: str, platform_name: str
-) -> Path:
+def validate_file_component(root: Path, value: Any, label: str, platform_name: str) -> Path:
     if not isinstance(value, dict):
         raise BootstrapPayloadError(f"{label} component is invalid")
     path = root / safe_relative(str(value.get("path", "")))
@@ -140,6 +156,27 @@ def validate_file_component(
     require_equal(path.stat().st_size, value.get("size_bytes"), f"{label} size")
     require_equal(sha256_file(path), value.get("sha256"), f"{label} SHA")
     return path.resolve()
+
+
+def validate_installer_component(root: Path, value: Any) -> Path:
+    if not isinstance(value, dict):
+        raise BootstrapPayloadError("Managed Release installer component is invalid")
+    if value.get("execution") != "private_python_-I_zipapp" or value.get("network_install_allowed") is not False:
+        raise BootstrapPayloadError("Managed Release installer execution policy is invalid")
+    path = (root / safe_relative(str(value.get("path", "")))).resolve()
+    if path.is_symlink() or not path.is_file() or path.suffix != ".pyz":
+        raise BootstrapPayloadError("Managed Release installer is missing or symlinked")
+    require_equal(path.stat().st_size, value.get("size_bytes"), "Managed Release installer size")
+    require_equal(sha256_file(path), value.get("sha256"), "Managed Release installer SHA")
+    try:
+        with zipfile.ZipFile(path, "r") as archive:
+            if "__main__.py" not in archive.namelist() or "INSTALLER-MANIFEST.json" not in archive.namelist():
+                raise BootstrapPayloadError("Managed Release installer zipapp file set is invalid")
+            if archive.testzip() is not None:
+                raise BootstrapPayloadError("Managed Release installer zipapp CRC failed")
+    except zipfile.BadZipFile as error:
+        raise BootstrapPayloadError("Managed Release installer is not a valid zipapp") from error
+    return path
 
 
 def execute_private_python(path: Path, toolchain_root: Path) -> tuple[str, str]:
@@ -180,6 +217,29 @@ def execute_private_uv(path: Path) -> str:
     return value
 
 
+def execute_installer_help(private_python: Path, installer: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="hermes-empty-path-") as poison:
+        completed = subprocess.run(
+            [str(private_python), "-I", str(installer), "--help"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=sanitized_environment(poison),
+        )
+    output = completed.stdout
+    for required in (
+        "--payload",
+        "--runtime-manager",
+        "--qualified-toolchain",
+        "--releases-root",
+        "--expected-release-id",
+        "--expected-target",
+    ):
+        if required not in output:
+            raise BootstrapPayloadError(f"Managed Release installer CLI is missing {required}")
+
+
 def sanitized_environment(poison_path: str) -> dict[str, str]:
     env = dict(os.environ)
     env["PATH"] = poison_path
@@ -203,5 +263,12 @@ def require_equal(actual: Any, expected: Any, label: str) -> None:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (BootstrapPayloadError, OSError, ValueError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+    except (
+        BootstrapPayloadError,
+        OSError,
+        ValueError,
+        subprocess.SubprocessError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+    ) as error:
         raise SystemExit(f"bootstrap_payload_validation_error: {error}") from error
