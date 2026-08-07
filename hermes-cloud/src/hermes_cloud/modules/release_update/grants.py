@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from .domain import DownloadGrantV1, ReleaseArtifactRefV1
 from .ports import PresignDownloadPort
-from .service import UpdateCheckPolicyError
+from .service import UpdateCheckPolicyError, UpdateCheckUnavailable
 
 _DEFAULT_TTL = timedelta(minutes=10)
 _MAX_TTL = timedelta(minutes=20)
@@ -41,10 +41,13 @@ class ShortLivedDownloadGrantIssuer:
         if not _safe_device_id(device_id):
             raise UpdateCheckPolicyError("invalid device identity for download authorization")
         expires_at = observed_now + self._ttl
-        url = self._presigner.presign_get(
-            object_key=artifact.object_key,
-            expires_at=expires_at,
-        )
+        try:
+            url = self._presigner.presign_get(
+                object_key=artifact.object_key,
+                expires_at=expires_at,
+            )
+        except Exception as exc:  # noqa: BLE001 - backend details must stay behind the port
+            raise UpdateCheckUnavailable("download presign backend is unavailable") from exc
         _validate_presigned_url(url)
         return DownloadGrantV1(
             object_key=artifact.object_key,
@@ -57,11 +60,11 @@ class ShortLivedDownloadGrantIssuer:
 
 def _validate_presigned_url(url: str) -> None:
     if not isinstance(url, str) or not url or len(url) > 4096:
-        raise UpdateCheckPolicyError("download URL is empty or oversized")
+        raise UpdateCheckUnavailable("download URL is empty or oversized")
     try:
         parsed = urlsplit(url)
     except ValueError as exc:
-        raise UpdateCheckPolicyError("download URL is malformed") from exc
+        raise UpdateCheckUnavailable("download URL is malformed") from exc
     if (
         parsed.scheme != "https"
         or parsed.hostname is None
@@ -69,7 +72,7 @@ def _validate_presigned_url(url: str) -> None:
         or parsed.password is not None
         or parsed.fragment
     ):
-        raise UpdateCheckPolicyError("download URL must be credential-free HTTPS")
+        raise UpdateCheckUnavailable("download URL must be credential-free HTTPS")
 
 
 def _safe_device_id(value: str) -> bool:
