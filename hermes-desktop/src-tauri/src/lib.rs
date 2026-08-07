@@ -76,7 +76,7 @@ fn runtime_snapshot() -> RuntimeSnapshot {
 fn fetch_manager_snapshot() -> Result<ManagerSnapshotV1, String> {
     let layout = DefaultInstallLayout::discover().map_err(|error| error.to_string())?;
     let state_root = layout.state_root().map_err(|error| error.to_string())?;
-    fetch_manager_snapshot_from(&state_root.join("runtime-manager.sock"))
+    fetch_manager_snapshot_from(&state_root.join("rm.sock"))
 }
 
 fn fetch_manager_snapshot_from(endpoint: &Path) -> Result<ManagerSnapshotV1, String> {
@@ -251,12 +251,9 @@ mod tests {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "hermes-desktop-ipc-{}-{unique}",
-            std::process::id()
-        ));
-        let endpoint = root.join("runtime-manager.sock");
+            .subsec_nanos();
+        let root = Path::new("/tmp").join(format!("hdt-{}-{unique}", std::process::id()));
+        let endpoint = root.join("rm.sock");
         let manager = Arc::new(RuntimeManager::new(
             Arc::new(FailClosedServiceManager),
             Arc::new(DefaultInstallLayout::discover().expect("layout")),
