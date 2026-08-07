@@ -49,8 +49,10 @@ fn serve_read_only(
 ) {
     use hermes_runtime_manager::local_ipc::ReadOnlyUnixServer;
 
+    // Keep the leaf intentionally short: macOS AF_UNIX has a much smaller
+    // sun_path budget than Linux, and customer HOME prefixes are not fixed.
     let endpoint = match layout.state_root() {
-        Ok(root) => root.join("runtime-manager.sock"),
+        Ok(root) => root.join("rm.sock"),
         Err(error) => {
             eprintln!("runtime_manager_ipc_layout_error: {error}");
             std::process::exit(4);
