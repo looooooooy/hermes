@@ -8,6 +8,8 @@ pub enum PortError {
     Unavailable(&'static str),
     #[error("platform operation failed: {0}")]
     Operation(String),
+    #[error("platform I/O failed: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub trait ServiceManager: Send + Sync {
