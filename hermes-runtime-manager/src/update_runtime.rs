@@ -71,6 +71,23 @@ pub fn compose_macos_authoritative_update_safe_window(
     )
 }
 
+#[cfg(windows)]
+pub fn compose_windows_authoritative_update_safe_window(
+    manager: Arc<RuntimeManager>,
+    services: Arc<dyn ServiceManager>,
+    releases_root: PathBuf,
+) -> Result<ManagedUpdateSafeWindow, PortError> {
+    use crate::windows_host_update_safety_pipe::WindowsHostUpdateSafetySource;
+
+    compose_managed_update_safe_window(
+        manager,
+        services,
+        releases_root,
+        PlatformKind::Windows,
+        Arc::new(WindowsHostUpdateSafetySource::discover()?),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
