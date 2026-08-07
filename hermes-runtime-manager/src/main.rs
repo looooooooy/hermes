@@ -193,13 +193,14 @@ fn pack_managed_payload_command(args: &[String]) {
 }
 
 fn stage_managed_payload_command(args: &[String]) {
-    if args.len() != 11 {
+    if args.len() != 12 {
         eprintln!(
             "usage: hermes-runtime-manager stage-managed-payload <archive.tar.zst> <private-python> <installer.pyz> <runtime-manager> <qualified-toolchain-root> <releases-root> <staging-root> <release-id> <release-generation> <target>"
         );
         std::process::exit(64);
     }
-    let release_generation = match args[9].parse::<u64>() {
+    let release_id = &args[9];
+    let release_generation = match args[10].parse::<u64>() {
         Ok(value) if value > 0 => value,
         _ => {
             eprintln!("runtime_manager_managed_payload_stage_error: release generation is invalid");
@@ -213,7 +214,7 @@ fn stage_managed_payload_command(args: &[String]) {
         PathBuf::from(&args[6]),
         PathBuf::from(&args[7]),
         PathBuf::from(&args[8]),
-        args[10].clone(),
+        args[11].clone(),
     ) {
         Ok(value) => value,
         Err(error) => {
@@ -221,7 +222,7 @@ fn stage_managed_payload_command(args: &[String]) {
             std::process::exit(12);
         }
     };
-    match stager.stage_archive(&PathBuf::from(&args[2]), &args[8], release_generation) {
+    match stager.stage_archive(&PathBuf::from(&args[2]), release_id, release_generation) {
         Ok(staged) => println!(
             "{{\"schema_version\":1,\"release_id\":{},\"release_generation\":{},\"release_path\":{},\"content_verified\":true}}",
             serde_json::to_string(&staged.release_id).expect("release id serializable"),
