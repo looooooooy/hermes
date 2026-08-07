@@ -42,7 +42,6 @@ fn current_user_logon_task_registers_runs_runtime_manager_and_cleans_up() {
         assert!(xml.contains("<LogonTrigger>"));
         assert!(xml.contains(&registration.user_sid));
         assert!(xml.contains("<LogonType>InteractiveToken</LogonType>"));
-        assert!(xml.contains("<RunLevel>LeastPrivilege</RunLevel>"));
         assert!(xml.contains("<RestartOnFailure>"));
         assert!(xml.contains("<Interval>PT1M</Interval>"));
         assert!(xml.contains("<Count>3</Count>"));
@@ -50,6 +49,9 @@ fn current_user_logon_task_registers_runs_runtime_manager_and_cleans_up() {
         assert!(xml.contains("version"));
         assert!(!xml.to_ascii_lowercase().contains("<password>"));
         assert!(!xml.to_ascii_lowercase().contains("highestavailable"));
+        // Least-privilege semantics are verified by the adapter via the registered
+        // TaskDefinition Principal.RunLevel == TASK_RUNLEVEL_LUA. The Task Scheduler
+        // service is allowed to omit default-valued RunLevel from serialized XML.
 
         scheduler
             .run_and_wait(&task_name)
