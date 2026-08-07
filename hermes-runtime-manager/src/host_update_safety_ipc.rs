@@ -65,7 +65,6 @@ impl UnixHostUpdateSafetySource {
         stream.flush().map_err(|_| {
             PortError::Operation("Host update-safety request failed".to_owned())
         })?;
-        std::net::Shutdown::Write;
         stream.shutdown(std::net::Shutdown::Write).map_err(|_| {
             PortError::Operation("Host update-safety request shutdown failed".to_owned())
         })?;
