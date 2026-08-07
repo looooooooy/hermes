@@ -105,13 +105,19 @@ def create_macos_endpoint_opener(
 def select_platform_update_safety_opener() -> Callable[..., object] | None:
     """Return the dedicated same-user read-only update-safety relay opener."""
 
-    if sys.platform != "darwin":
-        return None
-    from ..adapters.platform.macos.update_safety_relay import (
-        start_update_safety_relay,
-    )
+    if sys.platform == "darwin":
+        from ..adapters.platform.macos.update_safety_relay import (
+            start_update_safety_relay,
+        )
 
-    return start_update_safety_relay
+        return start_update_safety_relay
+    if sys.platform == "win32":
+        from ..adapters.platform.windows.update_safety_relay import (
+            start_update_safety_relay,
+        )
+
+        return start_update_safety_relay
+    return None
 
 
 __all__ = [
