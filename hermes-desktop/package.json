@@ -11,13 +11,14 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.0.0",
     "@tauri-apps/api": "^2.0.0",
-    "lucide-svelte": "^0.468.0",
     "svelte": "^5.0.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tauri-apps/cli": "^2.9.0",
+    "@types/node": "^22.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^8.0.0"
