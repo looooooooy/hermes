@@ -56,7 +56,34 @@ jobs:
           python-version: "3.13"
       - name: Install pinned OSS SDK V2 and publisher tests
         run: python -m pip install --disable-pip-version-check -e "./hermes-release-publisher[dev]"
-      - name: Test immutable artifacts, monotonic control pointers, and SDK request surface
+      - name: Test immutable artifacts, monotonic control pointers, signer, and SDK request surface
         run: python -m pytest -q hermes-release-publisher/tests
       - name: Exercise content-addressed publication planning CLI
         run: hermes-release-publisher plan-artifact hermes-release-publisher/pyproject.toml --namespace evidence
+
+  signer-interoperability:
+    name: Python signer → Rust verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Install release signer
+        run: python -m pip install --disable-pip-version-check -e ./hermes-release-publisher
+      - name: Generate ephemeral Python-signed release control fixture
+        run: >-
+          python hermes-release-publisher/tests/generate_cross_language_fixture.py
+          --output "${{ runner.temp }}/release-control-fixture"
+      - name: Verify Python signatures and update eligibility with Rust Runtime Manager
+        run: >-
+          cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml --
+          verify-release-control
+          "${{ runner.temp }}/release-control-fixture/release-envelope.json"
+          "${{ runner.temp }}/release-control-fixture/channel-envelope.json"
+          "${{ runner.temp }}/release-control-fixture/block-envelope.json"
+          "${{ runner.temp }}/release-control-fixture/release-trust-store.json"
+          "${{ runner.temp }}/release-control-fixture/observed-state.json"
