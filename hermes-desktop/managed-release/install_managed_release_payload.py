@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Install one verified portable Managed Release payload into an immutable local release.
 
-This program is intended to run from the Hermes-managed installer zipapp with Private
-CPython (`python -I installer.pyz`). It never downloads dependencies and never imports
-customer/site Python packages. The caller must already have verified the outer release
-artifact SHA-256 and signed Product Release identity.
+Runs from the Hermes-managed installer zipapp with Private CPython. The outer artifact
+SHA and signed Product Release are already verified by Runtime Manager; this layer
+re-verifies the portable payload, target runtime plan, wheelhouse, and Plugin vendor
+signature before offline local assembly.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from hermes_local_release import ArtifactInput, ReleaseInputs, RuntimeReleaseInp
 from hermes_managed_release import ManagedReleaseAssembler
 from hermes_offline_wheelhouse import load_verified_wheelhouse
 from hermes_private_toolchain import PinnedExecutable, PrivateToolchainV1
+from hermes_target_runtime_plan import load_verified_target_runtime_plan
 
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 
@@ -52,19 +53,46 @@ def main() -> int:
         expected_target=args.expected_target,
     )
     toolchain = load_toolchain(toolchain_root)
-    wheelhouse = load_verified_wheelhouse(payload / "wheelhouse")
+    wheelhouse_root = canonical_dir(payload / "wheelhouse", "wheelhouse")
+    wheelhouse = load_verified_wheelhouse(wheelhouse_root)
     if wheelhouse.python_tag != "cp313":
         raise LocalAssemblyError("Managed Release wheelhouse must target cp313")
+    runtime_plan = load_verified_target_runtime_plan(
+        wheelhouse_root,
+        expected_wheelhouse_manifest_sha256=wheelhouse.manifest_sha256,
+    )
+    require_equal(runtime_plan.target, args.expected_target, "target runtime plan target")
+    require_equal(
+        runtime_plan.plan_sha256,
+        manifest.get("runtime_install_plan_sha256"),
+        "runtime install plan SHA",
+    )
+    require_equal(
+        runtime_plan.requirement("core").sha256,
+        manifest.get("core_requirements_sha256"),
+        "Core runtime requirements SHA",
+    )
+    require_equal(
+        runtime_plan.requirement("connector").sha256,
+        manifest.get("connector_requirements_sha256"),
+        "Connector runtime requirements SHA",
+    )
 
     core_project = canonical_dir(payload / "core/project", "Core project")
     connector_project = canonical_dir(payload / "connector/project", "Connector project")
     core_wheel = exactly_one_wheel(payload / "core/dist", "Core")
     connector_wheel = exactly_one_wheel(payload / "connector/dist", "Connector")
-    plugin_manifest_path = regular(payload / "plugin/portable-plugin-manifest.json", "Plugin manifest")
-    plugin_trust_path = regular(payload / "plugin/trust-store.json", "Plugin trust store")
+    plugin_manifest_path = regular(
+        payload / "plugin/portable-plugin-manifest.json", "Plugin manifest"
+    )
+    plugin_trust_path = regular(
+        payload / "plugin/trust-store.json", "Plugin trust store"
+    )
     plugin_manifest = load_json(plugin_manifest_path)
     plugin_wheel = regular(
-        payload / "plugin" / safe_filename(plugin_manifest.get("artifact_filename"), "Plugin wheel"),
+        payload
+        / "plugin"
+        / safe_filename(plugin_manifest.get("artifact_filename"), "Plugin wheel"),
         "Plugin wheel",
     )
 
@@ -76,7 +104,9 @@ def main() -> int:
             version=str(manifest.get("core_version", "")),
             wheel=artifact(core_wheel),
             lock=artifact(regular(core_project / "uv.lock", "Core uv.lock")),
-            project=artifact(regular(core_project / "pyproject.toml", "Core pyproject")),
+            project=artifact(
+                regular(core_project / "pyproject.toml", "Core pyproject")
+            ),
             console_script="hermes",
             entrypoint="hermes_cli.main:main",
             launch_module="hermes_cli.main",
@@ -88,15 +118,23 @@ def main() -> int:
             project_name="hermes-connector",
             version=str(manifest.get("connector_version", "")),
             wheel=artifact(connector_wheel),
-            lock=artifact(regular(connector_project / "uv.lock", "Connector uv.lock")),
-            project=artifact(regular(connector_project / "pyproject.toml", "Connector pyproject")),
+            lock=artifact(
+                regular(connector_project / "uv.lock", "Connector uv.lock")
+            ),
+            project=artifact(
+                regular(
+                    connector_project / "pyproject.toml", "Connector pyproject"
+                )
+            ),
             console_script="hermes-connector",
             entrypoint="hermes_connector.cli:main",
             launch_module="hermes_connector.cli",
         ),
     )
-    require_equal(wheelhouse.locks.get("core"), inputs.core.lock.sha256, "Core lock")
-    require_equal(wheelhouse.locks.get("connector"), inputs.connector.lock.sha256, "Connector lock")
+    wheelhouse.require_lock("core", inputs.core.lock.sha256)
+    wheelhouse.require_lock("connector", inputs.connector.lock.sha256)
+    runtime_plan.require_lock("core", inputs.core.lock.sha256)
+    runtime_plan.require_lock("connector", inputs.connector.lock.sha256)
 
     def portable_verifier(_inputs: ReleaseInputs) -> None:
         verify_plugin(runtime_manager, plugin_manifest_path, plugin_trust_path, plugin_wheel)
@@ -105,16 +143,36 @@ def main() -> int:
         releases_root=releases_root,
         toolchain=toolchain,
         wheelhouse=wheelhouse,
+        runtime_plan=runtime_plan,
         portable_plugin_verifier=portable_verifier,
     ).build(inputs)
     release_dir = published.release_dir.resolve(strict=True)
-    if release_dir.parent != releases_root.resolve(strict=True) or release_dir.name != args.expected_release_id:
-        raise LocalAssemblyError("assembled release escaped the exact immutable release root")
+    if (
+        release_dir.parent != releases_root.resolve(strict=True)
+        or release_dir.name != args.expected_release_id
+    ):
+        raise LocalAssemblyError(
+            "assembled release escaped the exact immutable release root"
+        )
     release_manifest = load_json(release_dir / "manifest/release.json")
-    require_equal(release_manifest.get("release_id"), args.expected_release_id, "assembled release_id")
-    require_equal(release_manifest.get("release_digest"), published.release_digest, "release digest")
+    require_equal(
+        release_manifest.get("release_id"), args.expected_release_id, "assembled release_id"
+    )
+    require_equal(
+        release_manifest.get("release_digest"), published.release_digest, "release digest"
+    )
     for relative in ("host/venv", "connector/venv", "plugin/artifacts"):
         canonical_dir(release_dir / relative, relative)
+    require_equal(
+        sha256_file(release_dir / "host/project/runtime-requirements.txt"),
+        runtime_plan.requirement("core").sha256,
+        "installed Core requirements receipt",
+    )
+    require_equal(
+        sha256_file(release_dir / "connector/project/runtime-requirements.txt"),
+        runtime_plan.requirement("connector").sha256,
+        "installed Connector requirements receipt",
+    )
 
     print(
         json.dumps(
@@ -125,6 +183,7 @@ def main() -> int:
                 "release_path": str(release_dir),
                 "release_digest": published.release_digest,
                 "content_verified": True,
+                "target_runtime_plan_verified": True,
                 "private_toolchain_used": True,
                 "network_dependency_install_allowed": False,
                 "reused_existing": bool(getattr(published, "reused", False)),
@@ -143,11 +202,17 @@ def validate_payload_manifest(
     expected_target: str,
 ) -> None:
     require_equal(manifest.get("schema_version"), 1, "payload schema")
-    require_equal(manifest.get("scope"), "hermes_managed_release_portable_inputs", "payload scope")
+    require_equal(
+        manifest.get("scope"), "hermes_managed_release_portable_inputs", "payload scope"
+    )
     require_equal(manifest.get("release_id"), expected_release_id, "payload release_id")
     require_equal(manifest.get("target"), expected_target, "payload target")
-    require_equal(manifest.get("final_local_assembly_required"), True, "local assembly policy")
-    require_equal(manifest.get("assembled_venv_included"), False, "venv shipping policy")
+    require_equal(
+        manifest.get("final_local_assembly_required"), True, "local assembly policy"
+    )
+    require_equal(
+        manifest.get("assembled_venv_included"), False, "venv shipping policy"
+    )
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         raise LocalAssemblyError("payload file manifest is invalid")
@@ -165,10 +230,14 @@ def validate_payload_manifest(
     actual = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and not path.is_symlink() and path.name != "MANAGED-RELEASE-PAYLOAD.json"
+        if path.is_file()
+        and not path.is_symlink()
+        and path.name != "MANAGED-RELEASE-PAYLOAD.json"
     }
     if actual != declared:
-        raise LocalAssemblyError("payload file set does not match signed portable manifest")
+        raise LocalAssemblyError(
+            "payload file set does not match signed portable manifest"
+        )
     if any("/venv/" in f"/{name}/" for name in actual):
         raise LocalAssemblyError("portable payload must not contain prebuilt venvs")
     binding_keys = (
@@ -183,11 +252,17 @@ def validate_payload_manifest(
         "core_lock_sha256",
         "connector_lock_sha256",
         "wheelhouse_manifest_sha256",
+        "runtime_install_plan_sha256",
+        "core_requirements_sha256",
+        "connector_requirements_sha256",
         "portable_plugin_manifest_sha256",
         "plugin_trust_store_sha256",
         "files",
     )
-    binding = {key: manifest[key] for key in binding_keys}
+    try:
+        binding = {key: manifest[key] for key in binding_keys}
+    except KeyError as exc:
+        raise LocalAssemblyError("payload target runtime binding is incomplete") from exc
     require_equal(
         hashlib.sha256(canonical_json(binding)).hexdigest(),
         manifest.get("content_sha256"),
@@ -200,8 +275,14 @@ def load_toolchain(root: Path) -> PrivateToolchainV1:
     require_equal(manifest.get("schema_version"), 1, "Toolchain schema")
     regular(root / "LICENSE-EVIDENCE.json", "Toolchain license evidence")
     regular(root / "UPSTREAM-SOURCE.json", "Toolchain source evidence")
-    python = executable(root / safe_relative(manifest.get("python_path"), "Private Python path"), "Private Python")
-    uv = executable(root / safe_relative(manifest.get("uv_path"), "Private uv path"), "Private uv")
+    python = executable(
+        root / safe_relative(manifest.get("python_path"), "Private Python path"),
+        "Private Python",
+    )
+    uv = executable(
+        root / safe_relative(manifest.get("uv_path"), "Private uv path"),
+        "Private uv",
+    )
     return PrivateToolchainV1(
         python=PinnedExecutable(
             path=python,
@@ -220,7 +301,13 @@ def verify_plugin(runtime_manager: Path, manifest: Path, trust: Path, wheel: Pat
     environment = dict(os.environ)
     environment["PATH"] = ""
     completed = subprocess.run(
-        [str(runtime_manager), "verify-plugin-signature", str(manifest), str(trust), str(wheel)],
+        [
+            str(runtime_manager),
+            "verify-plugin-signature",
+            str(manifest),
+            str(trust),
+            str(wheel),
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -230,14 +317,22 @@ def verify_plugin(runtime_manager: Path, manifest: Path, trust: Path, wheel: Pat
     try:
         report = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
-        raise LocalAssemblyError("Runtime Manager Plugin verifier returned invalid JSON") from exc
+        raise LocalAssemblyError(
+            "Runtime Manager Plugin verifier returned invalid JSON"
+        ) from exc
     if not isinstance(report, dict) or report.get("signature_verified") is not True:
-        raise LocalAssemblyError("portable Plugin vendor signature verification failed")
+        raise LocalAssemblyError(
+            "portable Plugin vendor signature verification failed"
+        )
 
 
 def exactly_one_wheel(root: Path, label: str) -> Path:
     root = canonical_dir(root, f"{label} dist")
-    wheels = [path for path in root.iterdir() if path.is_file() and not path.is_symlink() and path.suffix == ".whl"]
+    wheels = [
+        path
+        for path in root.iterdir()
+        if path.is_file() and not path.is_symlink() and path.suffix == ".whl"
+    ]
     if len(wheels) != 1:
         raise LocalAssemblyError(f"{label} dist must contain exactly one wheel")
     return wheels[0].resolve(strict=True)
@@ -334,5 +429,11 @@ def require_equal(actual: object, expected: object, label: str) -> None:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (LocalAssemblyError, OSError, ValueError, subprocess.SubprocessError) as exc:
+    except (
+        LocalAssemblyError,
+        OSError,
+        ValueError,
+        RuntimeError,
+        subprocess.SubprocessError,
+    ) as exc:
         raise SystemExit(f"managed_release_local_install_error: {exc}") from exc
