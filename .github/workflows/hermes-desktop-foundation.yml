@@ -71,6 +71,46 @@ jobs:
           hermes-connector/tests/packaging/test_offline_wheelhouse.py
           hermes-connector/tests/packaging/test_managed_release_entrypoint.py
 
+  native-toolchain:
+    name: Real private toolchain / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+          - os: macos-latest
+            target: macos-aarch64
+          - os: windows-latest
+            target: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Build Hermes toolchain bundle from pinned upstream assets
+        run: >-
+          python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
+          --lock hermes-runtime-manager/toolchains/upstream-lock-v1.json
+          --target ${{ matrix.target }}
+          --output "${{ runner.temp }}/hermes-toolchain-bundle"
+      - name: Install with the customer-side Runtime Manager installer
+        run: >-
+          cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml --
+          install-toolchain
+          "${{ runner.temp }}/hermes-toolchain-bundle"
+          "${{ runner.temp }}/hermes-toolchains"
+      - name: Execute installed private Python and uv
+        run: >-
+          python hermes-runtime-manager/toolchains/verify_installed_toolchain.py
+          --toolchains-root "${{ runner.temp }}/hermes-toolchains"
+          --python-version 3.13.14
+          --uv-version 0.12.2
+
   runtime-manager:
     name: Runtime Manager / ${{ matrix.os }}
     strategy:
