@@ -5,6 +5,7 @@ pub mod linux_secret_service;
 #[cfg(target_os = "linux")]
 pub mod linux_systemd_user;
 pub mod local_ipc;
+pub mod managed_payload_archive;
 pub mod manager;
 pub mod model;
 pub mod platform;
@@ -32,6 +33,10 @@ pub use blank_machine::{
 pub use linux_secret_service::LinuxSecretServiceStore;
 #[cfg(target_os = "linux")]
 pub use linux_systemd_user::{LinuxSystemdUserBootstrap, LinuxSystemdUserStatus};
+pub use managed_payload_archive::{
+    pack_managed_payload, unpack_managed_payload, ManagedPayloadArchiveError,
+    ManagedPayloadArchiveReceiptV1,
+};
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use portable_plugin_signature::{
