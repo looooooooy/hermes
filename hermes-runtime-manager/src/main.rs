@@ -1,7 +1,9 @@
 use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
-use hermes_runtime_manager::{PrivateToolchainInstaller, RuntimeManager};
+use hermes_runtime_manager::{
+    run_blank_machine_toolchain_gate, PrivateToolchainInstaller, RuntimeManager,
+};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -11,6 +13,10 @@ fn main() {
 
     if command == "install-toolchain" {
         install_toolchain_command(&args);
+        return;
+    }
+    if command == "blank-machine-toolchain-gate" {
+        blank_machine_toolchain_gate_command(&args);
         return;
     }
 
@@ -46,7 +52,7 @@ fn main() {
         other => {
             eprintln!("unsupported command: {other}");
             eprintln!(
-                "supported commands: status, doctor, serve-read-only, install-toolchain, version"
+                "supported commands: status, doctor, serve-read-only, install-toolchain, blank-machine-toolchain-gate, version"
             );
             std::process::exit(64);
         }
@@ -68,6 +74,27 @@ fn install_toolchain_command(args: &[String]) {
         Err(error) => {
             eprintln!("runtime_manager_toolchain_install_error: {error}");
             std::process::exit(7);
+        }
+    }
+}
+
+fn blank_machine_toolchain_gate_command(args: &[String]) {
+    if args.len() != 4 {
+        eprintln!(
+            "usage: hermes-runtime-manager blank-machine-toolchain-gate <qualified-bundle-root> <fresh-sandbox-root>"
+        );
+        std::process::exit(64);
+    }
+    let source = PathBuf::from(&args[2]);
+    let sandbox = PathBuf::from(&args[3]);
+    match run_blank_machine_toolchain_gate(&source, &sandbox) {
+        Ok(report) => println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("blank-machine report is serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_blank_machine_gate_error: {error}");
+            std::process::exit(8);
         }
     }
 }

@@ -1,3 +1,4 @@
+pub mod blank_machine;
 pub mod ipc;
 pub mod local_ipc;
 pub mod manager;
@@ -8,6 +9,9 @@ pub mod toolchain;
 #[cfg(windows)]
 pub mod windows_pipe;
 
+pub use blank_machine::{
+    run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
+};
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
