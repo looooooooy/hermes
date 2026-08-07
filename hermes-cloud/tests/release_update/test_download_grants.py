@@ -6,7 +6,10 @@ import pytest
 
 from hermes_cloud.modules.release_update.domain import ReleaseArtifactRefV1
 from hermes_cloud.modules.release_update.grants import ShortLivedDownloadGrantIssuer
-from hermes_cloud.modules.release_update.service import UpdateCheckPolicyError
+from hermes_cloud.modules.release_update.service import (
+    UpdateCheckPolicyError,
+    UpdateCheckUnavailable,
+)
 
 
 class _Presigner:
@@ -47,7 +50,7 @@ def test_grant_issuer_binds_presign_to_signed_artifact_and_ten_minute_ttl() -> N
     assert grant.expires_at == now + timedelta(minutes=10)
 
 
-def test_grant_issuer_rejects_insecure_or_credential_bearing_url() -> None:
+def test_grant_issuer_classifies_insecure_presign_output_as_service_unavailable() -> None:
     now = datetime(2026, 8, 7, 16, 0, tzinfo=UTC)
     for url in (
         "http://updates.example.test/a.bin",
@@ -55,7 +58,7 @@ def test_grant_issuer_rejects_insecure_or_credential_bearing_url() -> None:
         "https://updates.example.test/a.bin#fragment",
     ):
         issuer = ShortLivedDownloadGrantIssuer(_Presigner(url))
-        with pytest.raises(UpdateCheckPolicyError):
+        with pytest.raises(UpdateCheckUnavailable):
             issuer.issue_grant(
                 device_id="77777777-7777-4777-8777-777777777777",
                 artifact=_artifact(),
@@ -63,7 +66,7 @@ def test_grant_issuer_rejects_insecure_or_credential_bearing_url() -> None:
             )
 
 
-def test_grant_issuer_rejects_out_of_policy_ttl_and_naive_time() -> None:
+def test_grant_issuer_rejects_out_of_policy_ttl_and_naive_request_time() -> None:
     with pytest.raises(ValueError):
         ShortLivedDownloadGrantIssuer(_Presigner(), ttl=timedelta(minutes=21))
     with pytest.raises(ValueError):
