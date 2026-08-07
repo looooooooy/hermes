@@ -58,6 +58,16 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path, str]:
     return wheelhouse, venv, metadata, _sha(manifest_path.read_bytes())
 
 
+def _project_metadata(venv: Path, dist_info: str, url: str) -> Path:
+    metadata = venv / "lib/python3.13/site-packages" / dist_info / "direct_url.json"
+    metadata.parent.mkdir(parents=True, exist_ok=True)
+    metadata.write_text(
+        json.dumps({"url": url, "archive_info": {}}, sort_keys=True),
+        encoding="utf-8",
+    )
+    return metadata
+
+
 def test_local_declared_wheel_direct_url_is_accepted(tmp_path: Path) -> None:
     wheelhouse, venv, metadata, manifest_sha = _fixture(tmp_path)
 
@@ -67,6 +77,52 @@ def test_local_declared_wheel_direct_url_is_accepted(tmp_path: Path) -> None:
         wheelhouse_root=wheelhouse,
         expected_manifest_sha256=manifest_sha,
     )
+
+
+def test_release_project_direct_urls_are_excluded_from_dependency_policy(
+    tmp_path: Path,
+) -> None:
+    wheelhouse, venv, _, manifest_sha = _fixture(tmp_path)
+    outside = (tmp_path / "release-project-wheel.whl").resolve()
+    outside.write_bytes(b"release-project")
+    core = _project_metadata(
+        venv,
+        "hermes_agent-0.19.0.dist-info",
+        outside.as_uri(),
+    )
+    connector = _project_metadata(
+        venv,
+        "hermes_connector-0.1.0.dist-info",
+        outside.as_uri(),
+    )
+
+    # Core/Connector project wheel identity is verified separately by ReleaseInputs.
+    # Their PEP 610 records must not be interpreted as third-party dependency sources.
+    verify_wheelhouse_direct_urls(
+        [str(core), str(connector)],
+        venv_root=venv,
+        wheelhouse_root=wheelhouse,
+        expected_manifest_sha256=manifest_sha,
+    )
+
+
+def test_similarly_named_dependency_is_not_exempt(tmp_path: Path) -> None:
+    wheelhouse, venv, _, manifest_sha = _fixture(tmp_path)
+    outside = (tmp_path / "outside.whl").resolve()
+    outside.write_bytes(b"outside")
+    metadata = _project_metadata(
+        venv,
+        "hermes_agent_tools-9.9.9.dist-info",
+        outside.as_uri(),
+    )
+
+    with pytest.raises(WheelhouseProvenanceError, match="escaped verified wheelhouse"):
+        verify_wheelhouse_direct_urls(
+            [str(metadata)],
+            venv_root=venv,
+            wheelhouse_root=wheelhouse,
+            expected_manifest_sha256=manifest_sha,
+        )
 
 
 def test_network_direct_url_is_rejected(tmp_path: Path) -> None:
