@@ -3,19 +3,19 @@ use crate::model::PlatformKind;
 use crate::ports::{PortError, ServiceManager};
 use crate::update_coordinator::UpdateConnectorLane;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Freeze Cloud command admission by stopping the Connector before runtime cutover.
 ///
-/// `ServiceManager::stop_connector` is the lifecycle boundary: success means the
-/// Connector process is no longer accepting commands.  Reconciliation always starts
-/// the Connector belonging to Runtime Manager's current active exact release, so both
-/// successful activation and rollback use the same authority path.
+/// The drain state is process-local and idempotent so a Safe Window probe may freeze
+/// command admission before it inspects Host evidence, while the coordinator's later
+/// drain phase can call the same lane again without restarting or double-stopping it.
 pub struct GracefulServiceManagerConnectorLane {
     manager: Arc<RuntimeManager>,
     services: Arc<dyn ServiceManager>,
     releases_root: PathBuf,
     platform: PlatformKind,
+    drained: Mutex<bool>,
 }
 
 impl GracefulServiceManagerConnectorLane {
@@ -35,6 +35,7 @@ impl GracefulServiceManagerConnectorLane {
             services,
             releases_root,
             platform,
+            drained: Mutex::new(false),
         })
     }
 
@@ -82,12 +83,30 @@ impl GracefulServiceManagerConnectorLane {
 
 impl UpdateConnectorLane for GracefulServiceManagerConnectorLane {
     fn drain(&self) -> Result<(), PortError> {
-        self.services.stop_connector()
+        let mut drained = self
+            .drained
+            .lock()
+            .map_err(|_| PortError::Operation("Connector drain state lock is poisoned".to_owned()))?;
+        if *drained {
+            return Ok(());
+        }
+        self.services.stop_connector()?;
+        *drained = true;
+        Ok(())
     }
 
     fn reconcile(&self) -> Result<(), PortError> {
+        let mut drained = self
+            .drained
+            .lock()
+            .map_err(|_| PortError::Operation("Connector drain state lock is poisoned".to_owned()))?;
+        if !*drained {
+            return Ok(());
+        }
         let (release_id, executable) = self.active_connector()?;
-        self.services.start_connector(&executable, &release_id)
+        self.services.start_connector(&executable, &release_id)?;
+        *drained = false;
+        Ok(())
     }
 }
 
@@ -123,7 +142,6 @@ mod tests {
     use crate::ports::InstallLayout;
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[derive(Default)]
@@ -181,21 +199,12 @@ mod tests {
     }
 
     #[test]
-    fn drain_stops_connector_and_reconcile_uses_current_exact_release() {
+    fn repeated_drain_and_reconcile_are_idempotent() {
         let root = temp_root();
         let release_id = "1.0.1+active";
         make_release(&root.join("releases"), release_id);
         let services = Arc::new(RecordingServices::default());
-        let manager = Arc::new(RuntimeManager::new(
-            services.clone(),
-            Arc::new(Layout(root.clone())),
-        ));
-        manager.transition(LifecycleState::Installing).unwrap();
-        manager.transition(LifecycleState::Stopped).unwrap();
-        manager.transition(LifecycleState::Starting).unwrap();
-        manager.transition(LifecycleState::Ready).unwrap();
-        manager.record_activation(release_id, "1").unwrap();
-
+        let manager = ready_manager(root.clone(), services.clone(), release_id);
         let lane = GracefulServiceManagerConnectorLane::new(
             manager,
             services.clone(),
@@ -203,15 +212,31 @@ mod tests {
             current_platform(),
         )
         .unwrap();
+
         lane.drain().unwrap();
+        lane.drain().unwrap();
+        lane.reconcile().unwrap();
         lane.reconcile().unwrap();
 
         let calls = services.calls.lock().unwrap().clone();
-        assert_eq!(calls.first().map(String::as_str), Some("stop"));
-        assert!(calls
-            .last()
-            .is_some_and(|call| call.starts_with(&format!("start:{release_id}:"))));
+        assert_eq!(calls.iter().filter(|call| call.as_str() == "stop").count(), 1);
+        assert_eq!(calls.iter().filter(|call| call.starts_with("start:")).count(), 1);
+        assert!(calls.last().is_some_and(|call| call.starts_with(&format!("start:{release_id}:"))));
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn ready_manager(
+        root: PathBuf,
+        services: Arc<RecordingServices>,
+        release_id: &str,
+    ) -> Arc<RuntimeManager> {
+        let manager = Arc::new(RuntimeManager::new(services, Arc::new(Layout(root))));
+        manager.transition(LifecycleState::Installing).unwrap();
+        manager.transition(LifecycleState::Stopped).unwrap();
+        manager.transition(LifecycleState::Starting).unwrap();
+        manager.transition(LifecycleState::Ready).unwrap();
+        manager.record_activation(release_id, "1").unwrap();
+        manager
     }
 
     fn make_release(root: &Path, release_id: &str) {
