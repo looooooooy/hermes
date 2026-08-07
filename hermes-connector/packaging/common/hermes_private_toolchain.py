@@ -1,8 +1,8 @@
 """Pinned Hermes toolchain execution for blank-machine Managed Runtime builds.
 
 The runner is independent of shell PATH discovery and can be bound to a verified,
-closed wheelhouse. Every uv project sync uses the declared private Python, disables
-network/index/config discovery, and searches only the verified local wheel set.
+closed wheelhouse. Approved uv operations use the declared private Python, disable
+network/index/config discovery, and search only the verified local wheel set.
 """
 
 from __future__ import annotations
@@ -135,9 +135,6 @@ class PinnedToolchainRunner:
 
 
 def _bounded_diagnostic(value: str) -> str:
-    # Toolchain commands run without shell interpolation and without credentials.
-    # Still keep failure material bounded and single-line so CI cannot accidentally
-    # turn a resolver diagnostic into an unbounded log surface.
     normalized = " ".join(value.replace("\x00", "").split())
     if not normalized:
         return "no diagnostic output"
@@ -151,12 +148,12 @@ def _bind_uv_python(argv: list[str], python: Path) -> None:
         raise PrivateToolchainError("uv command has no subcommand")
 
     subcommand = argv[1]
-    if subcommand == "sync":
+    if subcommand in {"sync", "venv"}:
         if "--python" in argv:
             index = argv.index("--python")
             if index + 1 >= len(argv) or Path(argv[index + 1]) != python:
                 raise PrivateToolchainError(
-                    "uv sync attempted to override the pinned private Python"
+                    f"uv {subcommand} attempted to override the pinned private Python"
                 )
         else:
             argv[2:2] = ["--python", str(python)]
@@ -176,11 +173,18 @@ def _bind_uv_python(argv: list[str], python: Path) -> None:
 
 
 def _bind_wheelhouse(argv: list[str]) -> None:
-    if "--no-index" not in argv:
-        if argv[1] == "pip":
-            argv[3:3] = ["--no-index"]
-        else:
-            argv[2:2] = ["--no-index"]
+    subcommand = argv[1] if len(argv) > 1 else ""
+    if subcommand == "venv":
+        return
+    if "--no-index" in argv:
+        return
+    if subcommand == "pip":
+        argv[3:3] = ["--no-index"]
+        return
+    if subcommand == "sync":
+        argv[2:2] = ["--no-index"]
+        return
+    raise PrivateToolchainError(f"wheelhouse binding is unsupported for uv {subcommand}")
 
 
 def _sanitized_environment(declared: Mapping[str, str]) -> dict[str, str]:
