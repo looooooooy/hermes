@@ -180,10 +180,7 @@ fn pending_approval_defers_and_restores_previous_connector_before_activation() {
     let root = temp_root();
     let services = Arc::new(RecordingServices::default());
     let manager = ready_manager(&root, services.clone());
-    let (source, server) = one_snapshot_source(
-        &root,
-        snapshot_json(0, 1, 0),
-    );
+    let (source, server) = one_snapshot_source(&root, snapshot_json(0, 1, 0));
     let composition = compose_managed_update_safe_window(
         manager.clone(),
         services.clone(),
@@ -224,10 +221,7 @@ fn safe_authoritative_snapshot_enters_activation_and_reconciles_target_connector
     let root = temp_root();
     let services = Arc::new(RecordingServices::default());
     let manager = ready_manager(&root, services.clone());
-    let (source, server) = one_snapshot_source(
-        &root,
-        snapshot_json(0, 0, 0),
-    );
+    let (source, server) = one_snapshot_source(&root, snapshot_json(0, 0, 0));
     let composition = compose_managed_update_safe_window(
         manager.clone(),
         services.clone(),
@@ -384,11 +378,14 @@ fn snapshot_json(active: u32, approvals: u32, clarifications: u32) -> Vec<u8> {
             "{{\"schema_version\":1,",
             "\"profile\":\"default\",",
             "\"runtime_generation\":\"generation-42\",",
-            "\"active_tasks\":{active},",
-            "\"pending_approvals\":{approvals},",
-            "\"pending_clarifications\":{clarifications},",
+            "\"active_tasks\":{},",
+            "\"pending_approvals\":{},",
+            "\"pending_clarifications\":{},",
             "\"evidence_complete\":true}}\n"
-        )
+        ),
+        active,
+        approvals,
+        clarifications,
     )
     .into_bytes()
 }
