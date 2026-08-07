@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,12 +13,16 @@ sys.path.insert(0, str(COMMON_PACKAGING))
 
 import hermes_managed_release
 from hermes_managed_release import ManagedReleaseAssembler
+from hermes_offline_wheelhouse import WheelhouseError, load_verified_wheelhouse
 from hermes_private_toolchain import (
     PinnedExecutable,
     PinnedToolchainRunner,
     PrivateToolchainError,
     PrivateToolchainV1,
 )
+
+CORE_LOCK = "1" * 64
+CONNECTOR_LOCK = "2" * 64
 
 
 def _executable(tmp_path: Path, name: str, content: bytes) -> PinnedExecutable:
@@ -37,6 +43,39 @@ def _toolchain(tmp_path: Path) -> PrivateToolchainV1:
     )
 
 
+def _wheelhouse(tmp_path: Path, *, core_lock: str = CORE_LOCK):
+    root = (tmp_path / "wheelhouse").resolve()
+    root.mkdir(exist_ok=True)
+    wheel = b"managed dependency"
+    filename = "managed_dep-1.0.0-py3-none-any.whl"
+    (root / filename).write_bytes(wheel)
+    manifest = {
+        "schema_version": 1,
+        "platform": "test",
+        "architecture": "test",
+        "python_tag": "cp313",
+        "locks": {"core": core_lock, "connector": CONNECTOR_LOCK},
+        "artifacts": [
+            {
+                "filename": filename,
+                "sha256": hashlib.sha256(wheel).hexdigest(),
+                "size_bytes": len(wheel),
+            }
+        ],
+    }
+    (root / "WHEELHOUSE-MANIFEST.json").write_text(
+        json.dumps(manifest, sort_keys=True), encoding="utf-8"
+    )
+    return load_verified_wheelhouse(root)
+
+
+def _inputs():
+    return SimpleNamespace(
+        core=SimpleNamespace(lock=SimpleNamespace(sha256=CORE_LOCK)),
+        connector=SimpleNamespace(lock=SimpleNamespace(sha256=CONNECTOR_LOCK)),
+    )
+
+
 def test_managed_release_composition_always_injects_pinned_runner(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -54,15 +93,17 @@ def test_managed_release_composition_always_injects_pinned_runner(
             return "built"
 
     monkeypatch.setattr(hermes_managed_release, "ReleaseBuilder", FakeBuilder)
+    inputs = _inputs()
     assembler = ManagedReleaseAssembler(
         releases_root=(tmp_path / "releases").resolve(),
         toolchain=_toolchain(tmp_path),
+        wheelhouse=_wheelhouse(tmp_path),
     )
 
-    assert assembler.build("release-inputs", dry_run=True) == "built"
+    assert assembler.build(inputs, dry_run=True) == "built"
     assert isinstance(captured["runner"], PinnedToolchainRunner)
     assert captured["releases_root"] == (tmp_path / "releases").resolve()
-    assert captured["inputs"] == "release-inputs"
+    assert captured["inputs"] is inputs
     assert captured["dry_run"] is True
 
 
@@ -88,6 +129,28 @@ def test_managed_release_refuses_unverified_toolchain_before_builder_creation(
         ManagedReleaseAssembler(
             releases_root=(tmp_path / "releases").resolve(),
             toolchain=bad_toolchain,
+            wheelhouse=_wheelhouse(tmp_path),
         )
 
     assert builder_created is False
+
+
+def test_managed_release_rejects_wheelhouse_for_different_lock(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class FakeBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def build(self, *_args, **_kwargs):
+            raise AssertionError("builder must not run after lock mismatch")
+
+    monkeypatch.setattr(hermes_managed_release, "ReleaseBuilder", FakeBuilder)
+    assembler = ManagedReleaseAssembler(
+        releases_root=(tmp_path / "releases").resolve(),
+        toolchain=_toolchain(tmp_path),
+        wheelhouse=_wheelhouse(tmp_path, core_lock="f" * 64),
+    )
+
+    with pytest.raises(WheelhouseError, match="lock mismatch"):
+        assembler.build(_inputs())
