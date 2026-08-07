@@ -3,7 +3,9 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import subprocess
 from ctypes import wintypes
+from pathlib import Path
 
 import pytest
 
@@ -208,3 +210,50 @@ def test_first_pipe_instance_prevents_live_endpoint_takeover() -> None:
         ) == _snapshot()
     finally:
         first.close()
+
+
+def test_python_relay_to_rust_runtime_manager_contract() -> None:
+    if os.environ.get("HERMES_RUN_WINDOWS_UPDATE_SAFETY_CROSS_LANGUAGE") != "1":
+        pytest.skip("cross-language Windows update-safety gate is not enabled")
+
+    pipe_name = _pipe_name("python-rust")
+
+    def provider() -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "profile": "default",
+            "runtime_generation": "generation-python-42",
+            "active_tasks": 2,
+            "pending_approvals": 1,
+            "pending_clarifications": 3,
+            "evidence_complete": True,
+        }
+
+    relay = WindowsUpdateSafetyRelay(provider, pipe_name=pipe_name).start()
+    try:
+        repository_root = Path(__file__).resolve().parents[6]
+        environment = os.environ.copy()
+        environment["HERMES_UPDATE_SAFETY_CROSS_LANGUAGE_PIPE"] = pipe_name
+        result = subprocess.run(
+            [
+                "cargo",
+                "test",
+                "--manifest-path",
+                str(repository_root / "hermes-runtime-manager" / "Cargo.toml"),
+                "--test",
+                "windows_host_update_safety_pipe",
+                "python_relay_cross_language_contract_when_configured",
+                "--",
+                "--exact",
+                "--nocapture",
+            ],
+            cwd=repository_root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + "\n" + result.stderr
+    finally:
+        relay.close()
