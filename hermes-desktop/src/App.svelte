@@ -141,7 +141,7 @@
         {nativeSource ? 'Live runtime' : 'Design preview'}
       </div>
       <button class="icon-button" on:click={refreshSnapshot} aria-label="Refresh runtime status">
-        <RefreshCw size={16} class:spin={refreshing} />
+        <span class:spin={refreshing}><RefreshCw size={16} /></span>
       </button>
     </header>
 
