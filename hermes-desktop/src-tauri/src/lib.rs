@@ -1,9 +1,17 @@
 use hermes_runtime_manager::ipc::{ManagerRequestV1, ManagerResponseV1};
+#[cfg(unix)]
 use hermes_runtime_manager::local_ipc::request_read_only;
 use hermes_runtime_manager::model::{LifecycleState, ManagerSnapshotV1};
+#[cfg(unix)]
 use hermes_runtime_manager::platform::DefaultInstallLayout;
+#[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
+#[cfg(windows)]
+use hermes_runtime_manager::windows_pipe::{
+    current_user_pipe_name, request_read_only as request_windows_pipe,
+};
 use serde::Serialize;
+#[cfg(unix)]
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize)]
@@ -73,15 +81,35 @@ fn runtime_snapshot() -> RuntimeSnapshot {
     }
 }
 
+#[cfg(unix)]
 fn fetch_manager_snapshot() -> Result<ManagerSnapshotV1, String> {
     let layout = DefaultInstallLayout::discover().map_err(|error| error.to_string())?;
     let state_root = layout.state_root().map_err(|error| error.to_string())?;
     fetch_manager_snapshot_from(&state_root.join("rm.sock"))
 }
 
+#[cfg(windows)]
+fn fetch_manager_snapshot() -> Result<ManagerSnapshotV1, String> {
+    let pipe_name = current_user_pipe_name().map_err(|error| error.to_string())?;
+    fetch_manager_snapshot_from_pipe(&pipe_name)
+}
+
+#[cfg(unix)]
 fn fetch_manager_snapshot_from(endpoint: &Path) -> Result<ManagerSnapshotV1, String> {
     let request_id = format!("desktop-status-{}", std::process::id());
     match request_read_only(endpoint, &request_id, ManagerRequestV1::Status)
+        .map_err(|error| error.to_string())?
+    {
+        ManagerResponseV1::Snapshot(snapshot) => Ok(snapshot),
+        ManagerResponseV1::Error { code, message } => Err(format!("{code}: {message}")),
+        other => Err(format!("unexpected Runtime Manager response: {other:?}")),
+    }
+}
+
+#[cfg(windows)]
+fn fetch_manager_snapshot_from_pipe(pipe_name: &str) -> Result<ManagerSnapshotV1, String> {
+    let request_id = format!("desktop-status-{}", std::process::id());
+    match request_windows_pipe(pipe_name, &request_id, ManagerRequestV1::Status)
         .map_err(|error| error.to_string())?
     {
         ManagerResponseV1::Snapshot(snapshot) => Ok(snapshot),
@@ -260,7 +288,7 @@ mod tests {
             Arc::new(DefaultInstallLayout::discover().expect("layout")),
         ));
         let server = ReadOnlyUnixServer::bind(endpoint.clone(), manager).expect("bind server");
-        let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
+        let server_thread = std::thread::spawn(move || server.serve_once().expect("serve"));
 
         let snapshot = fetch_manager_snapshot_from(&endpoint).expect("Desktop IPC snapshot");
         server_thread.join().expect("server thread");
@@ -269,6 +297,37 @@ mod tests {
         assert_eq!(snapshot.components.len(), 4);
         assert!(snapshot.components.iter().all(|component| !component.ready));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn desktop_snapshot_consumes_real_runtime_manager_named_pipe() {
+        use super::fetch_manager_snapshot_from_pipe;
+        use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
+        use hermes_runtime_manager::windows_pipe::{
+            current_user_pipe_name, ReadOnlyWindowsPipeServer,
+        };
+        use hermes_runtime_manager::RuntimeManager;
+        use std::sync::Arc;
+        use std::thread;
+
+        let base = current_user_pipe_name().expect("pipe name");
+        let name = format!("{base}-desktop-test-{}", std::process::id());
+        let manager = Arc::new(RuntimeManager::new(
+            Arc::new(FailClosedServiceManager),
+            Arc::new(DefaultInstallLayout::discover().expect("layout")),
+        ));
+        let server = ReadOnlyWindowsPipeServer::new(&name, manager).expect("bind server");
+        let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
+
+        let snapshot = fetch_manager_snapshot_from_pipe(&name).expect("Desktop pipe snapshot");
+        let identity = server_thread.join().expect("server thread");
+
+        assert_eq!(snapshot.schema_version, 1);
+        assert_eq!(snapshot.components.len(), 4);
+        assert!(snapshot.components.iter().all(|component| !component.ready));
+        assert_eq!(identity.pid, std::process::id());
+        assert!(identity.same_user);
     }
 }
 
