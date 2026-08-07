@@ -17,7 +17,8 @@ use windows_sys::Win32::Security::{
     EqualSid, GetTokenInformation, RevertToSelf, TokenUser, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE, OPEN_EXISTING,
+    CreateFileW, FlushFileBuffers, ReadFile, WriteFile, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    OPEN_EXISTING,
 };
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
@@ -69,8 +70,6 @@ impl PipeSecurity {
             return Err(WindowsPipeError::Identity("TokenUser SID is null"));
         }
         let user_sid = sid_to_string(user.User.Sid)?;
-        // Protected DACL with exactly one allow ACE: the Runtime Manager's current
-        // user gets Generic All; Everyone/Anonymous receive no inherited/default ACE.
         let sddl = format!("D:P(A;;GA;;;{user_sid})");
         let sddl_wide = wide(&sddl);
         let mut descriptor = null_mut();
@@ -200,6 +199,13 @@ impl ReadOnlyWindowsPipeServer {
             self.pipe.raw(),
             &ManagerEnvelopeV1::new(envelope.request_id, response),
         )?;
+        // Flush on the server end before disconnecting. Windows documents this as the
+        // synchronous handoff that prevents the client from observing ERROR_NO_DATA
+        // after a response has been written but the server disconnects too quickly.
+        if unsafe { FlushFileBuffers(self.pipe.raw()) } == 0 {
+            unsafe { DisconnectNamedPipe(self.pipe.raw()) };
+            return Err(last_error());
+        }
         unsafe { DisconnectNamedPipe(self.pipe.raw()) };
         Ok(WindowsPipePeerIdentity { pid, same_user })
     }
