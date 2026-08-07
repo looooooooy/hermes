@@ -78,6 +78,38 @@ def _inputs():
     )
 
 
+def _portable_manifest(filename: str, wheel_sha256: str) -> dict[str, object]:
+    return {
+        "schema_version": 2,
+        "plugin_id": "hermes-agent-plugin",
+        "version": "0.1.0",
+        "artifact_filename": filename,
+        "wheel_sha256": wheel_sha256,
+        "entrypoint": {
+            "group": "hermes_agent.plugins",
+            "name": "hermes-agent-plugin",
+            "value": "hermes_agent_plugin",
+        },
+        "signature_algorithm": "ed25519",
+        "key_id": "vendor-key-1",
+        "issued_at": "2026-08-07T00:00:00Z",
+        "expires_at": "2026-08-08T00:00:00Z",
+        "signature": "A" * 88,
+    }
+
+
+def _portable_inputs(tmp_path: Path):
+    wheel = (tmp_path / "hermes_agent_plugin-0.1.0-py3-none-any.whl").resolve()
+    wheel.write_bytes(b"plugin")
+    digest = hashlib.sha256(b"plugin").hexdigest()
+    return SimpleNamespace(
+        core=SimpleNamespace(lock=SimpleNamespace(sha256=CORE_LOCK)),
+        connector=SimpleNamespace(lock=SimpleNamespace(sha256=CONNECTOR_LOCK)),
+        plugin_bundle=SimpleNamespace(path=wheel, sha256=digest),
+        signed_plugin_manifest=_portable_manifest(wheel.name, digest),
+    )
+
+
 def test_managed_release_composition_always_injects_pinned_runner(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -156,6 +188,64 @@ def test_managed_release_rejects_wheelhouse_for_different_lock(
 
     with pytest.raises(WheelhouseError, match="lock mismatch"):
         assembler.build(_inputs())
+
+
+def test_portable_plugin_v2_requires_external_crypto_verifier(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class FakeBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def build(self, *_args, **_kwargs):
+            raise AssertionError("builder must not run without v2 trust proof")
+
+    monkeypatch.setattr(hermes_managed_release, "ManagedReleaseBuilder", FakeBuilder)
+    assembler = ManagedReleaseAssembler(
+        releases_root=(tmp_path / "releases").resolve(),
+        toolchain=_toolchain(tmp_path),
+        wheelhouse=_wheelhouse(tmp_path),
+    )
+    with pytest.raises(RuntimeError, match="requires external cryptographic verification"):
+        assembler.build(_portable_inputs(tmp_path), dry_run=True)
+
+
+def test_portable_plugin_v2_invokes_crypto_verifier_before_builder(
+    tmp_path: Path, monkeypatch
+) -> None:
+    verified: list[object] = []
+
+    class FakeBuilder:
+        def __init__(self, **_kwargs):
+            pass
+
+        def build(self, inputs, *, dry_run=False):
+            assert verified == [inputs]
+            return "portable-built"
+
+    monkeypatch.setattr(hermes_managed_release, "ManagedReleaseBuilder", FakeBuilder)
+    inputs = _portable_inputs(tmp_path)
+    assembler = ManagedReleaseAssembler(
+        releases_root=(tmp_path / "releases").resolve(),
+        toolchain=_toolchain(tmp_path),
+        wheelhouse=_wheelhouse(tmp_path),
+        portable_plugin_verifier=lambda candidate: verified.append(candidate),
+    )
+    assert assembler.build(inputs, dry_run=True) == "portable-built"
+
+
+def test_portable_plugin_v2_rejects_absolute_path_fields(
+    tmp_path: Path, monkeypatch
+) -> None:
+    inputs = _portable_inputs(tmp_path)
+    inputs.signed_plugin_manifest["wheel_path"] = "/Users/example/Hermes/plugin.whl"
+    builder = ManagedReleaseBuilder(
+        releases_root=(tmp_path / "releases").resolve(),
+        runner=SimpleNamespace(run=lambda _command: None),
+    )
+    monkeypatch.setattr(ReleaseBuilder, "_validate_inputs", lambda _self, _inputs: None)
+    with pytest.raises(RuntimeError, match="does not match schema v2"):
+        builder._validate_inputs(inputs)
 
 
 def test_managed_release_sync_commands_exclude_default_dependency_groups(
