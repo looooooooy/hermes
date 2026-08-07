@@ -9,8 +9,10 @@ on:
       - "hermes-runtime-manager/**"
       - "hermes-connector/packaging/common/hermes_private_toolchain.py"
       - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
       - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
       - "hermes-connector/tests/packaging/test_managed_release_entrypoint.py"
+      - "hermes-connector/tests/packaging/test_offline_wheelhouse.py"
       - ".github/workflows/hermes-desktop-foundation.yml"
   pull_request:
     paths:
@@ -18,8 +20,10 @@ on:
       - "hermes-runtime-manager/**"
       - "hermes-connector/packaging/common/hermes_private_toolchain.py"
       - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
       - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
       - "hermes-connector/tests/packaging/test_managed_release_entrypoint.py"
+      - "hermes-connector/tests/packaging/test_offline_wheelhouse.py"
       - ".github/workflows/hermes-desktop-foundation.yml"
 
 permissions:
@@ -60,10 +64,11 @@ jobs:
           python-version: "3.13"
       - name: Install test runner
         run: python -m pip install --disable-pip-version-check pytest==8.4.2
-      - name: Prove private toolchain and managed release composition
+      - name: Prove private toolchain, wheelhouse and managed release composition
         run: >-
           python -m pytest -q
           hermes-connector/tests/packaging/test_private_toolchain_runner.py
+          hermes-connector/tests/packaging/test_offline_wheelhouse.py
           hermes-connector/tests/packaging/test_managed_release_entrypoint.py
 
   runtime-manager:
