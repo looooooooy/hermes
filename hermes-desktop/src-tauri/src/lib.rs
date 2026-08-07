@@ -4,6 +4,7 @@ use hermes_runtime_manager::model::{LifecycleState, ManagerSnapshotV1};
 use hermes_runtime_manager::platform::DefaultInstallLayout;
 use hermes_runtime_manager::ports::InstallLayout;
 use serde::Serialize;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,9 +76,12 @@ fn runtime_snapshot() -> RuntimeSnapshot {
 fn fetch_manager_snapshot() -> Result<ManagerSnapshotV1, String> {
     let layout = DefaultInstallLayout::discover().map_err(|error| error.to_string())?;
     let state_root = layout.state_root().map_err(|error| error.to_string())?;
-    let endpoint = state_root.join("runtime-manager.sock");
+    fetch_manager_snapshot_from(&state_root.join("runtime-manager.sock"))
+}
+
+fn fetch_manager_snapshot_from(endpoint: &Path) -> Result<ManagerSnapshotV1, String> {
     let request_id = format!("desktop-status-{}", std::process::id());
-    match request_read_only(&endpoint, &request_id, ManagerRequestV1::Status)
+    match request_read_only(endpoint, &request_id, ManagerRequestV1::Status)
         .map_err(|error| error.to_string())?
     {
         ManagerResponseV1::Snapshot(snapshot) => Ok(snapshot),
@@ -227,6 +231,46 @@ fn lifecycle_name(state: LifecycleState) -> &'static str {
         LifecycleState::RollingBack => "rolling_back",
         LifecycleState::Degraded => "degraded",
         LifecycleState::Failed => "failed",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn desktop_snapshot_consumes_real_runtime_manager_socket() {
+        use super::fetch_manager_snapshot_from;
+        use hermes_runtime_manager::local_ipc::ReadOnlyUnixServer;
+        use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
+        use hermes_runtime_manager::RuntimeManager;
+        use std::fs;
+        use std::sync::Arc;
+        use std::thread;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "hermes-desktop-ipc-{}-{unique}",
+            std::process::id()
+        ));
+        let endpoint = root.join("runtime-manager.sock");
+        let manager = Arc::new(RuntimeManager::new(
+            Arc::new(FailClosedServiceManager),
+            Arc::new(DefaultInstallLayout::discover().expect("layout")),
+        ));
+        let server = ReadOnlyUnixServer::bind(endpoint.clone(), manager).expect("bind server");
+        let server_thread = thread::spawn(move || server.serve_once().expect("serve"));
+
+        let snapshot = fetch_manager_snapshot_from(&endpoint).expect("Desktop IPC snapshot");
+        server_thread.join().expect("server thread");
+
+        assert_eq!(snapshot.schema_version, 1);
+        assert_eq!(snapshot.components.len(), 4);
+        assert!(snapshot.components.iter().all(|component| !component.ready));
+        let _ = fs::remove_dir_all(root);
     }
 }
 
