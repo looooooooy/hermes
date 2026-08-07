@@ -12,6 +12,8 @@ pub enum LocalIpcError {
     Codec(#[from] IpcCodecError),
     #[error("local IPC unavailable: {0}")]
     Unavailable(&'static str),
+    #[error("local IPC peer rejected: {0}")]
+    Peer(String),
     #[error("local IPC I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("runtime manager request failed: {0}")]
@@ -65,9 +67,16 @@ mod unix_transport {
     use super::*;
     use std::fs;
     use std::io::{Read, Write};
+    use std::os::fd::AsRawFd;
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::path::{Path, PathBuf};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct UnixPeerIdentity {
+        pub uid: u32,
+        pub pid: Option<u32>,
+    }
 
     pub struct ReadOnlyUnixServer {
         endpoint: PathBuf,
@@ -112,6 +121,7 @@ mod unix_transport {
 
         pub fn serve_once(&self) -> Result<(), LocalIpcError> {
             let (mut stream, _) = self.listener.accept()?;
+            let _peer = verify_same_user(&stream)?;
             let envelope: ManagerEnvelopeV1<ManagerRequestV1> = read_envelope(&mut stream)?;
             let response = dispatch_read_only(&self.manager, envelope.body);
             let response_envelope = ManagerEnvelopeV1::new(envelope.request_id, response);
@@ -150,6 +160,76 @@ mod unix_transport {
         Ok(response.body)
     }
 
+    pub fn verify_same_user(stream: &UnixStream) -> Result<UnixPeerIdentity, LocalIpcError> {
+        let fd = stream.as_raw_fd();
+
+        #[cfg(target_os = "linux")]
+        {
+            let mut credential = std::mem::MaybeUninit::<libc::ucred>::zeroed();
+            let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+            // SAFETY: `credential` points to a correctly sized writable ucred buffer,
+            // `length` describes that buffer, and `fd` is a live accepted Unix socket.
+            let result = unsafe {
+                libc::getsockopt(
+                    fd,
+                    libc::SOL_SOCKET,
+                    libc::SO_PEERCRED,
+                    credential.as_mut_ptr().cast(),
+                    &mut length,
+                )
+            };
+            if result != 0 {
+                return Err(LocalIpcError::Io(std::io::Error::last_os_error()));
+            }
+            // SAFETY: successful SO_PEERCRED initialized the complete ucred value.
+            let credential = unsafe { credential.assume_init() };
+            // SAFETY: geteuid has no preconditions.
+            let current_uid = unsafe { libc::geteuid() };
+            if credential.uid != current_uid {
+                return Err(LocalIpcError::Peer(format!(
+                    "peer uid {} does not match Runtime Manager uid {}",
+                    credential.uid, current_uid
+                )));
+            }
+            return Ok(UnixPeerIdentity {
+                uid: credential.uid,
+                pid: u32::try_from(credential.pid).ok(),
+            });
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let mut peer_uid: libc::uid_t = 0;
+            let mut peer_gid: libc::gid_t = 0;
+            // SAFETY: peer_uid/peer_gid are valid writable outputs and `fd` is a live
+            // accepted Unix-domain socket. getpeereid does not retain the pointers.
+            let result = unsafe { libc::getpeereid(fd, &mut peer_uid, &mut peer_gid) };
+            if result != 0 {
+                return Err(LocalIpcError::Io(std::io::Error::last_os_error()));
+            }
+            // SAFETY: geteuid has no preconditions.
+            let current_uid = unsafe { libc::geteuid() };
+            if peer_uid != current_uid {
+                return Err(LocalIpcError::Peer(format!(
+                    "peer uid {} does not match Runtime Manager uid {}",
+                    peer_uid, current_uid
+                )));
+            }
+            return Ok(UnixPeerIdentity {
+                uid: peer_uid,
+                pid: None,
+            });
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = fd;
+            Err(LocalIpcError::Unavailable(
+                "Unix peer authentication is not implemented for this OS",
+            ))
+        }
+    }
+
     fn read_envelope<T: serde::de::DeserializeOwned>(
         stream: &mut UnixStream,
     ) -> Result<ManagerEnvelopeV1<T>, LocalIpcError> {
@@ -176,10 +256,41 @@ mod unix_transport {
         stream.flush()?;
         Ok(())
     }
+
+    #[cfg(test)]
+    mod peer_tests {
+        use super::*;
+        use std::thread;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        #[test]
+        fn accepted_peer_is_bound_to_current_os_user() {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .subsec_nanos();
+            let root = Path::new("/tmp").join(format!("hpa-{}-{unique}", std::process::id()));
+            fs::create_dir_all(&root).expect("root");
+            let endpoint = root.join("p.sock");
+            let listener = UnixListener::bind(&endpoint).expect("listener");
+            let client_endpoint = endpoint.clone();
+            let client = thread::spawn(move || UnixStream::connect(client_endpoint).expect("client"));
+            let (server_stream, _) = listener.accept().expect("accept");
+            let identity = verify_same_user(&server_stream).expect("peer identity");
+            let _client_stream = client.join().expect("client thread");
+
+            // SAFETY: geteuid has no preconditions.
+            assert_eq!(identity.uid, unsafe { libc::geteuid() });
+            #[cfg(target_os = "linux")]
+            assert_eq!(identity.pid, Some(std::process::id()));
+            let _ = fs::remove_file(endpoint);
+            let _ = fs::remove_dir_all(root);
+        }
+    }
 }
 
 #[cfg(unix)]
-pub use unix_transport::{request as request_read_only, ReadOnlyUnixServer};
+pub use unix_transport::{request as request_read_only, ReadOnlyUnixServer, UnixPeerIdentity};
 
 #[cfg(windows)]
 pub fn request_read_only(
@@ -222,8 +333,6 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .subsec_nanos();
-        // `/tmp` plus a deliberately short leaf keeps the test inside macOS
-        // AF_UNIX SUN_LEN while still exercising a real filesystem socket.
         let root = Path::new("/tmp").join(format!("hrm-{}-{unique}", std::process::id()));
         let endpoint = root.join("rm.sock");
         let layout = Arc::new(DefaultInstallLayout::discover().expect("layout"));
