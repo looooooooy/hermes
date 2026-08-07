@@ -116,9 +116,17 @@ def test_managed_release_composition_always_injects_pinned_runner(
     captured: dict[str, object] = {}
 
     class FakeBuilder:
-        def __init__(self, *, releases_root, runner, service_renderer=None):
+        def __init__(
+            self,
+            *,
+            releases_root,
+            runner,
+            runtime_plan=None,
+            service_renderer=None,
+        ):
             captured["releases_root"] = releases_root
             captured["runner"] = runner
+            captured["runtime_plan"] = runtime_plan
             captured["service_renderer"] = service_renderer
 
         def build(self, inputs, *, dry_run=False):
@@ -137,6 +145,7 @@ def test_managed_release_composition_always_injects_pinned_runner(
     assert assembler.build(inputs, dry_run=True) == "built"
     assert isinstance(captured["runner"], PinnedToolchainRunner)
     assert captured["releases_root"] == (tmp_path / "releases").resolve()
+    assert captured["runtime_plan"] is None
     assert captured["inputs"] is inputs
     assert captured["dry_run"] is True
 
@@ -242,6 +251,7 @@ def test_portable_plugin_v2_rejects_absolute_path_fields(
     builder = ManagedReleaseBuilder(
         releases_root=(tmp_path / "releases").resolve(),
         runner=SimpleNamespace(run=lambda _command: None),
+        runtime_plan=None,
     )
     monkeypatch.setattr(ReleaseBuilder, "_validate_inputs", lambda _self, _inputs: None)
     with pytest.raises(RuntimeError, match="does not match schema v2"):
@@ -279,8 +289,13 @@ def test_managed_release_sync_commands_exclude_default_dependency_groups(
         "_commands",
         staticmethod(lambda _inputs, _release_dir: base_commands),
     )
+    builder = ManagedReleaseBuilder(
+        releases_root=(tmp_path / "releases").resolve(),
+        runner=SimpleNamespace(run=lambda _command: None),
+        runtime_plan=None,
+    )
 
-    hardened = ManagedReleaseBuilder._commands(SimpleNamespace(), tmp_path)
+    hardened = builder._commands(SimpleNamespace(), tmp_path)
     sync = [command for command in hardened if command.argv[:2] == ("uv", "sync")]
     assert len(sync) == 2
     assert all(command.argv.count("--no-default-groups") == 1 for command in sync)
