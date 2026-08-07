@@ -83,7 +83,7 @@ impl HttpRangeSource {
             .timeout(StdDuration::from_secs(60))
             .user_agent("Hermes-Runtime-Manager/0.1")
             .build()
-            .map_err(|_| UpdateDownloadError::Transport("HTTPS client initialization failed".to_owned()))?;
+            .map_err(|_| transport_error("HTTPS client initialization failed"))?;
         Ok(Self {
             client,
             url,
@@ -103,9 +103,7 @@ impl HttpRangeSource {
             ));
         }
         if OffsetDateTime::now_utc() >= self.expires_at {
-            return Err(UpdateDownloadError::Transport(
-                "download grant expired before range request".to_owned(),
-            ));
+            return Err(transport_error("download grant expired before range request"));
         }
         let maximum_end = start
             .checked_add(maximum_bytes as u64 - 1)
@@ -116,7 +114,7 @@ impl HttpRangeSource {
             .header(RANGE, format!("bytes={start}-{end}"))
             .header(ACCEPT_ENCODING, "identity")
             .build()
-            .map_err(|_| UpdateDownloadError::Transport("HTTPS range request build failed".to_owned()))
+            .map_err(|_| transport_error("HTTPS range request build failed"))
     }
 }
 
@@ -127,13 +125,13 @@ impl ArtifactRangeSource for HttpRangeSource {
         maximum_bytes: usize,
     ) -> Result<DownloadChunkV1, UpdateDownloadError> {
         let request = self.build_request(start, maximum_bytes)?;
-        let mut response = self
+        let response = self
             .client
             .execute(request)
-            .map_err(|_| UpdateDownloadError::Transport("HTTPS range request failed".to_owned()))?;
+            .map_err(|_| transport_error("HTTPS range request failed"))?;
         if response.status() != StatusCode::PARTIAL_CONTENT {
-            return Err(UpdateDownloadError::Transport(
-                "HTTPS source did not return 206 Partial Content".to_owned(),
+            return Err(transport_error(
+                "HTTPS source did not return 206 Partial Content",
             ));
         }
         let content_range = response
@@ -173,7 +171,7 @@ impl ArtifactRangeSource for HttpRangeSource {
         response
             .take(span + 1)
             .read_to_end(&mut bytes)
-            .map_err(|error| UpdateDownloadError::Io(error))?;
+            .map_err(UpdateDownloadError::Io)?;
         if bytes.len() as u64 != span {
             return Err(UpdateDownloadError::PrematureEof);
         }
@@ -217,6 +215,10 @@ fn parse_content_range(value: &str) -> Result<ParsedContentRange, UpdateDownload
         ));
     }
     Ok(ParsedContentRange { start, end, total })
+}
+
+fn transport_error(message: &str) -> UpdateDownloadError {
+    UpdateDownloadError::InvalidRange(message.to_owned())
 }
 
 #[cfg(test)]
