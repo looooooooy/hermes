@@ -3,7 +3,7 @@
 use crate::ports::PortError;
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
-use std::ptr::{null_mut};
+use std::ptr::null_mut;
 use std::thread;
 use std::time::Duration;
 use windows::core::{BSTR, Error as WindowsError};
@@ -168,8 +168,13 @@ impl WindowsTaskSchedulerBootstrap {
     }
 }
 
+/// Owns one COM initialization together with the Task Scheduler service interface.
+///
+/// COM interfaces must be released while the apartment is still initialized. Rust
+/// runs a type's custom `Drop::drop` before automatically dropping its fields, so the
+/// interface lives in an `Option` and is explicitly `take()`n before CoUninitialize.
 struct TaskSchedulerApartment {
-    service: ITaskService,
+    service: Option<ITaskService>,
 }
 
 impl TaskSchedulerApartment {
@@ -188,20 +193,30 @@ impl TaskSchedulerApartment {
         };
         let empty = VARIANT::default();
         if let Err(error) = unsafe { service.Connect(&empty, &empty, &empty, &empty) } {
+            // Release the COM interface before balancing CoInitializeEx.
+            drop(service);
             unsafe { CoUninitialize() };
             return Err(windows_operation("ITaskService::Connect", error));
         }
-        Ok(Self { service })
+        Ok(Self {
+            service: Some(service),
+        })
     }
 
     fn root_folder(&self) -> Result<ITaskFolder, PortError> {
-        unsafe { self.service.GetFolder(&BSTR::from("\\")) }
+        let service = self.service.as_ref().ok_or_else(|| {
+            PortError::Operation("Task Scheduler COM apartment is already closed".to_owned())
+        })?;
+        unsafe { service.GetFolder(&BSTR::from("\\")) }
             .map_err(|error| windows_operation("ITaskService::GetFolder", error))
     }
 }
 
 impl Drop for TaskSchedulerApartment {
     fn drop(&mut self) {
+        // `Option::take` drops/releases ITaskService at the end of this statement,
+        // while COM is still initialized on the current thread.
+        drop(self.service.take());
         unsafe { CoUninitialize() };
     }
 }
