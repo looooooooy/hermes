@@ -2,12 +2,20 @@ use crate::ports::PortError;
 use crate::update_coordinator::{
     UpdateConnectorLane, UpdateSafeWindowEvidenceV1, UpdateSafeWindowProbe,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+const HOST_SNAPSHOT_SCHEMA_VERSION: u8 = 1;
 const MAX_OBSERVED_COUNT: u32 = 1_000_000;
+const MAX_PROFILE_BYTES: usize = 128;
+const MAX_RUNTIME_GENERATION_BYTES: usize = 256;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HostUpdateSafetySnapshotV1 {
+    pub schema_version: u8,
+    pub profile: String,
+    pub runtime_generation: String,
     pub active_tasks: u32,
     pub pending_approvals: u32,
     pub pending_clarifications: u32,
@@ -55,14 +63,11 @@ impl UpdateSafeWindowProbe for DrainingSafeWindowProbe {
             }
         };
 
-        if !snapshot.evidence_complete
-            || snapshot.active_tasks > MAX_OBSERVED_COUNT
-            || snapshot.pending_approvals > MAX_OBSERVED_COUNT
-            || snapshot.pending_clarifications > MAX_OBSERVED_COUNT
-        {
+        if !valid_snapshot(&snapshot) {
             self.restore_connector()?;
             return Err(PortError::Operation(
-                "Host update-safety evidence is incomplete or out of bounds".to_owned(),
+                "Host update-safety evidence is incomplete, malformed, or out of bounds"
+                    .to_owned(),
             ));
         }
 
@@ -77,4 +82,29 @@ impl UpdateSafeWindowProbe for DrainingSafeWindowProbe {
         }
         Ok(evidence)
     }
+}
+
+fn valid_snapshot(snapshot: &HostUpdateSafetySnapshotV1) -> bool {
+    snapshot.schema_version == HOST_SNAPSHOT_SCHEMA_VERSION
+        && valid_profile(&snapshot.profile)
+        && valid_runtime_generation(&snapshot.runtime_generation)
+        && snapshot.evidence_complete
+        && snapshot.active_tasks <= MAX_OBSERVED_COUNT
+        && snapshot.pending_approvals <= MAX_OBSERVED_COUNT
+        && snapshot.pending_clarifications <= MAX_OBSERVED_COUNT
+}
+
+fn valid_profile(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_PROFILE_BYTES
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-')
+        })
+}
+
+fn valid_runtime_generation(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_RUNTIME_GENERATION_BYTES
+        && value.trim() == value
+        && value.chars().all(|character| !character.is_control())
 }
