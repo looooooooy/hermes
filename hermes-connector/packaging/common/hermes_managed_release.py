@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from hermes_local_release import (
+    BuildCommand,
     PublishedRelease,
     ReleaseBuilder,
     ReleaseInputs,
@@ -19,6 +20,37 @@ from hermes_local_release import (
 )
 from hermes_offline_wheelhouse import VerifiedWheelhouseV1
 from hermes_private_toolchain import PinnedToolchainRunner, PrivateToolchainV1
+
+
+class ManagedReleaseBuilder(ReleaseBuilder):
+    """ReleaseBuilder specialization that installs runtime dependencies only.
+
+    `uv sync` includes a project's default dependency groups unless told not to. Both
+    Hermes Core and Connector carry developer groups, so customer runtime assembly must
+    make `--no-default-groups` part of the audited command/receipt instead of relying on
+    a runner-side hidden rewrite.
+    """
+
+    @staticmethod
+    def _commands(inputs: ReleaseInputs, release_dir: Path) -> tuple[BuildCommand, ...]:
+        commands = ReleaseBuilder._commands(inputs, release_dir)
+        hardened: list[BuildCommand] = []
+        for command in commands:
+            argv = command.argv
+            if len(argv) >= 2 and argv[:2] == ("uv", "sync"):
+                if "--no-default-groups" in argv:
+                    raise RuntimeError("duplicate --no-default-groups in managed release command")
+                argv = (*argv, "--no-default-groups")
+            hardened.append(
+                BuildCommand(
+                    purpose=command.purpose,
+                    argv=argv,
+                    cwd=command.cwd,
+                    environment=command.environment,
+                    release_dir=command.release_dir,
+                )
+            )
+        return tuple(hardened)
 
 
 class ManagedReleaseAssembler:
@@ -39,7 +71,7 @@ class ManagedReleaseAssembler:
             wheelhouse=wheelhouse,
             executor=executor,
         )
-        self._builder = ReleaseBuilder(
+        self._builder = ManagedReleaseBuilder(
             releases_root=Path(releases_root),
             runner=self._runner,
             service_renderer=service_renderer,
