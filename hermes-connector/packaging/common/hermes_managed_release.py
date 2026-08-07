@@ -104,6 +104,7 @@ class ManagedReleaseBuilder(ReleaseBuilder):
         releases_root: Path,
         runner: Any,
         runtime_plan: VerifiedTargetRuntimePlanV1 | None,
+        private_python: Path | None = None,
         service_renderer: Callable[[Path], Mapping[str, bytes]] | None = None,
     ) -> None:
         super().__init__(
@@ -112,6 +113,17 @@ class ManagedReleaseBuilder(ReleaseBuilder):
             service_renderer=service_renderer,
         )
         self._runtime_plan = runtime_plan
+        self._private_python = None if private_python is None else Path(private_python)
+        if self._runtime_plan is not None:
+            if (
+                self._private_python is None
+                or not self._private_python.is_absolute()
+                or self._private_python.is_symlink()
+                or not self._private_python.is_file()
+            ):
+                raise RuntimeError(
+                    "target runtime assembly requires the verified Private Python executable"
+                )
 
     def _prepare_staging(
         self,
@@ -148,7 +160,9 @@ class ManagedReleaseBuilder(ReleaseBuilder):
     def _commands(self, inputs: ReleaseInputs, release_dir: Path) -> tuple[BuildCommand, ...]:
         if self._runtime_plan is None:
             return _harden_legacy_commands(ReleaseBuilder._commands(inputs, release_dir))
-        return _target_runtime_commands(inputs, release_dir)
+        if self._private_python is None:
+            raise RuntimeError("target runtime Private Python binding is missing")
+        return _target_runtime_commands(inputs, release_dir, self._private_python)
 
     def _execute(
         self,
@@ -228,12 +242,15 @@ class ManagedReleaseAssembler:
             wheelhouse=wheelhouse,
             executor=executor,
         )
-        self._builder = ManagedReleaseBuilder(
-            releases_root=Path(releases_root),
-            runner=self._runner,
-            runtime_plan=runtime_plan,
-            service_renderer=service_renderer,
-        )
+        builder_args: dict[str, Any] = {
+            "releases_root": Path(releases_root),
+            "runner": self._runner,
+            "runtime_plan": runtime_plan,
+            "service_renderer": service_renderer,
+        }
+        if runtime_plan is not None:
+            builder_args["private_python"] = toolchain.python.path
+        self._builder = ManagedReleaseBuilder(**builder_args)
 
     def build(
         self,
@@ -293,6 +310,7 @@ def build_managed_release(
 def _target_runtime_commands(
     inputs: ReleaseInputs,
     release_dir: Path,
+    private_python: Path,
 ) -> tuple[BuildCommand, ...]:
     host_project = release_dir / "host/project"
     connector_project = release_dir / "connector/project"
@@ -314,8 +332,17 @@ def _target_runtime_commands(
             release_dir=release_dir,
         )
 
+    create_venv = lambda destination: (
+        str(private_python),
+        "-I",
+        "-m",
+        "venv",
+        "--without-pip",
+        "--copies",
+        str(destination),
+    )
     return (
-        command("create-host-venv", ("uv", "venv", "--offline", str(host_venv)), release_dir),
+        command("create-host-venv", create_venv(host_venv), release_dir),
         command(
             "install-host-dependencies",
             (
@@ -342,11 +369,7 @@ def _target_runtime_commands(
             ),
             release_dir,
         ),
-        command(
-            "create-connector-venv",
-            ("uv", "venv", "--offline", str(connector_venv)),
-            release_dir,
-        ),
+        command("create-connector-venv", create_venv(connector_venv), release_dir),
         command(
             "install-connector-dependencies",
             (
