@@ -12,6 +12,7 @@ pub mod portable_plugin_signature;
 pub mod ports;
 pub mod release_control;
 pub mod toolchain;
+pub mod update_coordinator;
 pub mod update_download;
 pub mod update_http;
 #[cfg(windows)]
@@ -47,6 +48,13 @@ pub use release_control::{
     RollbackAuthorizationV1, SignedReleaseEnvelopeV1,
 };
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
+pub use update_coordinator::{
+    StagedReleaseV1, UpdateArtifactFetcher, UpdateConnectorLane, UpdateCoordinator,
+    UpdateCoordinatorError, UpdateHealthEvidenceV1, UpdateHealthGate, UpdateOutcomeStatusV1,
+    UpdateOutcomeV1, UpdatePhaseV1, UpdatePlanV1, UpdateReleaseActivator,
+    UpdateReleaseStager, UpdateRollbackPolicy, UpdateSafeWindowEvidenceV1,
+    UpdateSafeWindowProbe, UpdateTransactionV1,
+};
 pub use update_download::{
     download_spec_from_verified_release, download_verified_artifact, ArtifactDownloadReceiptV1,
     ArtifactDownloadSpecV1, ArtifactRangeSource, DownloadChunkV1, ReleaseArtifactKindV1,
