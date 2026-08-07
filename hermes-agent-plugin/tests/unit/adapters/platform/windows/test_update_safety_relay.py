@@ -33,6 +33,15 @@ def _pipe_name(label: str) -> str:
 
 def _call(pipe_name: str, payload: object) -> dict[str, object]:
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CallNamedPipeW.argtypes = [
+        wintypes.LPCWSTR,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.DWORD,
+    ]
     kernel32.CallNamedPipeW.restype = wintypes.BOOL
     body = (
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -43,9 +52,9 @@ def _call(pipe_name: str, payload: object) -> dict[str, object]:
     read = wintypes.DWORD()
     if not kernel32.CallNamedPipeW(
         pipe_name,
-        input_buffer,
+        ctypes.cast(input_buffer, ctypes.c_void_p),
         len(body),
-        output_buffer,
+        ctypes.cast(output_buffer, ctypes.c_void_p),
         len(output_buffer),
         ctypes.byref(read),
         2_000,
