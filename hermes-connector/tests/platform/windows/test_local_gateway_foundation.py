@@ -5,33 +5,31 @@ import time
 from uuid import UUID
 
 import pytest
-
-pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Named Pipes required")
-
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (  # noqa: E402
-    LocalContractV1Adapter,
-)
-from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (  # noqa: E402
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
-from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (  # noqa: E402
+from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
     capture_windows_host_authority,
 )
-from hermes_connector.adapters.contract_codec import (  # noqa: E402
+from hermes_connector.adapters.contract_codec import (
     decode_local_gateway_response,
     encode_local_hello,
 )
-from hermes_connector.adapters.platform.windows.agent_discovery import (  # noqa: E402
-    WindowsAgentDiscovery,
-)
-from hermes_connector.adapters.platform.windows.instance_lock import (  # noqa: E402
+from hermes_connector.adapters.platform.windows.agent_discovery import WindowsAgentDiscovery
+from hermes_connector.adapters.platform.windows.instance_lock import (
     AlreadyRunning,
     WindowsInstanceLock,
 )
-from hermes_connector.adapters.platform.windows.local_gateway_transport import (  # noqa: E402
+from hermes_connector.adapters.platform.windows.local_gateway_transport import (
     WindowsLocalGatewayTransport,
 )
-from hermes_connector.domain.contract_messages import LocalHello, LocalWelcome  # noqa: E402
+from hermes_connector.domain.contract_messages import (
+    LocalHello,
+    LocalWelcome,
+)
+
+pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Named Pipes required")
 
 
 def _runtime_authority():
