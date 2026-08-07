@@ -40,7 +40,11 @@ def main() -> int:
         raise SystemExit(f"unexpected private Python version: {python_output}")
 
     uv_output = subprocess.check_output([str(uv_path), "--version"], text=True).strip()
-    if uv_output != f"uv {args.uv_version}":
+    expected_uv_prefix = f"uv {args.uv_version}"
+    if not (
+        uv_output == expected_uv_prefix
+        or uv_output.startswith(expected_uv_prefix + " ")
+    ):
         raise SystemExit(f"unexpected private uv version: {uv_output}")
 
     print(
