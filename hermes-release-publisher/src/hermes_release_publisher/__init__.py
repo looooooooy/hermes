@@ -7,6 +7,7 @@ from .doctor import (
     OssRepositoryDoctor,
     OssV2DoctorBackend,
 )
+from .presign import OssV4DownloadPresigner
 from .repository import (
     BucketMap,
     ObjectAlreadyExists,
@@ -38,6 +39,7 @@ __all__ = [
     "OssRepositoryDoctor",
     "OssV2Backend",
     "OssV2DoctorBackend",
+    "OssV4DownloadPresigner",
     "PublishReceipt",
     "PublisherError",
     "ReleasePublisher",
