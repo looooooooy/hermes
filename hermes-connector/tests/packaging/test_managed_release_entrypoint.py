@@ -4,7 +4,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -13,7 +13,8 @@ COMMON_PACKAGING = CONNECTOR_ROOT / "packaging" / "common"
 sys.path.insert(0, str(COMMON_PACKAGING))
 
 import hermes_managed_release
-from hermes_managed_release import ManagedReleaseAssembler
+from hermes_local_release import BuildCommand, ReleaseBuilder
+from hermes_managed_release import ManagedReleaseAssembler, ManagedReleaseBuilder
 from hermes_offline_wheelhouse import WheelhouseError, load_verified_wheelhouse
 from hermes_private_toolchain import (
     PinnedExecutable,
@@ -93,7 +94,7 @@ def test_managed_release_composition_always_injects_pinned_runner(
             captured["dry_run"] = dry_run
             return "built"
 
-    monkeypatch.setattr(hermes_managed_release, "ReleaseBuilder", FakeBuilder)
+    monkeypatch.setattr(hermes_managed_release, "ManagedReleaseBuilder", FakeBuilder)
     inputs = _inputs()
     assembler = ManagedReleaseAssembler(
         releases_root=(tmp_path / "releases").resolve(),
@@ -118,7 +119,7 @@ def test_managed_release_refuses_unverified_toolchain_before_builder_creation(
             nonlocal builder_created
             builder_created = True
 
-    monkeypatch.setattr(hermes_managed_release, "ReleaseBuilder", FakeBuilder)
+    monkeypatch.setattr(hermes_managed_release, "ManagedReleaseBuilder", FakeBuilder)
     python = _executable(tmp_path, "private-python", b"python")
     uv = _executable(tmp_path, "private-uv", b"uv")
     bad_toolchain = PrivateToolchainV1(
@@ -146,7 +147,7 @@ def test_managed_release_rejects_wheelhouse_for_different_lock(
         def build(self, *_args, **_kwargs):
             raise AssertionError("builder must not run after lock mismatch")
 
-    monkeypatch.setattr(hermes_managed_release, "ReleaseBuilder", FakeBuilder)
+    monkeypatch.setattr(hermes_managed_release, "ManagedReleaseBuilder", FakeBuilder)
     assembler = ManagedReleaseAssembler(
         releases_root=(tmp_path / "releases").resolve(),
         toolchain=_toolchain(tmp_path),
@@ -155,6 +156,45 @@ def test_managed_release_rejects_wheelhouse_for_different_lock(
 
     with pytest.raises(WheelhouseError, match="lock mismatch"):
         assembler.build(_inputs())
+
+
+def test_managed_release_sync_commands_exclude_default_dependency_groups(
+    tmp_path: Path, monkeypatch
+) -> None:
+    base_commands = (
+        BuildCommand(
+            purpose="sync-host-dependencies",
+            argv=("uv", "sync", "--locked", "--no-install-project"),
+            cwd=tmp_path,
+            environment=MappingProxyType({"UV_OFFLINE": "1"}),
+            release_dir=tmp_path,
+        ),
+        BuildCommand(
+            purpose="verify-host-runtime",
+            argv=(str(tmp_path / "python"), "-I", "-c", "pass"),
+            cwd=tmp_path,
+            environment=MappingProxyType({}),
+            release_dir=tmp_path,
+        ),
+        BuildCommand(
+            purpose="sync-connector-dependencies",
+            argv=("uv", "sync", "--locked", "--no-install-project"),
+            cwd=tmp_path,
+            environment=MappingProxyType({"UV_OFFLINE": "1"}),
+            release_dir=tmp_path,
+        ),
+    )
+    monkeypatch.setattr(
+        ReleaseBuilder,
+        "_commands",
+        staticmethod(lambda _inputs, _release_dir: base_commands),
+    )
+
+    hardened = ManagedReleaseBuilder._commands(SimpleNamespace(), tmp_path)
+    sync = [command for command in hardened if command.argv[:2] == ("uv", "sync")]
+    assert len(sync) == 2
+    assert all(command.argv.count("--no-default-groups") == 1 for command in sync)
+    assert "--no-default-groups" not in hardened[1].argv
 
 
 def test_production_code_cannot_bypass_managed_release_composition() -> None:
