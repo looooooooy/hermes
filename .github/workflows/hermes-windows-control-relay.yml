@@ -1,0 +1,76 @@
+name: Hermes Windows Control Relay
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-observer-control-*"
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_control_relay_foundation.py"
+      - ".github/workflows/hermes-windows-control-relay.yml"
+  pull_request:
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_control_relay_foundation.py"
+      - ".github/workflows/hermes-windows-control-relay.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-control-relay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract:
+    name: Windows Control Relay contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint Windows Control Relay slice
+        run: >-
+          ruff check
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/framed_pipe.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/control_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/availability.py
+          hermes-connector/tests/platform/windows/test_control_relay_foundation.py
+      - name: Preserve Connector partial fail-closed boundary
+        run: >-
+          python -m pytest
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-control-relay:
+    name: Plugin → Connector Control Relay / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Test Windows attach, claims, allowlist, and local-only dispatch
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_control_relay_foundation.py
