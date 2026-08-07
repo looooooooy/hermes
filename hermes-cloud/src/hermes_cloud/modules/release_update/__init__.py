@@ -1,5 +1,6 @@
 """Hermes Cloud release update policy module."""
 
+from .catalog import SignedReleaseCatalog
 from .domain import (
     DeviceUpdateContextV1,
     DownloadGrantV1,
@@ -21,6 +22,7 @@ __all__ = [
     "ReleaseArtifactRefV1",
     "ReleaseUpdateCandidateV1",
     "ShortLivedDownloadGrantIssuer",
+    "SignedReleaseCatalog",
     "UpdateCheckPolicyError",
     "UpdateCheckService",
     "UpdateCheckUnavailable",
