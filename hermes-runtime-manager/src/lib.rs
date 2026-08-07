@@ -5,6 +5,8 @@ pub mod model;
 pub mod platform;
 pub mod ports;
 pub mod toolchain;
+#[cfg(windows)]
+pub mod windows_pipe;
 
 pub use manager::{ManagerError, RuntimeManager};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
