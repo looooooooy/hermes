@@ -25,6 +25,7 @@ thiserror = "2"
 windows = { version = "=0.61.3", features = [
   "Win32_Foundation",
   "Win32_System_Com",
+  "Win32_System_Ole",
   "Win32_System_TaskScheduler",
   "Win32_System_Variant"
 ] }
