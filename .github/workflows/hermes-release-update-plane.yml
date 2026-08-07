@@ -5,8 +5,10 @@ on:
     branches:
       - "feature/hermes-release-update-plane-*"
     paths:
+      - "hermes-runtime-manager/Cargo.toml"
       - "hermes-runtime-manager/src/release_control.rs"
       - "hermes-runtime-manager/src/update_download.rs"
+      - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -16,8 +18,10 @@ on:
       - ".github/workflows/hermes-release-update-plane.yml"
   pull_request:
     paths:
+      - "hermes-runtime-manager/Cargo.toml"
       - "hermes-runtime-manager/src/release_control.rs"
       - "hermes-runtime-manager/src/update_download.rs"
+      - "hermes-runtime-manager/src/update_http.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-release-publisher/**"
@@ -41,7 +45,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Use stable Rust
@@ -50,6 +54,8 @@ jobs:
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml release_control::tests
       - name: Test resumable signed-artifact download contracts
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_download::tests
+      - name: Test strict HTTPS Range grant and transport contracts
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_http::tests
       - name: Compile Runtime Manager verification CLI
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml --bin hermes-runtime-manager
       - name: Verify CLI surface is present
