@@ -2,10 +2,9 @@
 
 from ..capabilities import LocalGatewayPlatformCapabilities
 
-# Local Gateway discovery/handshake and the Control endpoint are implemented and
-# Windows-runner validated. Host activation still requires the Observer role and
-# a Windows endpoint opener, so keep overall availability false until that full
-# lifecycle is transaction-tested.
+# All three Host endpoint roles now have concrete Named Pipe implementations in
+# stacked slices. Overall availability remains false until the Observer/Catalog
+# Connector clients and the Windows Host endpoint opener are transaction-tested.
 LOCAL_GATEWAY_CAPABILITIES = LocalGatewayPlatformCapabilities(
     platform="windows",
     available=False,
@@ -14,9 +13,11 @@ LOCAL_GATEWAY_CAPABILITIES = LocalGatewayPlatformCapabilities(
         {
             "control.endpoint",
             "local-gateway.handshake",
+            "observer.endpoint",
+            "session-catalog.endpoint",
         }
     ),
-    unavailable_reason="windows_observer_endpoint_not_implemented",
+    unavailable_reason="windows_observer_connector_and_host_opener_not_implemented",
 )
 LOCAL_GATEWAY_AVAILABLE = LOCAL_GATEWAY_CAPABILITIES.available
 
