@@ -3,7 +3,6 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import os
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from ctypes import wintypes
@@ -392,7 +391,7 @@ def private_named_mutex(
     ):
         raise ValueError("Windows private mutex input is invalid")
     sid = current_user_sid_string()
-    digest = hashlib.sha256(f"{sid}\0{key}".encode("utf-8")).hexdigest()[:40]
+    digest = hashlib.sha256(f"{sid}\0{key}".encode()).hexdigest()[:40]
     name = f"Local\\HermesConnectorState-{digest}"
     kernel32, _ = _libraries()
     with _security_attributes() as attributes:
