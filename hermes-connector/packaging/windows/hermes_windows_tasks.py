@@ -53,7 +53,14 @@ def build_connector_task(
     if not _is_within(config_file, hermes_home):
         raise WindowsTaskContractError("configuration file must be inside HERMES_HOME")
     executable = release_dir / "connector" / "hermes-connector.exe"
-    launcher = release_dir / "services" / "windows" / "run-connector.cmd"
+    launcher = (
+        hermes_home
+        / "connector"
+        / "profiles"
+        / profile
+        / "activation"
+        / "run-connector.cmd"
+    )
     return WindowsConnectorTask(
         release_dir=release_dir,
         release_id=release_id,
@@ -124,8 +131,19 @@ def _validate_task(task: WindowsConnectorTask) -> None:
         raise WindowsTaskContractError("task release identity drifted")
     if not _is_within(task.executable, task.release_dir):
         raise WindowsTaskContractError("connector executable escaped release")
-    if not _is_within(task.launcher, task.release_dir):
-        raise WindowsTaskContractError("launcher escaped release")
+    expected_launcher = (
+        task.hermes_home
+        / "connector"
+        / "profiles"
+        / task.profile
+        / "activation"
+        / "run-connector.cmd"
+    )
+    if task.launcher != expected_launcher or not _is_within(
+        task.launcher,
+        task.hermes_home,
+    ):
+        raise WindowsTaskContractError("launcher escaped profile activation state")
     if not _is_within(task.config_file, task.hermes_home):
         raise WindowsTaskContractError("configuration escaped HERMES_HOME")
     if task.executable.name.lower() != "hermes-connector.exe":
