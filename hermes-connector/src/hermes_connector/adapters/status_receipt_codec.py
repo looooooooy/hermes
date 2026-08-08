@@ -163,7 +163,7 @@ def timestamp_is_current(updated_at: datetime, now: datetime) -> bool:
 
 def _receipt_payload(receipt: ConnectorStatusReceipt) -> dict[str, object]:
     if not isinstance(receipt, ConnectorStatusReceipt):
-        raise ValueError("status receipt is invalid")
+        raise TypeError("status receipt is invalid")
     validated = decode_status_receipt(
         json.dumps(
             {
