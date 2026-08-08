@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -19,7 +21,9 @@ import hermes_connector.bootstrap.windows as windows_bootstrap
 from hermes_connector.adapters.platform.windows.pairing_projection import (
     WindowsPairedProjectionStore,
 )
-from hermes_connector.adapters.platform.windows.private_state import ensure_private_directory
+from hermes_connector.adapters.platform.windows.private_state import (
+    ensure_private_directory,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
 from hermes_connector.bootstrap.windows_service import build_windows_service_runner
@@ -41,11 +45,6 @@ def _settings(tmp_path: Path) -> ConnectorRuntimeSettings:
         profile="default",
         database_file=state / "connector.sqlite3",
         lock_file=state / "connector.lock",
-        instance_state_file=state / "instance.json",
-        paired_projection_file=state / "paired.json",
-        pairing_offer_projection_file=state / "pairing-offer.json",
-        pairing_command_lock_file=state / "pairing-command.lock",
-        status_receipt_file=state / "status.json",
         state_directory=state,
         local_gateway_registry_directory=roles / "local-registry",
         local_gateway_socket_directory=roles / "local-socket",
