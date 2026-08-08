@@ -68,17 +68,28 @@ class WindowsControlRelayClient:
     def is_open(self) -> bool:
         return self._connection is not None
 
-    async def open(self) -> WindowsControlRelayClient:
-        await asyncio.to_thread(self._open_sync)
+    async def open(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> WindowsControlRelayClient:
+        timeout = self._io_timeout_seconds if timeout_seconds is None else timeout_seconds
+        if not isinstance(timeout, int | float) or isinstance(timeout, bool) or timeout <= 0:
+            raise ValueError("Windows control relay open timeout must be positive")
+        await asyncio.to_thread(self._open_sync, float(timeout))
         return self
 
-    def _open_sync(self) -> None:
+    def _open_sync(self, timeout_seconds: float) -> None:
         if self._connection is not None:
             return
+        deadline = time.monotonic() + timeout_seconds
         pipe_name = profile_pipe_name("control", self._authority.profile)
         connection = connect_same_user_pipe(
             pipe_name,
-            timeout_seconds=self._connect_timeout_seconds,
+            timeout_seconds=min(
+                self._connect_timeout_seconds,
+                _remaining(deadline),
+            ),
         )
         try:
             expected_identity = normalize_process_identity(
@@ -103,7 +114,7 @@ class WindowsControlRelayClient:
                     }
                 },
                 request_id="attach-1",
-                timeout_seconds=self._io_timeout_seconds,
+                timeout_seconds=_remaining(deadline),
             )
             result = response.get("result")
             if (
@@ -203,6 +214,13 @@ class WindowsControlRelayClient:
         self._connection = None
         if connection is not None:
             connection.close()
+
+
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Windows control relay deadline exceeded")
+    return remaining
 
 
 __all__ = ["WindowsControlRelayClient"]
