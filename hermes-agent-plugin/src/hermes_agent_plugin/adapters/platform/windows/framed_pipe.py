@@ -23,15 +23,13 @@ _PIPE_TYPE_BYTE = 0x00000000
 _PIPE_READMODE_BYTE = 0x00000000
 _PIPE_WAIT = 0x00000000
 _PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
-_GENERIC_READ = 0x80000000
-_GENERIC_WRITE = 0x40000000
-_OPEN_EXISTING = 3
 _ERROR_PIPE_CONNECTED = 535
 _ERROR_BROKEN_PIPE = 109
 _ERROR_NO_DATA = 232
 _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 _CLOSE_TIMEOUT_S = 3.0
 _DEFAULT_IO_TIMEOUT_S = 3.0
+_MAX_SERVER_INSTANCES = 16
 _MAX_WIRE_FRAME_BYTES = MAX_FRAME_BYTES + 4
 
 
@@ -48,16 +46,6 @@ def _configure_pipe_api(kernel32: Any) -> None:
         ctypes.c_void_p,
     ]
     kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
-    kernel32.CreateFileW.argtypes = [
-        wintypes.LPCWSTR,
-        wintypes.DWORD,
-        wintypes.DWORD,
-        ctypes.c_void_p,
-        wintypes.DWORD,
-        wintypes.DWORD,
-        wintypes.HANDLE,
-    ]
-    kernel32.CreateFileW.restype = wintypes.HANDLE
     kernel32.ConnectNamedPipe.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
     kernel32.ConnectNamedPipe.restype = wintypes.BOOL
     kernel32.DisconnectNamedPipe.argtypes = [wintypes.HANDLE]
@@ -213,7 +201,7 @@ class WindowsFramedPipeConnection:
 
 
 class WindowsFramedPipeServer:
-    """Single-instance same-user Pipe server with one session at a time."""
+    """Bounded same-user Pipe server with independent concurrent instances."""
 
     def __init__(
         self,
@@ -221,37 +209,106 @@ class WindowsFramedPipeServer:
         handler: Callable[[WindowsFramedPipeConnection], None],
         *,
         io_timeout_seconds: float = _DEFAULT_IO_TIMEOUT_S,
+        max_instances: int = 1,
     ) -> None:
         if not isinstance(pipe_name, str) or not pipe_name.startswith("\\\\.\\pipe\\"):
             raise ValueError("Windows framed Pipe name is invalid")
         if not callable(handler):
             raise TypeError("handler must be callable")
+        if type(max_instances) is not int or not 1 <= max_instances <= _MAX_SERVER_INSTANCES:
+            raise ValueError("Windows framed Pipe instance bound is invalid")
+        if io_timeout_seconds <= 0:
+            raise ValueError("io_timeout_seconds must be positive")
         self._pipe_name = pipe_name
         self._handler = handler
         self._io_timeout_seconds = io_timeout_seconds
-        self._pipe: int | None = None
-        self._thread: threading.Thread | None = None
+        self._max_instances = max_instances
+        self._pipes: tuple[int, ...] = ()
+        self._threads: tuple[threading.Thread, ...] = ()
         self._stop = threading.Event()
+        self._state_lock = threading.Lock()
 
     @property
     def pipe_name(self) -> str:
         return self._pipe_name
 
+    @property
+    def max_instances(self) -> int:
+        return self._max_instances
+
     def start(self) -> WindowsFramedPipeServer:
-        if self._pipe is not None:
-            return self
-        kernel32, _ = libraries()
-        _configure_pipe_api(kernel32)
+        with self._state_lock:
+            if self._pipes:
+                return self
+            kernel32, _ = libraries()
+            _configure_pipe_api(kernel32)
+            pipes: list[int] = []
+            try:
+                for index in range(self._max_instances):
+                    pipes.append(self._create_pipe(kernel32, first=index == 0))
+            except BaseException:
+                for pipe in pipes:
+                    close_handle(pipe)
+                raise
+            self._stop.clear()
+            threads = tuple(
+                threading.Thread(
+                    target=self._serve,
+                    args=(pipe,),
+                    name=f"hermes-windows-framed-pipe-{index + 1}",
+                    daemon=True,
+                )
+                for index, pipe in enumerate(pipes)
+            )
+            self._pipes = tuple(pipes)
+            self._threads = threads
+            try:
+                for thread in threads:
+                    thread.start()
+            except BaseException:
+                self._stop.set()
+                for pipe in self._pipes:
+                    close_handle(pipe)
+                for thread in threads:
+                    if thread.ident is not None:
+                        thread.join(_CLOSE_TIMEOUT_S)
+                self._pipes = ()
+                self._threads = ()
+                raise
+        return self
+
+    def close(self) -> None:
+        with self._state_lock:
+            pipes = self._pipes
+            threads = self._threads
+            self._pipes = ()
+            self._threads = ()
+            self._stop.set()
+        for pipe in pipes:
+            close_handle(pipe)
+        deadline = time.monotonic() + _CLOSE_TIMEOUT_S
+        for thread in threads:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            thread.join(remaining)
+        if any(thread.is_alive() for thread in threads):
+            raise RuntimeError("Windows framed Pipe server did not stop")
+
+    def _create_pipe(self, kernel32: Any, *, first: bool) -> int:
         attributes, descriptor = protected_security_attributes()
         try:
+            access = _PIPE_ACCESS_DUPLEX
+            if first:
+                access |= _FILE_FLAG_FIRST_PIPE_INSTANCE
             raw = kernel32.CreateNamedPipeW(
                 self._pipe_name,
-                _PIPE_ACCESS_DUPLEX | _FILE_FLAG_FIRST_PIPE_INSTANCE,
+                access,
                 _PIPE_TYPE_BYTE
                 | _PIPE_READMODE_BYTE
                 | _PIPE_WAIT
                 | _PIPE_REJECT_REMOTE_CLIENTS,
-                1,
+                self._max_instances,
                 _MAX_WIRE_FRAME_BYTES,
                 _MAX_WIRE_FRAME_BYTES,
                 1_000,
@@ -261,53 +318,12 @@ class WindowsFramedPipeServer:
             free_security_descriptor(descriptor)
         if raw in (None, 0, _INVALID_HANDLE_VALUE):
             raise OSError(ctypes.get_last_error(), "CreateNamedPipeW failed")
-        self._pipe = int(raw)
-        self._stop.clear()
-        self._thread = threading.Thread(
-            target=self._serve,
-            name="hermes-windows-framed-pipe",
-            daemon=True,
-        )
-        self._thread.start()
-        return self
+        return int(raw)
 
-    def close(self) -> None:
-        self._stop.set()
-        self._wake()
-        thread = self._thread
-        if thread is not None:
-            thread.join(_CLOSE_TIMEOUT_S)
-        pipe = self._pipe
-        self._pipe = None
-        self._thread = None
-        close_handle(pipe)
-        if thread is not None and thread.is_alive():
-            raise RuntimeError("Windows framed Pipe server did not stop")
-
-    def _wake(self) -> None:
-        if self._pipe is None:
-            return
-        kernel32, _ = libraries()
-        _configure_pipe_api(kernel32)
-        raw = kernel32.CreateFileW(
-            self._pipe_name,
-            _GENERIC_READ | _GENERIC_WRITE,
-            0,
-            None,
-            _OPEN_EXISTING,
-            0,
-            None,
-        )
-        if raw not in (None, 0, _INVALID_HANDLE_VALUE):
-            close_handle(int(raw))
-
-    def _serve(self) -> None:
+    def _serve(self, pipe: int) -> None:
         kernel32, _ = libraries()
         _configure_pipe_api(kernel32)
         while not self._stop.is_set():
-            pipe = self._pipe
-            if pipe is None:
-                return
             connected = kernel32.ConnectNamedPipe(wintypes.HANDLE(pipe), None)
             if not connected and ctypes.get_last_error() != _ERROR_PIPE_CONNECTED:
                 if self._stop.is_set():
@@ -315,7 +331,6 @@ class WindowsFramedPipeServer:
                 time.sleep(0.01)
                 continue
             if self._stop.is_set():
-                kernel32.DisconnectNamedPipe(wintypes.HANDLE(pipe))
                 return
             connection = WindowsFramedPipeConnection(
                 pipe,
@@ -327,6 +342,8 @@ class WindowsFramedPipeServer:
                 pass
             finally:
                 connection.close()
+                if self._stop.is_set():
+                    return
                 kernel32.DisconnectNamedPipe(wintypes.HANDLE(pipe))
 
 
