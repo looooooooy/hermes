@@ -33,16 +33,27 @@ def _task(tmp_path: Path):
     )
 
 
-def test_task_contract_points_only_to_exact_release(tmp_path: Path) -> None:
+def test_task_contract_projects_exact_release_through_private_launcher(
+    tmp_path: Path,
+) -> None:
     task = _task(tmp_path)
     launcher = render_connector_launcher(task).decode("utf-8")
+    expected_launcher = (
+        task.hermes_home
+        / "connector"
+        / "profiles"
+        / "default"
+        / "activation"
+        / "run-connector.cmd"
+    )
 
     assert task.task_name == "Hermes Connector [default]"
     assert task.executable == task.release_dir / "connector" / "hermes-connector.exe"
-    assert task.launcher == task.release_dir / "services" / "windows" / "run-connector.cmd"
+    assert task.launcher == expected_launcher
     assert task.release_id in launcher
     assert "hermes-connector.exe" in launcher
-    assert task.release_dir.name in task.task_action
+    assert task.release_dir.name in launcher
+    assert task.release_dir.name not in task.task_action
     assert "run-connector.cmd" in task.task_action
 
 
