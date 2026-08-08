@@ -67,7 +67,7 @@ impl RuntimeManager {
         service_manager: Arc<dyn ServiceManager>,
         layout: Arc<dyn InstallLayout>,
     ) -> Result<Self, ManagerError> {
-        let persistent_state = ManagerStateFile::new(layout.state_root())?;
+        let persistent_state = ManagerStateFile::new(layout.state_root()?)?;
         let restored = persistent_state.load()?;
         let lifecycle = if restored.active_release.is_some() {
             LifecycleState::Stopped
@@ -213,14 +213,20 @@ mod tests {
         fn platform(&self) -> PlatformKind {
             PlatformKind::Windows
         }
-        fn toolchain_root(&self) -> PathBuf {
-            self.root.join("toolchain")
+        fn application_root(&self) -> Result<PathBuf, PortError> {
+            Ok(self.root.join("application"))
         }
-        fn releases_root(&self) -> PathBuf {
-            self.root.join("releases")
+        fn releases_root(&self) -> Result<PathBuf, PortError> {
+            Ok(self.root.join("releases"))
         }
-        fn state_root(&self) -> PathBuf {
-            self.root.join("state")
+        fn toolchains_root(&self) -> Result<PathBuf, PortError> {
+            Ok(self.root.join("toolchains"))
+        }
+        fn state_root(&self) -> Result<PathBuf, PortError> {
+            Ok(self.root.join("state"))
+        }
+        fn logs_root(&self) -> Result<PathBuf, PortError> {
+            Ok(self.root.join("logs"))
         }
     }
 
