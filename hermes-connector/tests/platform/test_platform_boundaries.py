@@ -378,9 +378,11 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
                 "pairing_command_lock.py",
                 "pairing_projection.py",
                 "plugin_control_relay.py",
+                "private_file.py",
                 "private_state.py",
                 "process_identity.py",
                 "session_catalog_client.py",
+                "sqlite_storage.py",
                 "status_receipt.py",
             ],
         )
