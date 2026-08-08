@@ -7,21 +7,20 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from uuid import UUID, uuid4
 
 from hermes_connector.adapters.cloud.codec import ConnectorProtocolCodec
-from hermes_connector.adapters.platform.macos.observer_client import (
-    _observer_contract,
-    _ready_payload,
-    _same_authority_identity,
-    _validate_ready_identity,
+from hermes_connector.adapters.observer_protocol import (
+    observer_contract,
+    ready_payload,
+    validate_ready_identity,
 )
-from hermes_connector.adapters.platform.macos.session_catalog_client import (
+from hermes_connector.adapters.session_catalog_protocol import (
     MAX_CATALOG_PAGE_SIZE,
     SessionCatalogProtocolError,
-    _buffer_notification,
-    _catalog_event,
-    _local_page,
-    _request_id,
-    _require_catalog_authority,
-    _response_result,
+    buffer_notification,
+    catalog_event,
+    local_page,
+    request_id,
+    require_catalog_authority,
+    response_result,
 )
 from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
 from hermes_connector.domain.session_catalog import (
@@ -88,7 +87,7 @@ class WindowsSessionCatalogClient:
             raise ValueError("catalog runtime generation is invalid")
         if type(page_size) is not int or not 1 <= page_size <= MAX_CATALOG_PAGE_SIZE:
             raise ValueError("catalog page size is outside contract bounds")
-        authority = await _require_catalog_authority(
+        authority = await require_catalog_authority(
             self._authority,
             profile=profile,
             runtime_generation=runtime_generation,
@@ -101,18 +100,18 @@ class WindowsSessionCatalogClient:
                     authority=authority,
                     timeout_seconds=self._connect_timeout_seconds,
                 )
-                observer_contract = _observer_contract(authority)
+                contract = observer_contract(authority)
                 await _await_ready(
                     stream,
                     profile=profile,
                     authority=authority,
-                    observer_contract=observer_contract,
+                    observer_contract=contract,
                 )
-                request_id = _request_id(self._request_id_factory)
+                rpc_id = request_id(self._request_id_factory)
                 await stream.send(
                     {
                         "jsonrpc": "2.0",
-                        "id": request_id,
+                        "id": rpc_id,
                         "method": "session.catalog.subscribe",
                         "params": {
                             "profile": profile,
@@ -124,17 +123,17 @@ class WindowsSessionCatalogClient:
                 pending: list[Mapping[str, object]] = []
                 response = await _await_catalog_response(
                     stream,
-                    request_id=request_id,
+                    request_id_value=rpc_id,
                     pending=pending,
                 )
-                page = _local_page(
+                page = local_page(
                     self._codec,
                     response,
                     profile=profile,
                     runtime_generation=runtime_generation,
                     page_index=0,
                 )
-                current = await _require_catalog_authority(
+                current = await require_catalog_authority(
                     self._authority,
                     profile=profile,
                     runtime_generation=runtime_generation,
@@ -206,11 +205,11 @@ class WindowsSessionCatalogSubscription:
                     raise SessionCatalogProtocolError(
                         "non-final catalog page is missing its cursor"
                     )
-                request_id = _request_id(self._request_id_factory)
+                rpc_id = request_id(self._request_id_factory)
                 await self._stream.send(
                     {
                         "jsonrpc": "2.0",
-                        "id": request_id,
+                        "id": rpc_id,
                         "method": "session.catalog.page",
                         "params": {
                             "subscription_id": str(page.subscription_id),
@@ -220,8 +219,8 @@ class WindowsSessionCatalogSubscription:
                         },
                     }
                 )
-                response = await self._await_response(request_id)
-                next_page = _local_page(
+                response = await self._await_response(rpc_id)
+                next_page = local_page(
                     self._codec,
                     response,
                     profile=page.profile,
@@ -255,7 +254,7 @@ class WindowsSessionCatalogSubscription:
                     frame = self._pending_frames.pop(0)
                 else:
                     frame = await self._receive_frame()
-                event = _catalog_event(
+                event = catalog_event(
                     self._codec,
                     frame,
                     subscription_id=self._first_page.subscription_id,
@@ -277,13 +276,13 @@ class WindowsSessionCatalogSubscription:
         async with self._close_lock:
             if self._closed:
                 return
-            request_id = _request_id(self._request_id_factory)
+            rpc_id = request_id(self._request_id_factory)
             try:
                 async with asyncio.timeout(self._close_timeout_seconds):
                     await self._stream.send(
                         {
                             "jsonrpc": "2.0",
-                            "id": request_id,
+                            "id": rpc_id,
                             "method": "session.catalog.unsubscribe",
                             "params": {
                                 "subscription_id": str(
@@ -303,12 +302,12 @@ class WindowsSessionCatalogSubscription:
             await self._stream.close()
             self._closed = True
 
-    async def _await_response(self, request_id: str) -> Mapping[str, object]:
+    async def _await_response(self, rpc_id: str) -> Mapping[str, object]:
         while True:
             frame = await self._receive_frame()
-            if frame.get("id") == request_id:
-                return _response_result(frame)
-            _buffer_notification(frame, self._pending_frames)
+            if frame.get("id") == rpc_id:
+                return response_result(frame)
+            buffer_notification(frame, self._pending_frames)
 
     async def _receive_frame(self) -> Mapping[str, object]:
         receive = asyncio.create_task(self._stream.recv())
@@ -331,7 +330,7 @@ class WindowsSessionCatalogSubscription:
                 await asyncio.gather(receive, return_exceptions=True)
 
     async def _ensure_authority(self) -> None:
-        await _require_catalog_authority(
+        await require_catalog_authority(
             self._authority,
             profile=self._first_page.profile,
             runtime_generation=self._first_page.runtime_generation,
@@ -355,14 +354,14 @@ async def _await_ready(
     observer_contract: int,
 ) -> None:
     while True:
-        ready = _ready_payload(
+        ready = ready_payload(
             await stream.recv(),
             observer_contract=observer_contract,
         )
         if ready is None:
             continue
         if observer_contract == 1:
-            _validate_ready_identity(
+            validate_ready_identity(
                 ready,
                 profile=profile,
                 runtime_generation=authority.runtime_generation,
@@ -374,14 +373,14 @@ async def _await_ready(
 async def _await_catalog_response(
     stream: WindowsAuthorityBoundDuplexPipe,
     *,
-    request_id: str,
+    request_id_value: str,
     pending: list[Mapping[str, object]],
 ) -> Mapping[str, object]:
     while True:
         frame = await stream.recv()
-        if frame.get("id") == request_id:
-            return _response_result(frame)
-        _buffer_notification(frame, pending)
+        if frame.get("id") == request_id_value:
+            return response_result(frame)
+        buffer_notification(frame, pending)
 
 
 async def _close_quietly(stream: WindowsAuthorityBoundDuplexPipe) -> None:
