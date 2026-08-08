@@ -115,7 +115,7 @@ class WindowsDPAPISecretStore:
         self._service = _validated_label(service, field="service")
         self._account = _validated_label(account, field="account")
         digest = hashlib.sha256(
-            f"{self._service}\0{self._account}".encode("utf-8")
+            f"{self._service}\0{self._account}".encode()
         ).hexdigest()
         self._path = root_directory / f"{digest}.dpapi"
         self._mutex_key = f"dpapi-secret:{root_directory}:{digest}"
