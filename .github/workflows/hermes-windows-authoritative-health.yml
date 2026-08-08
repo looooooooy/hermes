@@ -5,6 +5,7 @@ on:
     branches:
       - "feature/hermes-windows-authoritative-health-*"
     paths:
+      - "hermes-runtime-manager/src/main.rs"
       - "hermes-runtime-manager/src/startup_reconcile.rs"
       - "hermes-runtime-manager/src/windows_startup_health.rs"
       - "hermes-runtime-manager/src/windows_update_health.rs"
@@ -16,6 +17,7 @@ on:
       - ".github/workflows/hermes-windows-authoritative-health.yml"
   pull_request:
     paths:
+      - "hermes-runtime-manager/src/main.rs"
       - "hermes-runtime-manager/src/startup_reconcile.rs"
       - "hermes-runtime-manager/src/windows_startup_health.rs"
       - "hermes-runtime-manager/src/windows_update_health.rs"
