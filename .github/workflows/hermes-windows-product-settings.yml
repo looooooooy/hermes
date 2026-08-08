@@ -40,6 +40,7 @@ jobs:
           python -m pip install
           -e hermes-connector
           pytest
+          pytest-asyncio
           ruff==0.16.1
       - name: Lint settings slice
         run: >-
