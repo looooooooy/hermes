@@ -1,4 +1,4 @@
-"""Windows Local Relay backend with a verified Local Gateway foundation."""
+"""Windows Local Relay backend with validated Gateway and Control roles."""
 
 from __future__ import annotations
 
@@ -7,11 +7,12 @@ from collections.abc import Callable
 from typing import Any
 
 from ..capabilities import PlatformLocalGatewayUnavailable
+from . import control_relay
 from .local_gateway_transport import create_local_gateway_resource
 
 _STARTUP_TIMEOUT_SECONDS = 3.0
 _SHUTDOWN_TIMEOUT_SECONDS = 3.0
-_UNAVAILABLE = "windows_observer_control_not_implemented"
+_UNAVAILABLE = "windows_observer_or_control_hub_not_implemented"
 
 
 class _Registration:
@@ -27,7 +28,7 @@ class _Registration:
 
 
 class WindowsLocalRelayBackend:
-    """Run the Windows Local Gateway role and fail closed for unfinished roles."""
+    """Run implemented Windows relay roles and fail closed for unfinished roles."""
 
     def start_local_gateway_endpoint(self, **kwargs: Any) -> _Registration:
         resource = create_local_gateway_resource(**kwargs)
@@ -36,15 +37,15 @@ class WindowsLocalRelayBackend:
             lambda: resource.stop(time.monotonic() + _SHUTDOWN_TIMEOUT_SECONDS)
         )
 
+    def start_control_endpoint(self, **kwargs: Any) -> object:
+        return control_relay.start_control_endpoint(**kwargs)
+
+    def list_control_endpoints(self) -> list[object]:
+        return list(control_relay.list_control_endpoints())
+
     @staticmethod
     def _unavailable() -> None:
         raise PlatformLocalGatewayUnavailable(_UNAVAILABLE)
-
-    def start_control_endpoint(self, **_kwargs: object) -> None:
-        self._unavailable()
-
-    def list_control_endpoints(self) -> list[object]:
-        self._unavailable()
 
     def create_control_relay_hub(self, *, current_pid: int | None) -> None:
         del current_pid
