@@ -100,6 +100,8 @@ jobs:
           $env:HERMES_CONNECTOR_PROFILE = "default"
           $env:HERMES_CONNECTOR_VERSION = "1.2.3"
           $env:HERMES_HOME = Join-Path $env:RUNNER_TEMP "hermes-frozen-home"
-          $status = & $exe status --json
-          if ($LASTEXITCODE -ne 3) { throw "expected not-ready exit code 3" }
+          $stdout = Join-Path $env:RUNNER_TEMP "hermes-frozen-status.out"
+          $process = Start-Process -FilePath $exe -ArgumentList @("status", "--json") -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdout
+          $status = (Get-Content -Raw $stdout).Trim()
+          if ($process.ExitCode -ne 3) { throw "expected not-ready exit code 3, got $($process.ExitCode)" }
           if ($status -ne '{"ready":false}') { throw "unexpected frozen status: $status" }
