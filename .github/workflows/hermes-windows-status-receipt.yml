@@ -1,0 +1,103 @@
+name: Hermes Windows Status Receipt
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-status-receipt-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/status_receipt_codec.py"
+      - "hermes-connector/src/hermes_connector/application/readiness_status.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/status_receipt.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/macos/test_status_receipt.py"
+      - "hermes-connector/tests/platform/windows/test_status_receipt.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-status-receipt.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/status_receipt_codec.py"
+      - "hermes-connector/src/hermes_connector/application/readiness_status.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/status_receipt.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/macos/test_status_receipt.py"
+      - "hermes-connector/tests/platform/windows/test_status_receipt.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-status-receipt.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-status-receipt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-contract:
+    name: Shared status receipt contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint status receipt slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/adapters/status_receipt_codec.py
+          hermes-connector/src/hermes_connector/application/readiness_status.py
+          hermes-connector/src/hermes_connector/adapters/platform/macos/status_receipt.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/status_receipt.py
+          hermes-connector/tests/platform/windows/test_status_receipt.py
+      - name: Regress macOS readiness receipt through shared contract
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/macos/test_status_receipt.py
+      - name: Preserve platform boundaries
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-receipt:
+    name: Windows readiness receipt / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Regress Secure State foundation
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_secure_state_foundation.py
+      - name: Regress DPAPI device identity
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_device_identity_dpapi.py
+      - name: Regress state projections
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_state_projections.py
+      - name: Test Windows readiness status receipt
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_status_receipt.py
