@@ -22,7 +22,7 @@ from hermes_windows_tasks import (
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Scheduled Tasks required")
 
 
-def test_windows_scheduled_task_registers_exact_release_as_limited_user(
+def test_windows_scheduled_task_registers_private_launcher_as_limited_user(
     tmp_path: Path,
 ) -> None:
     profile = f"ci-{uuid4().hex[:10]}"
@@ -38,7 +38,8 @@ def test_windows_scheduled_task_registers_exact_release_as_limited_user(
         config_file=config,
     )
     task.launcher.parent.mkdir(parents=True, exist_ok=True)
-    task.launcher.write_bytes(render_connector_launcher(task))
+    launcher = render_connector_launcher(task)
+    task.launcher.write_bytes(launcher)
 
     subprocess.run(create_task_command(task), check=True, capture_output=True, text=True)
     try:
@@ -54,7 +55,8 @@ def test_windows_scheduled_task_registers_exact_release_as_limited_user(
         assert "<RunLevel>HighestAvailable</RunLevel>" not in xml
         assert "cmd.exe" in xml
         assert "run-connector.cmd" in xml
-        assert release_id in xml
+        assert release_id not in xml
+        assert release_id in launcher.decode("utf-8")
         assert "<Password>" not in xml
     finally:
         subprocess.run(
