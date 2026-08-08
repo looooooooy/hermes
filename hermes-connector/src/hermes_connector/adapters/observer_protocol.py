@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from hermes_connector.adapters.cloud.codec import ConnectorProtocolCodec
 from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
 from hermes_connector.domain.observer import SessionEvent, SessionSnapshot
+from hermes_connector.ports.observer import ObserverResnapshotRequired
 
 MAX_PRE_SNAPSHOT_EVENTS = 32
 OUTPUT_PARITY_CAPABILITY = "session.observe.output-parity.v1"
@@ -22,10 +23,6 @@ class ObserverEndpointUnavailable(RuntimeError):
 
 
 class ObserverProtocolError(RuntimeError):
-    pass
-
-
-class ObserverResnapshotRequired(RuntimeError):
     pass
 
 
