@@ -77,8 +77,6 @@ def _configure_pipe_api(kernel32: Any) -> None:
         ctypes.c_void_p,
     ]
     kernel32.WriteFile.restype = wintypes.BOOL
-    kernel32.FlushFileBuffers.argtypes = [wintypes.HANDLE]
-    kernel32.FlushFileBuffers.restype = wintypes.BOOL
     kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.OpenThread.restype = wintypes.HANDLE
     kernel32.CancelSynchronousIo.argtypes = [wintypes.HANDLE]
@@ -226,8 +224,6 @@ class WindowsFramedPipeConnection:
             kernel32, _ = libraries()
             _configure_pipe_api(kernel32)
             _write_all(kernel32, self._pipe, payload)
-            if not kernel32.FlushFileBuffers(wintypes.HANDLE(self._pipe)):
-                raise OSError(ctypes.get_last_error(), "FlushFileBuffers failed")
 
     def close(self) -> None:
         self._closed = True
