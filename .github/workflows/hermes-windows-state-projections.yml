@@ -1,0 +1,108 @@
+name: Hermes Windows State Projections
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-state-projections-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/instance_identity_state.py"
+      - "hermes-connector/src/hermes_connector/adapters/pairing_projection_codec.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/macos/test_instance_identity.py"
+      - "hermes-connector/tests/platform/macos/test_pairing_projection.py"
+      - "hermes-connector/tests/platform/windows/test_state_projections.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-state-projections.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/instance_identity_state.py"
+      - "hermes-connector/src/hermes_connector/adapters/pairing_projection_codec.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/macos/test_instance_identity.py"
+      - "hermes-connector/tests/platform/macos/test_pairing_projection.py"
+      - "hermes-connector/tests/platform/windows/test_state_projections.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-state-projections.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-state-projections-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-contract:
+    name: Shared state projection contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint state projection slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/adapters/instance_identity_state.py
+          hermes-connector/src/hermes_connector/adapters/pairing_projection_codec.py
+          hermes-connector/src/hermes_connector/adapters/platform/macos/instance_identity.py
+          hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/instance_identity.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/pairing_projection.py
+          hermes-connector/tests/platform/windows/test_state_projections.py
+      - name: Regress macOS instance identity through shared contract
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/macos/test_instance_identity.py
+      - name: Regress macOS pairing projections through shared contract
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/macos/test_pairing_projection.py
+      - name: Preserve platform boundaries
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-state:
+    name: Windows private state projections / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Regress Secure State foundation
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_secure_state_foundation.py
+      - name: Regress DPAPI device identity
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_device_identity_dpapi.py
+      - name: Test instance and pairing projections
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_state_projections.py
