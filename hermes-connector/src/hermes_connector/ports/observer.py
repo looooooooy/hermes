@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from hermes_connector.domain.observer import (
@@ -11,6 +12,29 @@ from hermes_connector.domain.observer import (
     StreamNack,
 )
 from hermes_connector.domain.storage import ObserverOutboxRecord
+
+
+class ObserverResnapshotRequired(RuntimeError):
+    """The local Observer subscription must restart from a new snapshot."""
+
+
+class ObserverSubscriptionPort(Protocol):
+    snapshot: SessionSnapshot
+
+    def events(self) -> AsyncIterator[SessionEvent]: ...
+
+    async def close(self) -> None: ...
+
+
+class ObserverLocalClientPort(Protocol):
+    async def subscribe(
+        self,
+        *,
+        profile: str,
+        session_key: str,
+    ) -> ObserverSubscriptionPort: ...
+
+    async def aclose(self) -> None: ...
 
 
 class ObserverOutboundLanePort(Protocol):
@@ -60,4 +84,10 @@ class ObserverIntentLanePort(Protocol):
     async def shutdown(self) -> None: ...
 
 
-__all__ = ["ObserverIntentLanePort", "ObserverOutboundLanePort"]
+__all__ = [
+    "ObserverIntentLanePort",
+    "ObserverLocalClientPort",
+    "ObserverOutboundLanePort",
+    "ObserverResnapshotRequired",
+    "ObserverSubscriptionPort",
+]
