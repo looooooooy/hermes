@@ -80,10 +80,7 @@ class WindowsLocalGatewayTransport:
             timeout_seconds=self._connect_timeout_seconds,
         )
         try:
-            if connection.server_pid != endpoint.pid:
-                raise PermissionError("Windows Local Gateway server PID changed")
-            if current_process_identity(endpoint.pid) != endpoint.process_identity:
-                raise PermissionError("Windows Local Gateway process identity changed")
+            self._require_connection_identity(connection, endpoint)
             return WindowsNamedPipeGatewayConnection(
                 connection,
                 io_timeout_seconds=self._io_timeout_seconds,
@@ -92,9 +89,27 @@ class WindowsLocalGatewayTransport:
             connection.close()
             raise
 
-    async def probe_peer(self, endpoint: AgentEndpoint) -> None:
-        connection = await self.connect(endpoint)
-        await connection.close()
+    def probe_peer(self, endpoint: AgentEndpoint, *, timeout_seconds: float) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        connection = connect_same_user_pipe(
+            str(endpoint.socket_path),
+            timeout_seconds=timeout_seconds,
+        )
+        try:
+            self._require_connection_identity(connection, endpoint)
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _require_connection_identity(
+        connection: WindowsPipeConnection,
+        endpoint: AgentEndpoint,
+    ) -> None:
+        if connection.server_pid != endpoint.pid:
+            raise PermissionError("Windows Local Gateway server PID changed")
+        if current_process_identity(endpoint.pid) != endpoint.process_identity:
+            raise PermissionError("Windows Local Gateway process identity changed")
 
 
 __all__ = [
