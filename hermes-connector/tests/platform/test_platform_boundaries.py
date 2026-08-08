@@ -26,6 +26,26 @@ _PLATFORM_PROBES = frozenset(
 )
 _PLATFORM_PROBE_MODULES = frozenset(module for module, _ in _PLATFORM_PROBES)
 _PLATFORM_SELECTION_PATH = Path("bootstrap/platform.py")
+_WINDOWS_CAPABILITIES = frozenset(
+    {
+        "control.command",
+        "control.owner",
+        "device_identity.ed25519",
+        "instance_lock",
+        "local_gateway.discovery",
+        "local_gateway.handshake",
+        "local_gateway.preflight",
+        "observer",
+        "pairing",
+        "runtime.cli",
+        "runtime.service",
+        "runtime.settings",
+        "runtime.sqlite.private",
+        "secure_state.dpapi",
+        "session_catalog",
+        "status_receipt",
+    }
+)
 
 
 def _platform_probe_violations(
@@ -144,27 +164,15 @@ class PlatformBoundaryTest(unittest.TestCase):
         with self.assertRaises(boundary.PlatformUnavailable):
             linux.AVAILABILITY.require_available()
 
-    def test_windows_partial_foundation_is_declared_but_remains_unavailable(self) -> None:
-        boundary = importlib.import_module(
-            "hermes_connector.adapters.platform.availability"
-        )
+    def test_windows_declares_the_verified_product_capability_set(self) -> None:
         windows = importlib.import_module(
             "hermes_connector.adapters.platform.windows.availability"
         )
 
-        self.assertFalse(windows.AVAILABILITY.available)
-        self.assertEqual(
-            windows.AVAILABILITY.capabilities,
-            frozenset(
-                {
-                    "instance_lock",
-                    "local_gateway.discovery",
-                    "local_gateway.handshake",
-                }
-            ),
-        )
-        with self.assertRaises(boundary.PlatformUnavailable):
-            windows.AVAILABILITY.require_available()
+        self.assertTrue(windows.AVAILABILITY.available)
+        self.assertEqual(windows.AVAILABILITY.capabilities, _WINDOWS_CAPABILITIES)
+        self.assertIsNone(windows.AVAILABILITY.unavailable_reason)
+        windows.AVAILABILITY.require_available()
 
     def test_bootstrap_selects_macos_and_rejects_unimplemented_platforms(
         self,
@@ -189,7 +197,7 @@ class PlatformBoundaryTest(unittest.TestCase):
             selected.instance_lock_type.__name__,
             "MacOSInstanceLock",
         )
-        for platform_name in ("linux", "win32"):
+        for platform_name in ("linux", "freebsd"):
             with (
                 self.subTest(platform=platform_name),
                 self.assertRaises(boundary.PlatformUnavailable),
@@ -219,7 +227,7 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(CONNECTOR_ROOT / "src")
 
-        for platform_name in ("linux", "win32", "cygwin"):
+        for platform_name in ("linux", "freebsd"):
             with self.subTest(platform=platform_name):
                 completed = subprocess.run(
                     [sys.executable, "-c", script, platform_name],
