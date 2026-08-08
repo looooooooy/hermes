@@ -81,13 +81,11 @@ class WindowsControlRelayClient:
             timeout_seconds=self._connect_timeout_seconds,
         )
         try:
-            if connection.server_pid != self._authority.pid:
-                raise PermissionError("Windows control relay server PID changed")
             expected_identity = normalize_process_identity(
                 self._authority.process_identity
             )
             observed_identity = normalize_process_identity(
-                current_process_identity(self._authority.pid)
+                current_process_identity(connection.server_pid)
             )
             if expected_identity is None or observed_identity != expected_identity:
                 raise PermissionError("Windows control relay process identity changed")
