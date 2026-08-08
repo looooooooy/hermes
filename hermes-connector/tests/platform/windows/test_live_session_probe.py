@@ -3,19 +3,24 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
-from hermes_agent_plugin.adapters.platform.windows.local_relay import create_local_relay_backend
+from hermes_agent_plugin.adapters.platform.windows.local_relay import (
+    create_local_relay_backend,
+)
 from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
     capture_windows_host_authority,
 )
 
-from hermes_connector.adapters.platform.windows.private_state import ensure_private_directory
+from hermes_connector.adapters.platform.windows.private_state import (
+    ensure_private_directory,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
 from hermes_connector.bootstrap.windows_live_session import probe_windows_live_session
