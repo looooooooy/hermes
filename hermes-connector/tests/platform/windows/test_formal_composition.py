@@ -149,14 +149,19 @@ async def test_windows_formal_runtime_composes_verified_adapters_without_availab
     finally:
         resource.stop(time.monotonic() + 3.0)
 
-    assert isinstance(runtime.identities, type(WindowsInstanceIdentityStore(settings.instance_state_file).load_or_create()))
+    expected_identity_type = type(
+        WindowsInstanceIdentityStore(settings.instance_state_file).load_or_create()
+    )
+    assert isinstance(runtime.identities, expected_identity_type)
     assert isinstance(runtime.device_identity, SecureStoreDeviceIdentity)
     assert isinstance(runtime.observer_client, WindowsObserverClient)
     assert isinstance(runtime.session_catalog_client, WindowsSessionCatalogClient)
     assert isinstance(runtime.control_relay, WindowsPluginControlRelay)
     assert isinstance(runtime.owner_control_factory, WindowsPluginOwnerControlChannelFactory)
     assert isinstance(runtime.status_receipt._store, WindowsStatusReceiptStore)
-    assert not any("macos" in type(component).__module__ for component in runtime.components)
+    assert not any(
+        "macos" in type(component).__module__ for component in runtime.components
+    )
 
 
 @pytest.mark.asyncio
@@ -194,7 +199,9 @@ def test_windows_runtime_check_is_side_effect_bounded_and_dpapi_only(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_windows_sqlite_and_lock_files_inherit_required_private_acl(tmp_path: Path) -> None:
+async def test_windows_sqlite_and_lock_files_inherit_required_private_acl(
+    tmp_path: Path,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_paired(settings)
     resource = _start_local_gateway()
