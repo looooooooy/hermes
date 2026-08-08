@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import queue
 import struct
 import threading
-import time
 from collections.abc import Mapping
 from typing import Final
 
