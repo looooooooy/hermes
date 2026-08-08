@@ -6,8 +6,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from hermes_connector.adapters.instance_identity_state import (
-    InstanceIdentities,
     MAX_INSTANCE_IDENTITY_BYTES,
+    InstanceIdentities,
     UnsafeInstanceIdentity,
     decode_instance_identities,
     encode_instance_identities,
