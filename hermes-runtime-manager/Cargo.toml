@@ -1,0 +1,48 @@
+[package]
+name = "hermes-runtime-manager"
+version = "0.1.0"
+description = "Cross-platform lifecycle authority for Hermes Managed Runtime"
+authors = ["Hermes contributors"]
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[lib]
+name = "hermes_runtime_manager"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-runtime-manager"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "=0.22.1"
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std"] }
+libc = "0.2"
+reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tar = "=0.4.44"
+thiserror = "2"
+time = { version = "=0.3.44", features = ["parsing", "formatting"] }
+zstd = "=0.13.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "=4.1.6", default-features = false, features = ["v1"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.61.3", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Ole",
+  "Win32_System_TaskScheduler",
+  "Win32_System_Variant"
+] }
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
+  "Win32_System_Threading"
+] }

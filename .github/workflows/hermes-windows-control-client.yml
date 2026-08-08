@@ -1,0 +1,46 @@
+name: Hermes Windows Control Client
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-observer-control-*"
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/control_client.py"
+      - "hermes-connector/tests/platform/windows/test_control_client_foundation.py"
+      - ".github/workflows/hermes-windows-control-client.yml"
+  pull_request:
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/control_client.py"
+      - "hermes-connector/tests/platform/windows/test_control_client_foundation.py"
+      - ".github/workflows/hermes-windows-control-client.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-control-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-control-client:
+    name: Plugin → high-level Connector Control client / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Test high-level Windows Control client against real Plugin endpoint
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_control_client_foundation.py

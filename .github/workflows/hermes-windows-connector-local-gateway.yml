@@ -1,0 +1,84 @@
+name: Hermes Windows Connector Local Gateway
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-connector-runtime-*"
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_local_gateway_foundation.py"
+      - ".github/workflows/hermes-windows-connector-local-gateway.yml"
+  pull_request:
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_local_gateway_foundation.py"
+      - ".github/workflows/hermes-windows-connector-local-gateway.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-connector-local-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract:
+    name: Windows Connector foundation contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lint and focused test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint Windows Local Gateway foundation
+        run: >-
+          ruff check
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/named_pipe_security.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/runtime_authority.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_gateway_transport.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/availability.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/named_pipe.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/process_identity.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/agent_discovery.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/local_gateway_transport.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/instance_lock.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/__init__.py
+          hermes-connector/tests/platform/windows/test_local_gateway_foundation.py
+      - name: Verify Windows stays fail-closed until all required roles exist
+        run: >-
+          python -m pytest
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-local-gateway:
+    name: Plugin → Connector Local Gateway / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Test Windows same-user discovery, handshake, and instance lock
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_local_gateway_foundation.py

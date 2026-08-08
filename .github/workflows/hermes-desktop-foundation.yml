@@ -1,0 +1,259 @@
+name: Hermes Desktop foundation
+
+on:
+  push:
+    branches:
+      - "feature/hermes-desktop-foundation-*"
+    paths:
+      - "hermes-desktop/**"
+      - "hermes-runtime-manager/**"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
+      - "hermes-connector/tests/packaging/test_managed_release_entrypoint.py"
+      - "hermes-connector/tests/packaging/test_offline_wheelhouse.py"
+      - ".github/workflows/hermes-desktop-foundation.yml"
+  pull_request:
+    paths:
+      - "hermes-desktop/**"
+      - "hermes-runtime-manager/**"
+      - "hermes-connector/packaging/common/hermes_private_toolchain.py"
+      - "hermes-connector/packaging/common/hermes_managed_release.py"
+      - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
+      - "hermes-connector/tests/packaging/test_private_toolchain_runner.py"
+      - "hermes-connector/tests/packaging/test_managed_release_entrypoint.py"
+      - "hermes-connector/tests/packaging/test_offline_wheelhouse.py"
+      - ".github/workflows/hermes-desktop-foundation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-desktop-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Svelte desktop shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Static check
+        working-directory: hermes-desktop
+        run: npm run check
+      - name: Build frontend
+        working-directory: hermes-desktop
+        run: npm run build
+
+  private-toolchain:
+    name: Private Python/uv execution contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test runner
+        run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Prove private toolchain, wheelhouse and managed release composition
+        run: >-
+          python -m pytest -q
+          hermes-connector/tests/packaging/test_private_toolchain_runner.py
+          hermes-connector/tests/packaging/test_offline_wheelhouse.py
+          hermes-connector/tests/packaging/test_managed_release_entrypoint.py
+
+  native-toolchain:
+    name: Real private toolchain / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+          - os: macos-latest
+            target: macos-aarch64
+          - os: windows-latest
+            target: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Build unqualified Hermes toolchain bundle from pinned upstream assets
+        run: >-
+          python hermes-runtime-manager/toolchains/build_toolchain_bundle.py
+          --lock hermes-runtime-manager/toolchains/upstream-lock-v1.json
+          --target ${{ matrix.target }}
+          --output "${{ runner.temp }}/hermes-toolchain-unqualified"
+      - name: Qualify source and license evidence before publication
+        run: >-
+          python hermes-runtime-manager/toolchains/qualify_toolchain_bundle.py
+          --bundle "${{ runner.temp }}/hermes-toolchain-unqualified"
+          --license-lock hermes-runtime-manager/toolchains/license-source-lock-v1.json
+          --output "${{ runner.temp }}/hermes-toolchain-qualified"
+      - name: Install only the qualified bundle with the customer-side Runtime Manager
+        run: >-
+          cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml --
+          install-toolchain
+          "${{ runner.temp }}/hermes-toolchain-qualified"
+          "${{ runner.temp }}/hermes-toolchains"
+      - name: Execute installed private Python and uv
+        run: >-
+          python hermes-runtime-manager/toolchains/verify_installed_toolchain.py
+          --toolchains-root "${{ runner.temp }}/hermes-toolchains"
+          --python-version 3.13.14
+          --uv-version 0.12.2
+      - name: Build native blank-machine gate
+        run: >-
+          cargo build --quiet
+          --manifest-path hermes-runtime-manager/Cargo.toml
+          --bin hermes-runtime-manager
+      - name: Run zero-host-dependency gate with poisoned PATH
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate="$PWD/hermes-runtime-manager/target/debug/hermes-runtime-manager"
+          poison="${RUNNER_TEMP}/hermes-empty-path"
+          blank_root="${RUNNER_TEMP}/hermes-blank-machine"
+          rm -rf "$poison" "$blank_root"
+          mkdir -p "$poison"
+          PATH="$poison" "$gate" blank-machine-toolchain-gate \
+            "${RUNNER_TEMP}/hermes-toolchain-qualified" \
+            "$blank_root"
+      - name: Run zero-host-dependency gate with poisoned PATH on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gate = (Resolve-Path 'hermes-runtime-manager/target/debug/hermes-runtime-manager.exe').Path
+          $poison = Join-Path $env:RUNNER_TEMP 'hermes-empty-path'
+          $blankRoot = Join-Path $env:RUNNER_TEMP 'hermes-blank-machine'
+          $qualified = Join-Path $env:RUNNER_TEMP 'hermes-toolchain-qualified'
+          Remove-Item -Recurse -Force $poison -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $blankRoot -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $poison | Out-Null
+          $env:PATH = $poison
+          & $gate blank-machine-toolchain-gate $qualified $blankRoot
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove Private Python can consume authenticated Runtime Manager UDS
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate="$PWD/hermes-runtime-manager/target/debug/hermes-runtime-manager"
+          endpoint="$($gate ipc-endpoint)"
+          toolchains_root="${RUNNER_TEMP}/hermes-toolchains"
+          manifest="$(find "$toolchains_root" -mindepth 2 -maxdepth 2 -name TOOLCHAIN-MANIFEST.json -type f -print -quit)"
+          test -n "$manifest"
+          private_python="$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["python"]["path"])' "$manifest")"
+          test -x "$private_python"
+          poison="${RUNNER_TEMP}/hermes-empty-path"
+          server_log="${RUNNER_TEMP}/hermes-runtime-manager-ipc.log"
+          PATH="$poison" "$gate" serve-read-only >"$server_log" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          PATH="$poison" "$private_python" -I \
+            "$PWD/hermes-runtime-manager/toolchains/private_ipc_test_host.py" \
+            --transport unix \
+            --endpoint "$endpoint" \
+            --toolchains-root "$toolchains_root" \
+            --expected-platform "${{ runner.os }}"
+      - name: Prove Private Python can consume authenticated Runtime Manager Named Pipe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gate = (Resolve-Path 'hermes-runtime-manager/target/debug/hermes-runtime-manager.exe').Path
+          $endpoint = (& $gate ipc-endpoint).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($endpoint)) { throw 'failed to resolve Runtime Manager Named Pipe' }
+          $toolchainsRoot = Join-Path $env:RUNNER_TEMP 'hermes-toolchains'
+          $manifest = Get-ChildItem -Path $toolchainsRoot -Recurse -Filter 'TOOLCHAIN-MANIFEST.json' -File | Select-Object -First 1
+          if (-not $manifest) { throw 'installed toolchain manifest not found' }
+          $privatePython = ((Get-Content -Raw $manifest.FullName | ConvertFrom-Json).python.path)
+          if (-not (Test-Path -LiteralPath $privatePython -PathType Leaf)) { throw 'private Python not found' }
+          $poison = Join-Path $env:RUNNER_TEMP 'hermes-empty-path'
+          $serverOut = Join-Path $env:RUNNER_TEMP 'hermes-runtime-manager-ipc.out.log'
+          $serverErr = Join-Path $env:RUNNER_TEMP 'hermes-runtime-manager-ipc.err.log'
+          $oldPath = $env:PATH
+          $env:PATH = $poison
+          $server = Start-Process -FilePath $gate -ArgumentList 'serve-read-only' -PassThru -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+          try {
+            & $privatePython -I 'hermes-runtime-manager/toolchains/private_ipc_test_host.py' --transport windows-pipe --endpoint $endpoint --toolchains-root $toolchainsRoot --expected-platform Windows
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+            $env:PATH = $oldPath
+          }
+
+  runtime-manager:
+    name: Runtime Manager / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Test shared lifecycle core and local IPC
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml --all-targets
+      - name: Check status CLI
+        run: cargo run --quiet --manifest-path hermes-runtime-manager/Cargo.toml -- status
+
+  tauri-shell:
+    name: Tauri native shell / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Linux Tauri prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Install frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Check native shell
+        run: cargo check --manifest-path hermes-desktop/src-tauri/Cargo.toml
+      - name: Test native Desktop to Runtime Manager contract
+        run: cargo test --manifest-path hermes-desktop/src-tauri/Cargo.toml --lib

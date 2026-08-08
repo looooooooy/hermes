@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "qualification_required_before_publish": true,
+    "runtime_license_scan_required": true,
+    "note": "Engineering provenance evidence; not a substitute for legal review."
+  },
+  "sources": [
+    {
+      "component": "uv",
+      "version": "0.12.2",
+      "repository": "astral-sh/uv",
+      "commit": "46ead609859e3c8f8572ca44e766fa003fbec43a",
+      "licenses": [
+        {
+          "path": "LICENSE-MIT",
+          "git_blob_sha1": "014835144877ea9c926d027ece3e1a26290cf481"
+        },
+        {
+          "path": "LICENSE-APACHE",
+          "git_blob_sha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+        }
+      ]
+    },
+    {
+      "component": "python-build-standalone",
+      "version": "20260805",
+      "repository": "astral-sh/python-build-standalone",
+      "commit": "76b41240bc8dfe753a54b2e32c8941e536568be8",
+      "licenses": [
+        {
+          "path": "LICENSE",
+          "git_blob_sha1": "a612ad9813b006ce81d1ee438dd784da99a54007"
+        }
+      ]
+    }
+  ]
+}

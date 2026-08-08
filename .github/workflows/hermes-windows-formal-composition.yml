@@ -1,0 +1,102 @@
+name: Hermes Windows Formal Composition
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-formal-composition-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/runtime.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/tests/platform/windows/test_formal_composition.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - ".github/workflows/hermes-windows-formal-composition.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/runtime.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/tests/platform/windows/test_formal_composition.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - ".github/workflows/hermes-windows-formal-composition.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-formal-composition-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract:
+    name: Formal composition contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint formal composition slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/bootstrap/runtime.py
+          hermes-connector/src/hermes_connector/bootstrap/windows.py
+          hermes-connector/tests/platform/windows/test_formal_composition.py
+      - name: Regress platform-neutral service runner
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/test_service_runner.py
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-composition:
+    name: Windows formal runtime composition / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Regress verified Windows runtime adapters
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_secure_state_foundation.py
+          hermes-connector/tests/platform/windows/test_device_identity_dpapi.py
+          hermes-connector/tests/platform/windows/test_state_projections.py
+          hermes-connector/tests/platform/windows/test_status_receipt.py
+          hermes-connector/tests/platform/windows/test_runtime_adapter_parity.py
+      - name: Compose formal Windows runtime
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_formal_runtime_composes_verified_adapters_without_availability_switch
+      - name: Compose Windows pairing runtime
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_pairing_runtime_uses_dpapi_and_windows_projection_stores
+      - name: Verify Windows runtime check is side-effect bounded
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_runtime_check_is_side_effect_bounded_and_dpapi_only
+      - name: Verify SQLite and service-lock ACLs
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_sqlite_and_lock_files_inherit_required_private_acl

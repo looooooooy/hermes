@@ -40,7 +40,7 @@ LOCAL_GATEWAY_AVAILABLE = LOCAL_GATEWAY_CAPABILITIES.available
 
 
 def configure_platform_adapters() -> object | None:
-    """Inject a real backend or an explicit fail-closed platform backend."""
+    """Inject a real backend and return a complete Host endpoint opener when supported."""
 
     if sys.platform == "darwin":
         from ..adapters.platform.macos import local_gateway_paths
@@ -60,8 +60,13 @@ def configure_platform_adapters() -> object | None:
         )
     elif sys.platform == "win32":
         from ..adapters.platform.windows.local_relay import (
-            create_local_relay_backend as configured_local_relay_backend,
+            create_local_relay_backend,
         )
+
+        backend = create_local_relay_backend()
+
+        def configured_local_relay_backend():
+            return backend
     else:
         from ..adapters.platform.capabilities import (
             UnavailableLocalRelayBackend,
@@ -75,6 +80,8 @@ def configure_platform_adapters() -> object | None:
     configure_local_relay_backend(configured_local_relay_backend)
     if sys.platform == "darwin":
         return create_macos_endpoint_opener(backend=backend)
+    if sys.platform == "win32":
+        return create_windows_endpoint_opener(backend=backend)
     return None
 
 
@@ -102,10 +109,54 @@ def create_macos_endpoint_opener(
     )
 
 
+def create_windows_endpoint_opener(
+    *,
+    backend: object,
+    host_authority_factory: Callable[..., object] | None = None,
+) -> object:
+    """Compose the process-scoped Windows Host endpoint opener."""
+
+    from ..adapters.platform.windows.host_endpoint_opener import (
+        WindowsHostEndpointOpener,
+    )
+    from ..adapters.platform.windows.runtime_authority import (
+        capture_windows_host_authority,
+    )
+
+    return WindowsHostEndpointOpener(
+        backend=backend,
+        host_authority_factory=(
+            capture_windows_host_authority
+            if host_authority_factory is None
+            else host_authority_factory
+        ),
+    )
+
+
+def select_platform_update_safety_opener() -> Callable[..., object] | None:
+    """Return the dedicated same-user read-only update-safety relay opener."""
+
+    if sys.platform == "darwin":
+        from ..adapters.platform.macos.update_safety_relay import (
+            start_update_safety_relay,
+        )
+
+        return start_update_safety_relay
+    if sys.platform == "win32":
+        from ..adapters.platform.windows.update_safety_relay import (
+            start_update_safety_relay,
+        )
+
+        return start_update_safety_relay
+    return None
+
+
 __all__ = [
     "LOCAL_GATEWAY_AVAILABLE",
     "LOCAL_GATEWAY_CAPABILITIES",
     "configure_platform_adapters",
     "create_macos_endpoint_opener",
+    "create_windows_endpoint_opener",
     "select_platform_local_gateway_capabilities",
+    "select_platform_update_safety_opener",
 ]

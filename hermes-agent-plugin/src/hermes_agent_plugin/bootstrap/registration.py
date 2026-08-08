@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from ..adapters.host.extension import HermesAgentPluginExtension
+from ..adapters.host.managed_extension import (
+    ManagedRuntimeHermesAgentPluginExtension,
+)
 from ..adapters.host.spi_v1 import (
     PublicHostSpiContractUnavailable,
     load_public_host_spi_factories,
@@ -14,7 +17,10 @@ from ..host_compatibility import (
     REQUIRED_HOST_CAPABILITIES,
     validate_host_context,
 )
-from .platform_adapters import configure_platform_adapters
+from .platform_adapters import (
+    configure_platform_adapters,
+    select_platform_update_safety_opener,
+)
 
 INCOMPATIBLE_HOST_MESSAGE = (
     "Hermes Agent Host SPI v1 is unavailable; "
@@ -56,9 +62,10 @@ def register(context: Any) -> HermesAgentPluginExtension:
             PUBLIC_HOST_CONTRACT_UNAVAILABLE_MESSAGE
         ) from error
     endpoint_opener = configure_platform_adapters()
-    extension = HermesAgentPluginExtension(
+    extension = ManagedRuntimeHermesAgentPluginExtension(
         host_spi_factories=host_spi_factories,
         endpoint_opener=endpoint_opener,
+        update_safety_opener=select_platform_update_safety_opener(),
     )
     register_extension(
         extension,

@@ -1,0 +1,65 @@
+name: Hermes Windows Service Projection
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-service-projection-*"
+    paths:
+      - "hermes-runtime-manager/src/windows_service_manager.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/src/main.rs"
+      - "hermes-runtime-manager/src/manager.rs"
+      - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
+      - ".github/workflows/hermes-windows-service-projection.yml"
+  pull_request:
+    paths:
+      - "hermes-runtime-manager/src/windows_service_manager.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-runtime-manager/src/main.rs"
+      - "hermes-runtime-manager/src/manager.rs"
+      - "hermes-runtime-manager/src/update_adapters.rs"
+      - "hermes-runtime-manager/src/update_connector_lane.rs"
+      - ".github/workflows/hermes-windows-service-projection.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-service-projection-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Projection formatting and non-Windows regression / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt
+      - name: Check projection formatting
+        run: rustfmt --edition 2021 --check hermes-runtime-manager/src/windows_service_manager.rs
+      - name: Check Runtime Manager
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
+
+  windows:
+    name: Real on-demand Task Scheduler projection / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt
+      - name: Compile Runtime Manager
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
+      - name: Run real Windows service projection tests
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml windows_service_manager -- --nocapture
+      - name: Regress generic release activator
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_adapters::tests -- --nocapture
+      - name: Regress Connector drain and reconcile lane
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests -- --nocapture

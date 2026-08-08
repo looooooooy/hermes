@@ -4,23 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import json
 import os
 import stat
 from collections.abc import Callable
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Generic, TypeVar
 from uuid import UUID, uuid4
 
-from hermes_connector.domain.identifiers import canonical_uuid
-from hermes_connector.domain.pairing import (
-    PairedProjection,
-    PairingOfferProjection,
+from hermes_connector.adapters.pairing_projection_codec import (
+    MAX_PAIRING_PROJECTION_BYTES,
+    UnsafePairingProjection,
+    decode_paired_projection,
+    decode_pairing_offer_projection,
+    encode_paired_projection,
+    encode_pairing_offer_projection,
 )
+from hermes_connector.domain.pairing import PairedProjection, PairingOfferProjection
 
-_MAX_FILE_BYTES = 16_384
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 _WRITE_FLAGS = (
     os.O_WRONLY
@@ -32,13 +33,7 @@ _WRITE_FLAGS = (
 _LOCK_FLAGS = (
     os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 )
-_SCOPES = frozenset({"session.observe", "session.control.request"})
-_LIFECYCLE_STATES = frozenset({"active", "auth_blocked", "suspended", "revoked"})
 _T = TypeVar("_T")
-
-
-class UnsafePairingProjection(ValueError):
-    """A pairing projection path or document is unsafe."""
 
 
 class _PrivateProjectionStore(Generic[_T]):
@@ -60,8 +55,6 @@ class _PrivateProjectionStore(Generic[_T]):
         return await asyncio.to_thread(self._load_if_present)
 
     def load_sync(self) -> _T | None:
-        """Load during synchronous bootstrap before an event loop exists."""
-
         return self._load_if_present()
 
     async def save(self, projection: _T) -> None:
@@ -185,33 +178,26 @@ class _PrivateProjectionStore(Generic[_T]):
 
 
 class MacOSPairedProjectionStore(_PrivateProjectionStore[PairedProjection]):
-    """Persist the server-authoritative paired binding without its token."""
-
     def __init__(self, path: str | os.PathLike[str]) -> None:
         super().__init__(
             path,
-            encode=_encode_paired_projection,
-            decode=_decode_paired_projection,
+            encode=encode_paired_projection,
+            decode=decode_paired_projection,
         )
 
 
 class MacOSPairingOfferProjectionStore(_PrivateProjectionStore[PairingOfferProjection]):
-    """Persist only non-secret metadata for one temporary pairing offer."""
-
     def __init__(self, path: str | os.PathLike[str]) -> None:
         super().__init__(
             path,
-            encode=_encode_offer_projection,
-            decode=_decode_offer_projection,
+            encode=encode_pairing_offer_projection,
+            decode=decode_pairing_offer_projection,
         )
 
     async def delete_if_matches(self, pairing_offer_id: UUID) -> bool:
         if not isinstance(pairing_offer_id, UUID):
             raise TypeError("pairing offer projection version is invalid")
-        return await asyncio.to_thread(
-            self._delete_if_matches,
-            pairing_offer_id,
-        )
+        return await asyncio.to_thread(self._delete_if_matches, pairing_offer_id)
 
     def _delete_if_matches(self, pairing_offer_id: UUID) -> bool:
         with _exclusive_projection_lock(self._lock_path):
@@ -226,7 +212,7 @@ def _validate_file_metadata(metadata: os.stat_result) -> None:
         not stat.S_ISREG(metadata.st_mode)
         or metadata.st_uid != os.geteuid()
         or stat.S_IMODE(metadata.st_mode) != 0o600
-        or not 1 <= metadata.st_size <= _MAX_FILE_BYTES
+        or not 1 <= metadata.st_size <= MAX_PAIRING_PROJECTION_BYTES
     ):
         raise UnsafePairingProjection("pairing projection metadata is unsafe")
 
@@ -296,7 +282,7 @@ def _read_all(descriptor: int, expected_size: int) -> bytes:
         chunks.append(chunk)
         remaining -= len(chunk)
     raw = b"".join(chunks)
-    if len(raw) != expected_size or len(raw) > _MAX_FILE_BYTES:
+    if len(raw) != expected_size or len(raw) > MAX_PAIRING_PROJECTION_BYTES:
         raise UnsafePairingProjection("pairing projection changed during read")
     return raw
 
@@ -319,176 +305,8 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _decode_json(raw: bytes, fields: frozenset[str]) -> dict[str, object]:
-    def pairs_hook(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        result: dict[str, object] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError
-            result[key] = value
-        return result
-
-    try:
-        value = json.loads(
-            raw.decode("utf-8", errors="strict"),
-            object_pairs_hook=pairs_hook,
-        )
-    except (UnicodeDecodeError, ValueError):
-        raise UnsafePairingProjection("pairing projection content is invalid") from None
-    if not isinstance(value, dict) or frozenset(value) != fields:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return value
-
-
-def _encode_offer_projection(projection: PairingOfferProjection) -> bytes:
-    return _json_bytes(
-        {
-            "credential_fingerprint": projection.credential_fingerprint,
-            "expires_at": _format_datetime(projection.expires_at),
-            "key_handle": projection.key_handle,
-            "pairing_offer_id": str(projection.pairing_offer_id),
-            "version": 1,
-        }
-    )
-
-
-def _decode_offer_projection(raw: bytes) -> PairingOfferProjection:
-    value = _decode_json(
-        raw,
-        frozenset(
-            {
-                "credential_fingerprint",
-                "expires_at",
-                "key_handle",
-                "pairing_offer_id",
-                "version",
-            }
-        ),
-    )
-    _require_version(value)
-    return PairingOfferProjection(
-        pairing_offer_id=_uuid(value["pairing_offer_id"]),
-        key_handle=_key_handle(value["key_handle"]),
-        credential_fingerprint=_fingerprint(value["credential_fingerprint"]),
-        expires_at=_datetime(value["expires_at"]),
-    )
-
-
-def _encode_paired_projection(projection: PairedProjection) -> bytes:
-    return _json_bytes(
-        {
-            "agent_id": str(projection.agent_id),
-            "credential_fingerprint": projection.credential_fingerprint,
-            "credential_id": str(projection.credential_id),
-            "device_id": str(projection.device_id),
-            "key_handle": projection.key_handle,
-            "lifecycle_state": projection.lifecycle_state,
-            "scopes": list(projection.scopes),
-            "tenant_id": str(projection.tenant_id),
-            "token_expires_at": _format_datetime(projection.token_expires_at),
-            "version": 1,
-        }
-    )
-
-
-def _decode_paired_projection(raw: bytes) -> PairedProjection:
-    value = _decode_json(
-        raw,
-        frozenset(
-            {
-                "agent_id",
-                "credential_fingerprint",
-                "credential_id",
-                "device_id",
-                "key_handle",
-                "lifecycle_state",
-                "scopes",
-                "tenant_id",
-                "token_expires_at",
-                "version",
-            }
-        ),
-    )
-    _require_version(value)
-    scopes = value["scopes"]
-    if (
-        not isinstance(scopes, list)
-        or not 1 <= len(scopes) <= 2
-        or any(not isinstance(scope, str) or scope not in _SCOPES for scope in scopes)
-        or len(set(scopes)) != len(scopes)
-    ):
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    lifecycle = value["lifecycle_state"]
-    if not isinstance(lifecycle, str) or lifecycle not in _LIFECYCLE_STATES:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return PairedProjection(
-        tenant_id=_uuid(value["tenant_id"]),
-        device_id=_uuid(value["device_id"]),
-        credential_id=_uuid(value["credential_id"]),
-        agent_id=_uuid(value["agent_id"]),
-        scopes=tuple(scopes),
-        key_handle=_key_handle(value["key_handle"]),
-        credential_fingerprint=_fingerprint(value["credential_fingerprint"]),
-        token_expires_at=_datetime(value["token_expires_at"]),
-        lifecycle_state=lifecycle,
-    )
-
-
-def _json_bytes(value: dict[str, object]) -> bytes:
-    raw = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    if not 1 <= len(raw) <= _MAX_FILE_BYTES:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return raw
-
-
-def _require_version(value: dict[str, object]) -> None:
-    if type(value["version"]) is not int or value["version"] != 1:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-
-
-def _uuid(value: object) -> UUID:
-    try:
-        return canonical_uuid(value)
-    except (TypeError, ValueError):
-        raise UnsafePairingProjection("pairing projection content is invalid") from None
-
-
-def _key_handle(value: object) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.startswith("hermes-device-key:v1:")
-        or not 24 <= len(value) <= 256
-    ):
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return value
-
-
-def _fingerprint(value: object) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.startswith("SHA256:")
-        or len(value) != 50
-    ):
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return value
-
-
-def _datetime(value: object) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        raise UnsafePairingProjection("pairing projection content is invalid") from None
-    if parsed.tzinfo != UTC or _format_datetime(parsed) != value:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    return parsed
-
-
-def _format_datetime(value: datetime) -> str:
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise UnsafePairingProjection("pairing projection content is invalid")
-    utc = value.astimezone(UTC)
-    if utc.microsecond:
-        return utc.isoformat(timespec="microseconds").replace("+00:00", "Z")
-    return utc.isoformat(timespec="seconds").replace("+00:00", "Z")
+__all__ = [
+    "MacOSPairedProjectionStore",
+    "MacOSPairingOfferProjectionStore",
+    "UnsafePairingProjection",
+]

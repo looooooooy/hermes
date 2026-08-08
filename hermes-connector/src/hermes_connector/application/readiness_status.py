@@ -5,17 +5,17 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Protocol
 
-from hermes_connector.adapters.platform.macos.process_identity import (
-    ProcessIdentityProvider,
-    normalize_process_identity,
-)
-from hermes_connector.adapters.platform.macos.status_receipt import (
-    MacOSStatusReceiptStore,
+from hermes_connector.adapters.status_receipt_codec import (
+    normalize_process_identity_evidence,
 )
 from hermes_connector.domain.cloud_session import CloudSessionState
-from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
+from hermes_connector.domain.local_gateway import (
+    LocalRuntimeAuthority,
+    ProcessIdentityEvidence,
+)
 from hermes_connector.domain.readiness_status import (
     ACTIVATION_LOCAL_CAPABILITIES,
     ConnectorStatusReceipt,
@@ -33,7 +33,17 @@ class CloudReadySource(ReadySource, Protocol):
     def state(self) -> CloudSessionState: ...
 
 
+class StatusReceiptStore(Protocol):
+    @property
+    def path(self) -> Path: ...
+
+    def publish(self, receipt: ConnectorStatusReceipt) -> None: ...
+
+    def remove(self) -> None: ...
+
+
 AuthorityProvider = Callable[[], Awaitable[LocalRuntimeAuthority | None]]
+ProcessIdentityProvider = Callable[[int], ProcessIdentityEvidence | None]
 
 
 class ReadinessStatusComponent:
@@ -44,7 +54,7 @@ class ReadinessStatusComponent:
     def __init__(
         self,
         *,
-        store: MacOSStatusReceiptStore,
+        store: StatusReceiptStore,
         release_id: str,
         local_authority: AuthorityProvider,
         storage: ReadySource,
@@ -82,7 +92,7 @@ class ReadinessStatusComponent:
     async def start(self) -> None:
         if self._started:
             raise RuntimeError("readiness status component can only be started once")
-        process_identity = normalize_process_identity(
+        process_identity = normalize_process_identity_evidence(
             self._process_identity_provider(self._pid)
         )
         if process_identity is None:
@@ -206,3 +216,12 @@ class ReadinessStatusComponent:
         if self._stopping is None:
             raise RuntimeError("readiness status component is not started")
         return self._stopping
+
+
+__all__ = [
+    "CloudReadySource",
+    "ProcessIdentityProvider",
+    "ReadinessStatusComponent",
+    "ReadySource",
+    "StatusReceiptStore",
+]

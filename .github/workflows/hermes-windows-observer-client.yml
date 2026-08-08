@@ -1,0 +1,113 @@
+name: Hermes Windows Observer Clients
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-connector-observer-client-*"
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py"
+      - "hermes-agent-plugin/tests/unit/bootstrap/test_platform_endpoint_opener.py"
+      - "hermes-connector/src/hermes_connector/adapters/observer_protocol.py"
+      - "hermes-connector/src/hermes_connector/adapters/session_catalog_protocol.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/**"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-observer-client.yml"
+  pull_request:
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py"
+      - "hermes-agent-plugin/tests/unit/bootstrap/test_platform_endpoint_opener.py"
+      - "hermes-connector/src/hermes_connector/adapters/observer_protocol.py"
+      - "hermes-connector/src/hermes_connector/adapters/session_catalog_protocol.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/**"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-observer-client.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-observer-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract:
+    name: Windows Observer client contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint Windows client and opener slice
+        run: >-
+          ruff check
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/host_endpoint_opener.py
+          hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py
+          hermes-agent-plugin/tests/unit/bootstrap/test_platform_endpoint_opener.py
+          hermes-connector/src/hermes_connector/adapters/observer_protocol.py
+          hermes-connector/src/hermes_connector/adapters/session_catalog_protocol.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/duplex_pipe.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/observer_client.py
+          hermes-connector/src/hermes_connector/adapters/platform/windows/session_catalog_client.py
+          hermes-connector/tests/platform/windows/test_observer_clients_foundation.py
+          hermes-connector/tests/platform/windows/test_host_endpoint_lifecycle.py
+      - name: Verify process-scoped Host endpoint openers
+        run: >-
+          python -m pytest -vv
+          hermes-agent-plugin/tests/unit/bootstrap/test_platform_endpoint_opener.py
+      - name: Preserve Connector platform boundaries
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-high-level-clients:
+    name: Connector Observer + Catalog clients / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Test production Host endpoint transaction lifecycle
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_host_endpoint_lifecycle.py
+      - name: Test high-level Observer and Catalog clients
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_observer_clients_foundation.py
+      - name: Regress Host Observer endpoint and shared transport
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_observer_endpoint_foundation.py
+      - name: Regress Control client and endpoint
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_control_relay_foundation.py
+          hermes-connector/tests/platform/windows/test_control_client_foundation.py

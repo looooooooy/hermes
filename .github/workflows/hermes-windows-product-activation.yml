@@ -1,0 +1,109 @@
+name: Hermes Windows Product Activation
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-formal-composition-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/platform.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_formal_runtime.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_provision.py"
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - "hermes-connector/tests/platform/windows/test_product_activation.py"
+      - "hermes-connector/tests/unit/bootstrap/test_cli.py"
+      - ".github/workflows/hermes-windows-product-activation.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/platform.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_formal_runtime.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_provision.py"
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - "hermes-connector/tests/platform/windows/test_product_activation.py"
+      - "hermes-connector/tests/unit/bootstrap/test_cli.py"
+      - ".github/workflows/hermes-windows-product-activation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-product-activation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundary:
+    name: Activated platform boundary / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          ruff==0.16.1
+      - name: Lint activation slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py
+          hermes-connector/src/hermes_connector/bootstrap/platform.py
+          hermes-connector/src/hermes_connector/bootstrap/windows_formal_runtime.py
+          hermes-connector/tests/platform/windows/test_product_activation.py
+      - name: Preserve activated platform boundaries
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  macos-compatibility:
+    name: Existing CLI after Windows activation / macos-latest
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Regress existing macOS CLI behavior
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/unit/bootstrap/test_cli.py
+
+  windows-activation:
+    name: Real Windows selector and CLI / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Verify real Windows platform activation
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_product_activation.py
+      - name: Regress product settings and CLI on real selector head
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_runtime_settings.py
+          hermes-connector/tests/platform/windows/test_product_cli.py

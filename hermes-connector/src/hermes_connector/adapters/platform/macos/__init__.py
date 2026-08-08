@@ -1,5 +1,6 @@
 """Verified macOS adapter implementations."""
 
+from hermes_connector.adapters.platform.macos import observer_client as _observer_client
 from hermes_connector.adapters.platform.macos.agent_discovery import (
     MacOSAgentDiscovery,
 )
@@ -23,15 +24,19 @@ from hermes_connector.adapters.platform.macos.local_gateway_transport import (
 from hermes_connector.adapters.platform.macos.local_runtime_preflight import (
     MacOSLocalRuntimePreflight,
 )
-from hermes_connector.adapters.platform.macos.observer_client import (
-    MacOSObserverClient,
-)
 from hermes_connector.adapters.platform.macos.observer_discovery import (
     MacOSObserverEndpointDiscovery,
 )
 from hermes_connector.adapters.platform.macos.session_catalog_client import (
     MacOSSessionCatalogClient,
 )
+from hermes_connector.ports.observer import ObserverResnapshotRequired
+
+# Compatibility bridge: the historical macOS observer module defined this error
+# locally. Rebind its global so existing imports and runtime raises now use the
+# platform-neutral port contract without changing the public macOS import path.
+_observer_client.ObserverResnapshotRequired = ObserverResnapshotRequired
+MacOSObserverClient = _observer_client.MacOSObserverClient
 
 __all__ = [
     "AVAILABILITY",

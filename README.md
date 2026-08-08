@@ -26,6 +26,16 @@ The separately authorized Hermes Core work is mapped in
 The approved commercial architecture is documented in
 [`docs/2026-07-28-hermes-connector-commercial-architecture-design.md`](docs/2026-07-28-hermes-connector-commercial-architecture-design.md).
 
+The customer-installation, managed-runtime, release, update, rollback, recovery,
+and uninstall productization baseline is documented in
+[`docs/2026-08-07-hermes-managed-runtime-customer-installation-design.md`](docs/2026-08-07-hermes-managed-runtime-customer-installation-design.md).
+
+The executable macOS / Windows / Linux Desktop implementation plan, including
+Tauri + Svelte shell, Rust Runtime Manager, private Python toolchain, platform
+service/IPC/secret-store adapters, installers, blank-machine gates, and phased
+closure tasks is documented in
+[`docs/2026-08-07-hermes-desktop-cross-platform-execution-plan.md`](docs/2026-08-07-hermes-desktop-cross-platform-execution-plan.md).
+
 Current status: the Cloud revision 11 candidate is complete only in the local
 tree and has not been deployed. The public test server still runs the older
 SQLite release with deterministic `android-agent` / `android-bootstrap` seed

@@ -26,6 +26,26 @@ _PLATFORM_PROBES = frozenset(
 )
 _PLATFORM_PROBE_MODULES = frozenset(module for module, _ in _PLATFORM_PROBES)
 _PLATFORM_SELECTION_PATH = Path("bootstrap/platform.py")
+_WINDOWS_CAPABILITIES = frozenset(
+    {
+        "control.command",
+        "control.owner",
+        "device_identity.ed25519",
+        "instance_lock",
+        "local_gateway.discovery",
+        "local_gateway.handshake",
+        "local_gateway.preflight",
+        "observer",
+        "pairing",
+        "runtime.cli",
+        "runtime.service",
+        "runtime.settings",
+        "runtime.sqlite.private",
+        "secure_state.dpapi",
+        "session_catalog",
+        "status_receipt",
+    }
+)
 
 
 def _platform_probe_violations(
@@ -131,23 +151,28 @@ class PlatformBoundaryTest(unittest.TestCase):
             "MacOSKeychainCloudTokenProvider",
         )
 
-    def test_linux_and_windows_declare_no_available_capabilities(self) -> None:
+    def test_linux_remains_unavailable_with_no_capabilities(self) -> None:
         boundary = importlib.import_module(
             "hermes_connector.adapters.platform.availability"
         )
         linux = importlib.import_module(
             "hermes_connector.adapters.platform.linux.availability"
         )
+
+        self.assertFalse(linux.AVAILABILITY.available)
+        self.assertEqual(linux.AVAILABILITY.capabilities, frozenset())
+        with self.assertRaises(boundary.PlatformUnavailable):
+            linux.AVAILABILITY.require_available()
+
+    def test_windows_declares_the_verified_product_capability_set(self) -> None:
         windows = importlib.import_module(
             "hermes_connector.adapters.platform.windows.availability"
         )
 
-        for availability in (linux.AVAILABILITY, windows.AVAILABILITY):
-            with self.subTest(platform=availability.platform_name):
-                self.assertFalse(availability.available)
-                self.assertEqual(availability.capabilities, frozenset())
-                with self.assertRaises(boundary.PlatformUnavailable):
-                    availability.require_available()
+        self.assertTrue(windows.AVAILABILITY.available)
+        self.assertEqual(windows.AVAILABILITY.capabilities, _WINDOWS_CAPABILITIES)
+        self.assertIsNone(windows.AVAILABILITY.unavailable_reason)
+        windows.AVAILABILITY.require_available()
 
     def test_bootstrap_selects_macos_and_rejects_unimplemented_platforms(
         self,
@@ -172,7 +197,7 @@ class PlatformBoundaryTest(unittest.TestCase):
             selected.instance_lock_type.__name__,
             "MacOSInstanceLock",
         )
-        for platform_name in ("linux", "win32"):
+        for platform_name in ("linux", "freebsd"):
             with (
                 self.subTest(platform=platform_name),
                 self.assertRaises(boundary.PlatformUnavailable),
@@ -202,7 +227,7 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(CONNECTOR_ROOT / "src")
 
-        for platform_name in ("linux", "win32", "cygwin"):
+        for platform_name in ("linux", "freebsd"):
             with self.subTest(platform=platform_name):
                 completed = subprocess.run(
                     [sys.executable, "-c", script, platform_name],
@@ -335,17 +360,42 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
         )
 
     def test_platform_packages_and_public_exports_are_exact(self) -> None:
-        for platform_name in ("linux", "windows"):
-            with self.subTest(platform=platform_name):
-                package_path = SOURCE_ROOT / "adapters" / "platform" / platform_name
-                self.assertEqual(
-                    sorted(path.name for path in package_path.glob("*.py")),
-                    ["__init__.py", "availability.py"],
-                )
-                package = importlib.import_module(
-                    f"hermes_connector.adapters.platform.{platform_name}"
-                )
-                self.assertEqual(package.__all__, ["AVAILABILITY"])
+        linux_path = SOURCE_ROOT / "adapters" / "platform" / "linux"
+        self.assertEqual(
+            sorted(path.name for path in linux_path.glob("*.py")),
+            ["__init__.py", "availability.py"],
+        )
+        linux = importlib.import_module("hermes_connector.adapters.platform.linux")
+        self.assertEqual(linux.__all__, ["AVAILABILITY"])
+
+        windows_path = SOURCE_ROOT / "adapters" / "platform" / "windows"
+        self.assertEqual(
+            sorted(path.name for path in windows_path.glob("*.py")),
+            [
+                "__init__.py",
+                "agent_discovery.py",
+                "availability.py",
+                "control_client.py",
+                "dpapi_secret_store.py",
+                "duplex_pipe.py",
+                "instance_identity.py",
+                "instance_lock.py",
+                "local_gateway_transport.py",
+                "named_pipe.py",
+                "observer_client.py",
+                "pairing_command_lock.py",
+                "pairing_projection.py",
+                "plugin_control_relay.py",
+                "private_file.py",
+                "private_state.py",
+                "process_identity.py",
+                "session_catalog_client.py",
+                "sqlite_storage.py",
+                "status_receipt.py",
+            ],
+        )
+        windows = importlib.import_module("hermes_connector.adapters.platform.windows")
+        self.assertEqual(windows.__all__, ["AVAILABILITY"])
 
     def test_legacy_shim_and_top_level_adapter_exports_are_exact(self) -> None:
         expected = {

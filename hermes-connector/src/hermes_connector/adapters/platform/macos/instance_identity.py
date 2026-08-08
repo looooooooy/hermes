@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import errno
-import json
 import os
 import stat
-from dataclasses import dataclass
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-_MAX_STATE_BYTES = 4_096
+from hermes_connector.adapters.instance_identity_state import (
+    MAX_INSTANCE_IDENTITY_BYTES,
+    InstanceIdentities,
+    UnsafeInstanceIdentity,
+    decode_instance_identities,
+    encode_instance_identities,
+)
+
 _READ_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 _WRITE_FLAGS = (
     os.O_WRONLY
@@ -19,23 +24,6 @@ _WRITE_FLAGS = (
     | getattr(os, "O_CLOEXEC", 0)
     | getattr(os, "O_NOFOLLOW", 0)
 )
-_STATE_FIELDS = frozenset(
-    {
-        "version",
-        "connector_instance_id",
-        "client_instance_id",
-    }
-)
-
-
-class UnsafeInstanceIdentity(ValueError):
-    """The stable instance identity path or content is unsafe."""
-
-
-@dataclass(frozen=True, slots=True)
-class InstanceIdentities:
-    connector_instance_id: UUID
-    client_instance_id: UUID
 
 
 class MacOSInstanceIdentityStore:
@@ -99,10 +87,10 @@ class MacOSInstanceIdentityStore:
             raw = _read_state(descriptor, opened.st_size)
         finally:
             os.close(descriptor)
-        return _decode_identities(raw)
+        return decode_instance_identities(raw)
 
     def _publish(self, identities: InstanceIdentities) -> None:
-        raw = _encode_identities(identities)
+        raw = encode_instance_identities(identities)
         temporary = self._path.parent / (
             f".{self._path.name}.{os.getpid()}.{uuid4().hex}.tmp"
         )
@@ -148,59 +136,16 @@ def _validate_state_metadata(metadata: os.stat_result) -> None:
         not stat.S_ISREG(metadata.st_mode)
         or metadata.st_uid != os.geteuid()
         or stat.S_IMODE(metadata.st_mode) != 0o600
-        or not 1 <= metadata.st_size <= _MAX_STATE_BYTES
+        or not 1 <= metadata.st_size <= MAX_INSTANCE_IDENTITY_BYTES
     ):
         raise UnsafeInstanceIdentity("instance identity metadata is unsafe")
 
 
 def _read_state(descriptor: int, expected_size: int) -> bytes:
-    raw = os.read(descriptor, _MAX_STATE_BYTES + 1)
-    if len(raw) != expected_size or len(raw) > _MAX_STATE_BYTES:
+    raw = os.read(descriptor, MAX_INSTANCE_IDENTITY_BYTES + 1)
+    if len(raw) != expected_size or len(raw) > MAX_INSTANCE_IDENTITY_BYTES:
         raise UnsafeInstanceIdentity("instance identity changed during read")
     return raw
-
-
-def _decode_identities(raw: bytes) -> InstanceIdentities:
-    try:
-        value = json.loads(raw.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, ValueError):
-        raise UnsafeInstanceIdentity("instance identity content is invalid") from None
-    if (
-        not isinstance(value, dict)
-        or frozenset(value) != _STATE_FIELDS
-        or type(value.get("version")) is not int
-        or value["version"] != 1
-    ):
-        raise UnsafeInstanceIdentity("instance identity content is invalid")
-    connector = _canonical_uuid(value.get("connector_instance_id"))
-    client = _canonical_uuid(value.get("client_instance_id"))
-    if connector == client:
-        raise UnsafeInstanceIdentity("instance identity content is invalid")
-    return InstanceIdentities(connector, client)
-
-
-def _canonical_uuid(value: object) -> UUID:
-    if not isinstance(value, str):
-        raise UnsafeInstanceIdentity("instance identity content is invalid")
-    try:
-        parsed = UUID(value)
-    except ValueError:
-        raise UnsafeInstanceIdentity("instance identity content is invalid") from None
-    if str(parsed) != value:
-        raise UnsafeInstanceIdentity("instance identity content is invalid")
-    return parsed
-
-
-def _encode_identities(identities: InstanceIdentities) -> bytes:
-    return json.dumps(
-        {
-            "client_instance_id": str(identities.client_instance_id),
-            "connector_instance_id": str(identities.connector_instance_id),
-            "version": 1,
-        },
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
 
 
 def _write_all(descriptor: int, raw: bytes) -> None:
@@ -219,3 +164,10 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+__all__ = [
+    "InstanceIdentities",
+    "MacOSInstanceIdentityStore",
+    "UnsafeInstanceIdentity",
+]
