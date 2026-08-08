@@ -68,6 +68,10 @@ def select_platform_adapters(
             instance_lock_type=MacOSInstanceLock,
         )
     if selected in {"cygwin", "win32"}:
+        if sys.platform not in {"cygwin", "win32"}:
+            raise PlatformUnavailable(
+                "Hermes Connector Windows adapters require a Windows host"
+            )
         from hermes_connector.adapters.platform.windows.availability import (
             AVAILABILITY,
         )
