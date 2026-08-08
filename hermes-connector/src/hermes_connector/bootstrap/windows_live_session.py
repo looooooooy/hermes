@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from uuid import uuid4
 
 from hermes_connector.adapters.foundation_projection import (
@@ -26,18 +27,18 @@ _REQUIRED_CAPABILITIES = ("session.observe",)
 _OPTIONAL_CAPABILITIES = ("session.catalog.v1",)
 
 
+@dataclass(frozen=True, slots=True)
+class WindowsLiveSessionEvidence:
+    live_session_ok: bool
+    runtime_generation: str | None
+
+
 async def probe_windows_live_session(
     settings: ConnectorRuntimeSettings,
     *,
     config: ConnectorConfig | None = None,
-) -> bool:
-    """Return True only when the current Host catalog contains a live session.
-
-    The probe is deliberately local-only. It creates no Cloud client, opens no SQLite
-    database, writes no Connector state, and never mutates a Session. It uses the
-    existing Local Gateway authority handshake and Session Catalog v1 subscription,
-    then closes both before returning.
-    """
+) -> WindowsLiveSessionEvidence:
+    """Probe the current Host catalog without mutating Connector or Session state."""
 
     selected = config or ConnectorConfig()
     discovery = WindowsAgentDiscovery(
@@ -56,7 +57,7 @@ async def probe_windows_live_session(
     )
     expected = preflight.verify(settings.profile)
     if expected is None:
-        return False
+        return WindowsLiveSessionEvidence(False, None)
 
     gateway = LocalGatewayClient(
         profile=settings.profile,
@@ -76,6 +77,7 @@ async def probe_windows_live_session(
     )
     subscription = None
     run_task: asyncio.Task[None] | None = None
+    generation: str | None = None
     try:
         await gateway.start()
         run_task = asyncio.create_task(
@@ -84,29 +86,32 @@ async def probe_windows_live_session(
         )
         async with asyncio.timeout(selected.start_deadline_seconds):
             if not await gateway.ready():
-                return False
+                return WindowsLiveSessionEvidence(False, None)
             authority = await gateway.current_runtime_authority()
             if authority is None:
-                return False
+                return WindowsLiveSessionEvidence(False, None)
+            generation = authority.runtime_generation
             capabilities = {
                 *authority.required_capabilities,
                 *authority.optional_capabilities,
             }
             if "session.catalog.v1" not in capabilities:
-                return False
+                return WindowsLiveSessionEvidence(False, generation)
             subscription = await catalog.subscribe(
                 profile=settings.profile,
-                runtime_generation=authority.runtime_generation,
+                runtime_generation=generation,
                 page_size=128,
             )
             async for page in subscription.pages():
+                if page.runtime_generation != generation:
+                    return WindowsLiveSessionEvidence(False, generation)
                 if page.sessions:
-                    return True
+                    return WindowsLiveSessionEvidence(True, generation)
                 if page.is_last:
-                    return False
-            return False
+                    return WindowsLiveSessionEvidence(False, generation)
+            return WindowsLiveSessionEvidence(False, generation)
     except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError):
-        return False
+        return WindowsLiveSessionEvidence(False, generation)
     finally:
         if subscription is not None:
             try:
@@ -134,4 +139,4 @@ async def probe_windows_live_session(
             pass
 
 
-__all__ = ["probe_windows_live_session"]
+__all__ = ["WindowsLiveSessionEvidence", "probe_windows_live_session"]
