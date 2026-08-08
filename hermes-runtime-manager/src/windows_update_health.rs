@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 const MAX_STATUS_BYTES: usize = 8_192;
 const MAX_LIVE_SESSION_BYTES: usize = 4_096;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(8);
+const DEFAULT_CONVERGENCE_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowsConnectorReadinessEvidence {
@@ -142,24 +144,15 @@ impl WindowsConnectorCommandHealth {
             &self.environment(),
             COMMAND_TIMEOUT,
         )?;
-        if !output.status.success() || output.stdout.is_empty() || output.stdout.len() > MAX_STATUS_BYTES {
-            return Ok(WindowsConnectorReadinessEvidence {
-                release_id: release_id.to_owned(),
-                runtime_generation: String::new(),
-                agent_ready: false,
-                cloud_connected: false,
-            });
+        if !output.status.success()
+            || output.stdout.is_empty()
+            || output.stdout.len() > MAX_STATUS_BYTES
+        {
+            return Ok(not_ready(release_id));
         }
         let status: ConnectorStatusOutput = match serde_json::from_slice(&output.stdout) {
             Ok(value) => value,
-            Err(_) => {
-                return Ok(WindowsConnectorReadinessEvidence {
-                    release_id: release_id.to_owned(),
-                    runtime_generation: String::new(),
-                    agent_ready: false,
-                    cloud_connected: false,
-                });
-            }
+            Err(_) => return Ok(not_ready(release_id)),
         };
         let bound = status.release_id == release_id
             && safe_identity(&status.runtime_generation, 128)
@@ -250,6 +243,8 @@ impl WindowsConnectorCommandHealth {
 pub struct WindowsAuthoritativeUpdateHealthGate {
     service_manager: Arc<dyn ServiceManager>,
     connector: Arc<WindowsConnectorCommandHealth>,
+    convergence_timeout: Duration,
+    poll_interval: Duration,
 }
 
 impl WindowsAuthoritativeUpdateHealthGate {
@@ -257,44 +252,95 @@ impl WindowsAuthoritativeUpdateHealthGate {
         service_manager: Arc<dyn ServiceManager>,
         connector: Arc<WindowsConnectorCommandHealth>,
     ) -> Self {
+        Self::with_policy(
+            service_manager,
+            connector,
+            DEFAULT_CONVERGENCE_TIMEOUT,
+            DEFAULT_POLL_INTERVAL,
+        )
+    }
+
+    pub fn with_policy(
+        service_manager: Arc<dyn ServiceManager>,
+        connector: Arc<WindowsConnectorCommandHealth>,
+        convergence_timeout: Duration,
+        poll_interval: Duration,
+    ) -> Self {
         Self {
             service_manager,
             connector,
+            convergence_timeout,
+            poll_interval,
         }
     }
 }
 
 impl UpdateHealthGate for WindowsAuthoritativeUpdateHealthGate {
     fn verify(&self, release_id: &str) -> Result<UpdateHealthEvidenceV1, PortError> {
-        let components = self.service_manager.component_health()?;
-        let components_ready = !components.is_empty() && components.iter().all(|item| item.ready);
-        let readiness = self.connector.readiness(release_id)?;
-        let live_session_ok = readiness.agent_ready
-            && readiness.cloud_connected
-            && self
-                .connector
-                .live_session_ok(release_id, &readiness.runtime_generation)?;
-        Ok(UpdateHealthEvidenceV1 {
-            agent_ready: readiness.agent_ready,
-            cloud_connected: readiness.cloud_connected,
-            live_session_ok,
-            components_ready,
-        })
+        let deadline = Instant::now() + self.convergence_timeout;
+        loop {
+            let components = self.service_manager.component_health()?;
+            let components_ready =
+                !components.is_empty() && components.iter().all(|item| item.ready);
+            let readiness = self.connector.readiness(release_id)?;
+            let live_session_ok = readiness.agent_ready
+                && readiness.cloud_connected
+                && self
+                    .connector
+                    .live_session_ok(release_id, &readiness.runtime_generation)?;
+            let evidence = UpdateHealthEvidenceV1 {
+                agent_ready: readiness.agent_ready,
+                cloud_connected: readiness.cloud_connected,
+                live_session_ok,
+                components_ready,
+            };
+            if evidence.healthy() || Instant::now() >= deadline {
+                return Ok(evidence);
+            }
+            sleep_bounded(self.poll_interval, deadline);
+        }
     }
 }
 
 pub struct WindowsStartupReadinessProbe {
     connector: Arc<WindowsConnectorCommandHealth>,
+    convergence_timeout: Duration,
+    poll_interval: Duration,
 }
 
 impl WindowsStartupReadinessProbe {
     pub fn new(connector: Arc<WindowsConnectorCommandHealth>) -> Self {
-        Self { connector }
+        Self::with_policy(
+            connector,
+            DEFAULT_CONVERGENCE_TIMEOUT,
+            DEFAULT_POLL_INTERVAL,
+        )
+    }
+
+    pub fn with_policy(
+        connector: Arc<WindowsConnectorCommandHealth>,
+        convergence_timeout: Duration,
+        poll_interval: Duration,
+    ) -> Self {
+        Self {
+            connector,
+            convergence_timeout,
+            poll_interval,
+        }
     }
 
     pub fn ready(&self, release_id: &str) -> Result<bool, PortError> {
-        let evidence = self.connector.readiness(release_id)?;
-        Ok(evidence.agent_ready && evidence.cloud_connected)
+        let deadline = Instant::now() + self.convergence_timeout;
+        loop {
+            let evidence = self.connector.readiness(release_id)?;
+            if evidence.agent_ready && evidence.cloud_connected {
+                return Ok(true);
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            sleep_bounded(self.poll_interval, deadline);
+        }
     }
 }
 
@@ -302,16 +348,23 @@ impl WindowsStartupReadinessProbe {
 #[serde(deny_unknown_fields)]
 struct ConnectorStatusOutput {
     cloud_state: String,
-    local_authority_identity: serde_json::Value,
-    pid: u32,
-    process_executable: String,
-    process_executable_device: u64,
-    process_executable_inode: u64,
-    process_start_time_ns: u64,
+    #[serde(rename = "local_authority_identity")]
+    _local_authority_identity: serde_json::Value,
+    #[serde(rename = "pid")]
+    _pid: u32,
+    #[serde(rename = "process_executable")]
+    _process_executable: String,
+    #[serde(rename = "process_executable_device")]
+    _process_executable_device: u64,
+    #[serde(rename = "process_executable_inode")]
+    _process_executable_inode: u64,
+    #[serde(rename = "process_start_time_ns")]
+    _process_start_time_ns: u64,
     ready: bool,
     release_id: String,
     runtime_generation: String,
-    updated_at: String,
+    #[serde(rename = "updated_at")]
+    _updated_at: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,6 +372,23 @@ struct ConnectorStatusOutput {
 struct LiveSessionOutput {
     live_session_ok: bool,
     runtime_generation: Option<String>,
+}
+
+fn not_ready(release_id: &str) -> WindowsConnectorReadinessEvidence {
+    WindowsConnectorReadinessEvidence {
+        release_id: release_id.to_owned(),
+        runtime_generation: String::new(),
+        agent_ready: false,
+        cloud_connected: false,
+    }
+}
+
+fn sleep_bounded(interval: Duration, deadline: Instant) {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return;
+    }
+    std::thread::sleep(interval.min(remaining));
 }
 
 fn safe_identity(value: &str, maximum: usize) -> bool {
@@ -346,19 +416,46 @@ mod tests {
     use std::fs;
     use std::os::windows::process::ExitStatusExt;
     use std::process::ExitStatus;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     struct RunningServices;
     impl ServiceManager for RunningServices {
-        fn install_bootstrap(&self, _runtime_manager: &Path) -> Result<(), PortError> { Ok(()) }
-        fn start_host(&self, _executable: &Path, _release_id: &str) -> Result<(), PortError> { Ok(()) }
-        fn stop_host(&self) -> Result<(), PortError> { Ok(()) }
-        fn start_connector(&self, _executable: &Path, _release_id: &str) -> Result<(), PortError> { Ok(()) }
-        fn stop_connector(&self) -> Result<(), PortError> { Ok(()) }
+        fn install_bootstrap(&self, _runtime_manager: &Path) -> Result<(), PortError> {
+            Ok(())
+        }
+        fn start_host(&self, _executable: &Path, _release_id: &str) -> Result<(), PortError> {
+            Ok(())
+        }
+        fn stop_host(&self) -> Result<(), PortError> {
+            Ok(())
+        }
+        fn start_connector(
+            &self,
+            _executable: &Path,
+            _release_id: &str,
+        ) -> Result<(), PortError> {
+            Ok(())
+        }
+        fn stop_connector(&self) -> Result<(), PortError> {
+            Ok(())
+        }
         fn component_health(&self) -> Result<Vec<ComponentHealth>, PortError> {
             Ok(vec![
-                ComponentHealth { name: "Host Process".to_owned(), ready: true, detail: "running".to_owned(), process: None },
-                ComponentHealth { name: "Connector Process".to_owned(), ready: true, detail: "running".to_owned(), process: None },
+                ComponentHealth {
+                    name: "Host Process".to_owned(),
+                    ready: true,
+                    detail: "running".to_owned(),
+                    process: None,
+                },
+                ComponentHealth {
+                    name: "Connector Process".to_owned(),
+                    ready: true,
+                    detail: "running".to_owned(),
+                    process: None,
+                },
             ])
         }
     }
@@ -382,23 +479,35 @@ mod tests {
         }
     }
 
-    fn success(payload: &str) -> Output {
+    fn output(code: u32, payload: &str) -> Output {
         Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::from_raw(code),
             stdout: payload.as_bytes().to_vec(),
             stderr: Vec::new(),
         }
     }
 
+    fn success(payload: &str) -> Output {
+        output(0, payload)
+    }
+
     fn setup() -> (PathBuf, PathBuf, PathBuf) {
-        let root = std::env::temp_dir().join(format!("hermes-windows-health-{}", std::process::id()));
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let root = std::env::temp_dir().join(format!(
+            "hermes-windows-health-{}-{id}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&root);
         let releases = root.join("releases");
         let release = releases.join("1.0.1+win");
         let scripts = release.join("connector/venv/Scripts");
         fs::create_dir_all(&scripts).unwrap();
         fs::write(scripts.join("hermes-connector.exe"), b"status").unwrap();
-        fs::write(scripts.join("hermes-connector-live-session.exe"), b"live").unwrap();
+        fs::write(
+            scripts.join("hermes-connector-live-session.exe"),
+            b"live",
+        )
+        .unwrap();
         let config = root.join("connector/profiles/default/config.json");
         fs::create_dir_all(config.parent().unwrap()).unwrap();
         fs::write(&config, b"{}").unwrap();
@@ -430,9 +539,11 @@ mod tests {
             )
             .unwrap(),
         );
-        let evidence = WindowsAuthoritativeUpdateHealthGate::new(
+        let evidence = WindowsAuthoritativeUpdateHealthGate::with_policy(
             Arc::new(RunningServices),
             connector,
+            Duration::ZERO,
+            Duration::ZERO,
         )
         .verify("1.0.1+win")
         .unwrap();
@@ -458,13 +569,42 @@ mod tests {
             )
             .unwrap(),
         );
-        let evidence = WindowsAuthoritativeUpdateHealthGate::new(
+        let evidence = WindowsAuthoritativeUpdateHealthGate::with_policy(
             Arc::new(RunningServices),
             connector,
+            Duration::ZERO,
+            Duration::ZERO,
         )
         .verify("1.0.1+win")
         .unwrap();
         assert!(!evidence.healthy());
         assert!(!evidence.live_session_ok);
+    }
+
+    #[test]
+    fn startup_readiness_converges_after_initial_not_ready_receipt() {
+        let (home, releases, config) = setup();
+        let runner = Arc::new(FakeRunner {
+            outputs: Mutex::new(vec![
+                output(3, "{\"ready\":false}"),
+                success(&status("gen-1")),
+            ]),
+        });
+        let connector = Arc::new(
+            WindowsConnectorCommandHealth::with_runner(
+                releases,
+                home,
+                "default",
+                config,
+                runner,
+            )
+            .unwrap(),
+        );
+        let probe = WindowsStartupReadinessProbe::with_policy(
+            connector,
+            Duration::from_secs(1),
+            Duration::ZERO,
+        );
+        assert!(probe.ready("1.0.1+win").unwrap());
     }
 }
