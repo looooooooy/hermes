@@ -23,9 +23,11 @@ _PIPE_TYPE_BYTE = 0x00000000
 _PIPE_READMODE_BYTE = 0x00000000
 _PIPE_WAIT = 0x00000000
 _PIPE_REJECT_REMOTE_CLIENTS = 0x00000008
+_THREAD_TERMINATE = 0x0001
 _ERROR_PIPE_CONNECTED = 535
 _ERROR_BROKEN_PIPE = 109
 _ERROR_NO_DATA = 232
+_ERROR_NOT_FOUND = 1168
 _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 _CLOSE_TIMEOUT_S = 3.0
 _DEFAULT_IO_TIMEOUT_S = 3.0
@@ -77,6 +79,10 @@ def _configure_pipe_api(kernel32: Any) -> None:
     kernel32.WriteFile.restype = wintypes.BOOL
     kernel32.FlushFileBuffers.argtypes = [wintypes.HANDLE]
     kernel32.FlushFileBuffers.restype = wintypes.BOOL
+    kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenThread.restype = wintypes.HANDLE
+    kernel32.CancelSynchronousIo.argtypes = [wintypes.HANDLE]
+    kernel32.CancelSynchronousIo.restype = wintypes.BOOL
 
 
 def _peek_available(kernel32: Any, pipe: int) -> int:
@@ -148,6 +154,23 @@ def _write_all(kernel32: Any, pipe: int, payload: bytes) -> None:
         if written.value == 0:
             raise RuntimeError("Windows framed Pipe write made no progress")
         offset += written.value
+
+
+def _cancel_thread_io(kernel32: Any, thread: threading.Thread) -> None:
+    native_id = thread.native_id
+    if native_id is None:
+        return
+    raw = kernel32.OpenThread(_THREAD_TERMINATE, False, native_id)
+    if raw in (None, 0, _INVALID_HANDLE_VALUE):
+        return
+    handle = int(raw)
+    try:
+        if not kernel32.CancelSynchronousIo(wintypes.HANDLE(handle)):
+            error = ctypes.get_last_error()
+            if error != _ERROR_NOT_FOUND:
+                return
+    finally:
+        close_handle(handle)
 
 
 class WindowsFramedPipeConnection:
@@ -277,6 +300,9 @@ class WindowsFramedPipeServer:
                     thread.start()
             except BaseException:
                 self._stop.set()
+                for thread in threads:
+                    if thread.ident is not None:
+                        _cancel_thread_io(kernel32, thread)
                 for pipe in self._pipes:
                     close_handle(pipe)
                 for thread in threads:
@@ -294,6 +320,10 @@ class WindowsFramedPipeServer:
             self._pipes = ()
             self._threads = ()
             self._stop.set()
+        kernel32, _ = libraries()
+        _configure_pipe_api(kernel32)
+        for thread in threads:
+            _cancel_thread_io(kernel32, thread)
         for pipe in pipes:
             close_handle(pipe)
         deadline = time.monotonic() + _CLOSE_TIMEOUT_S
