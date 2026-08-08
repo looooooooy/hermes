@@ -11,6 +11,9 @@ from hermes_agent_plugin.adapters.platform.windows.control_relay import (
     list_control_endpoints,
     start_control_endpoint,
 )
+from hermes_agent_plugin.adapters.platform.windows.local_relay import (
+    create_local_relay_backend,
+)
 from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
     capture_windows_host_authority,
 )
@@ -25,9 +28,9 @@ from hermes_connector.adapters.platform.windows.named_pipe import (
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Named Pipes required")
 
 
-def _authority():
+def _authority(profile: str = "default"):
     return capture_windows_host_authority(
-        profile="default",
+        profile=profile,
         host_bundle_id="com.hermes.windows-control-test",
     ).bind_runtime("generation-windows-control-1")
 
@@ -159,3 +162,61 @@ def test_control_rejects_attach_without_bound_claims_before_dispatch() -> None:
     finally:
         connection.close()
         registration.close()
+
+
+def test_production_windows_backend_delegates_control_endpoint_and_list() -> None:
+    authority = _authority("backend")
+    observed: list[dict] = []
+
+    def dispatcher(request: dict, _transport: object) -> dict:
+        observed.append(request)
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id"),
+            "result": {"delegated": True},
+        }
+
+    backend = create_local_relay_backend()
+    registration = backend.start_control_endpoint(
+        authority=authority,
+        dispatcher=dispatcher,
+    )
+    connection = connect_same_user_pipe(
+        profile_pipe_name("control", "backend"),
+        timeout_seconds=2.0,
+    )
+    try:
+        endpoints = backend.list_control_endpoints()
+        assert len(endpoints) == 1
+        assert endpoints[0].profile == "backend"
+        assert endpoints[0].instance_id == authority.instance_id
+
+        _send_frame(
+            connection,
+            {
+                "jsonrpc": "2.0",
+                "id": "backend-attach",
+                "method": "relay.control.attach",
+                "params": {"claims": _claims(authority)},
+            },
+        )
+        assert _recv_frame(connection)["result"]["attached"] is True
+        _send_frame(
+            connection,
+            {
+                "jsonrpc": "2.0",
+                "id": "backend-status",
+                "method": "session.control.status",
+                "params": {},
+            },
+        )
+        assert _recv_frame(connection) == {
+            "jsonrpc": "2.0",
+            "id": "backend-status",
+            "result": {"delegated": True},
+        }
+        assert observed[0]["params"]["relay_local_only"] is True
+    finally:
+        connection.close()
+        registration.close()
+    assert backend.list_control_endpoints() == []
