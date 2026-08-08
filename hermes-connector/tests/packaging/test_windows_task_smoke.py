@@ -50,7 +50,8 @@ def test_windows_scheduled_task_registers_exact_release_as_limited_user(
         )
         xml = queried.stdout
         assert "<LogonTrigger>" in xml
-        assert "<RunLevel>LeastPrivilege</RunLevel>" in xml
+        assert "<LogonType>InteractiveToken</LogonType>" in xml
+        assert "<RunLevel>HighestAvailable</RunLevel>" not in xml
         assert "cmd.exe" in xml
         assert "run-connector.cmd" in xml
         assert release_id in xml
