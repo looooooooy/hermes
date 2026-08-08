@@ -42,10 +42,13 @@ class WindowsAgentDiscovery:
         self._timeout_seconds = timeout_seconds
 
     async def discover(self, profile: str) -> tuple[AgentEndpoint, ...]:
+        return await asyncio.to_thread(self.discover_now, profile)
+
+    def discover_now(self, profile: str) -> tuple[AgentEndpoint, ...]:
         if not isinstance(profile, str) or _PROFILE.fullmatch(profile) is None:
             return ()
         try:
-            endpoint = await asyncio.to_thread(self._discover_sync, profile)
+            endpoint = self._discover_sync(profile)
         except (
             OSError,
             TimeoutError,
