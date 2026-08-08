@@ -73,8 +73,8 @@ def _canonical_uuid(value: object) -> UUID:
 
 
 __all__ = [
-    "InstanceIdentities",
     "MAX_INSTANCE_IDENTITY_BYTES",
+    "InstanceIdentities",
     "UnsafeInstanceIdentity",
     "decode_instance_identities",
     "encode_instance_identities",
