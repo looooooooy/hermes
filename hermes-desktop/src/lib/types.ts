@@ -32,6 +32,9 @@ export interface RuntimeSnapshot {
   runtimeVersion: string;
   runtimeGeneration: string;
   state: HealthState;
+  workspaceAuthenticated: boolean;
+  workspaceEndpoint?: string;
+  workspaceUser?: string;
   cloudConnected: boolean;
   agentReady: boolean;
   activeSessions: number;
