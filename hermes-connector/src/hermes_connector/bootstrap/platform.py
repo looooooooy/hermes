@@ -67,12 +67,29 @@ def select_platform_adapters(
             local_gateway_transport_type=MacOSLocalGatewayTransport,
             instance_lock_type=MacOSInstanceLock,
         )
-    if selected == "linux":
-        from hermes_connector.adapters.platform.linux import AVAILABILITY
+    if selected in {"cygwin", "win32"}:
+        from hermes_connector.adapters.platform.windows.availability import (
+            AVAILABILITY,
+        )
+        from hermes_connector.adapters.platform.windows.agent_discovery import (
+            WindowsAgentDiscovery,
+        )
+        from hermes_connector.adapters.platform.windows.instance_lock import (
+            WindowsInstanceLock,
+        )
+        from hermes_connector.adapters.platform.windows.local_gateway_transport import (
+            WindowsLocalGatewayTransport,
+        )
 
         AVAILABILITY.require_available()
-    elif selected in {"cygwin", "win32"}:
-        from hermes_connector.adapters.platform.windows import AVAILABILITY
+        return PlatformAdapterTypes(
+            platform_name=AVAILABILITY.platform_name,
+            agent_discovery_type=WindowsAgentDiscovery,
+            local_gateway_transport_type=WindowsLocalGatewayTransport,
+            instance_lock_type=WindowsInstanceLock,
+        )
+    if selected == "linux":
+        from hermes_connector.adapters.platform.linux import AVAILABILITY
 
         AVAILABILITY.require_available()
     raise PlatformUnavailable(
