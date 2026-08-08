@@ -14,6 +14,7 @@ on:
       - "hermes-connector/src/hermes_connector/adapters/platform/macos/local_runtime_preflight.py"
       - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
       - "hermes-connector/tests/unit/adapters/test_secure_store_cloud_token.py"
+      - "hermes-connector/tests/platform/macos/test_plugin_owner_control_channel.py"
       - "hermes-connector/tests/platform/windows/test_runtime_adapter_parity.py"
       - "hermes-connector/tests/platform/test_platform_boundaries.py"
       - ".github/workflows/hermes-windows-runtime-adapter-parity.yml"
@@ -28,6 +29,7 @@ on:
       - "hermes-connector/src/hermes_connector/adapters/platform/macos/local_runtime_preflight.py"
       - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
       - "hermes-connector/tests/unit/adapters/test_secure_store_cloud_token.py"
+      - "hermes-connector/tests/platform/macos/test_plugin_owner_control_channel.py"
       - "hermes-connector/tests/platform/windows/test_runtime_adapter_parity.py"
       - "hermes-connector/tests/platform/test_platform_boundaries.py"
       - ".github/workflows/hermes-windows-runtime-adapter-parity.yml"
@@ -75,14 +77,30 @@ jobs:
         run: >-
           python -m pytest -vv
           hermes-connector/tests/unit/adapters/test_secure_store_cloud_token.py
-      - name: Regress macOS Owner Control channel
-        run: >-
-          python -m pytest -vv
-          hermes-connector/tests/platform/macos/test_plugin_owner_control_channel.py
       - name: Preserve platform boundaries
         run: >-
           python -m pytest -vv
           hermes-connector/tests/platform/test_platform_boundaries.py
+
+  macos-compat:
+    name: macOS runtime adapter compatibility / macos-latest
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Regress macOS Owner Control channel
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/macos/test_plugin_owner_control_channel.py
 
   windows-runtime-adapters:
     name: Windows runtime adapter parity / windows-latest
