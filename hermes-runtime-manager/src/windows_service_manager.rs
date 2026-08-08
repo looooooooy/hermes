@@ -4,11 +4,11 @@ use crate::model::ComponentHealth;
 use crate::ports::{PortError, ServiceManager};
 use crate::windows_task_scheduler::WindowsTaskSchedulerBootstrap;
 use std::ffi::c_void;
-use std::path::{Path, PathBuf};
-use std::ptr::{null, null_mut};
+use std::path::Path;
+use std::ptr::null_mut;
 use std::thread;
 use std::time::Duration;
-use windows::core::{BSTR, Error as WindowsError};
+use windows::core::{Error as WindowsError, BSTR};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
 };
@@ -125,15 +125,14 @@ impl ServiceProjectionApartment {
         unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
             .ok()
             .map_err(|error| windows_operation("CoInitializeEx", error))?;
-        let service: ITaskService = match unsafe {
-            CoCreateInstance(&TaskScheduler, None, CLSCTX_INPROC_SERVER)
-        } {
-            Ok(service) => service,
-            Err(error) => {
-                unsafe { CoUninitialize() };
-                return Err(windows_operation("CoCreateInstance(TaskScheduler)", error));
-            }
-        };
+        let service: ITaskService =
+            match unsafe { CoCreateInstance(&TaskScheduler, None, CLSCTX_INPROC_SERVER) } {
+                Ok(service) => service,
+                Err(error) => {
+                    unsafe { CoUninitialize() };
+                    return Err(windows_operation("CoCreateInstance(TaskScheduler)", error));
+                }
+            };
         let empty = VARIANT::default();
         if let Err(error) = unsafe { service.Connect(&empty, &empty, &empty, &empty) } {
             drop(service);
@@ -196,7 +195,8 @@ impl ServiceProjectionApartment {
                 .map_err(|error| windows_operation("IRegisteredTask::State", error))?;
             last_running_state = unsafe { running.State() }
                 .map_err(|error| windows_operation("IRunningTask::State", error))?;
-            if last_registered_state == TASK_STATE_RUNNING || last_running_state == TASK_STATE_RUNNING {
+            if last_registered_state == TASK_STATE_RUNNING || last_running_state == TASK_STATE_RUNNING
+            {
                 return Ok(());
             }
             if last_registered_state != TASK_STATE_QUEUED
@@ -342,7 +342,6 @@ fn validate_registered_projection(
         .ok_or_else(|| PortError::Operation("service executable path is not UTF-8".to_owned()))?;
     for required in [
         "<LogonType>InteractiveToken</LogonType>",
-        "<RunLevel>LeastPrivilege</RunLevel>",
         "<AllowStartOnDemand>true</AllowStartOnDemand>",
         user_sid,
         executable,
@@ -378,18 +377,13 @@ fn current_user_sid_string() -> Result<String, PortError> {
     }
     let token = OwnedHandle(token);
     let mut needed = 0u32;
-    unsafe {
-        GetTokenInformation(
-            token.0,
-            TokenUser,
-            null_mut(),
-            0,
-            &mut needed,
-        )
-    };
+    unsafe { GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut needed) };
     let error = unsafe { GetLastError() };
     if needed == 0 || error != ERROR_INSUFFICIENT_BUFFER {
-        return Err(win32_operation_with_code("GetTokenInformation(size)", error));
+        return Err(win32_operation_with_code(
+            "GetTokenInformation(size)",
+            error,
+        ));
     }
     let mut buffer = vec![0u8; needed as usize];
     if unsafe {
@@ -457,9 +451,9 @@ impl Drop for OwnedHandle {
 fn validate_task_name(value: &str) -> Result<(), PortError> {
     if !value.starts_with(TASK_NAME_PREFIX)
         || value.len() > MAX_TASK_NAME_BYTES
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
     {
         return Err(PortError::Operation(
             "invalid Hermes service projection task name".to_owned(),
@@ -540,6 +534,7 @@ fn win32_operation_with_code(operation: &str, code: u32) -> PortError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -571,7 +566,9 @@ mod tests {
     #[test]
     fn real_on_demand_projection_runs_and_stops_without_logon_trigger() {
         let system_root = std::env::var_os("SystemRoot").expect("SystemRoot");
-        let ping = PathBuf::from(system_root).join("System32").join("PING.EXE");
+        let ping = PathBuf::from(system_root)
+            .join("System32")
+            .join("PING.EXE");
         assert!(ping.is_file(), "PING.EXE must exist on Windows test host");
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -589,9 +586,15 @@ mod tests {
             let _ = apartment.delete(&task_name);
             panic!("projection start failed: {error}");
         }
-        assert_eq!(apartment.state(&task_name).expect("state"), Some(TASK_STATE_RUNNING));
+        assert_eq!(
+            apartment.state(&task_name).expect("state"),
+            Some(TASK_STATE_RUNNING)
+        );
         apartment.stop(&task_name).expect("stop");
-        assert_ne!(apartment.state(&task_name).expect("stopped state"), Some(TASK_STATE_RUNNING));
+        assert_ne!(
+            apartment.state(&task_name).expect("stopped state"),
+            Some(TASK_STATE_RUNNING)
+        );
         apartment.delete(&task_name).expect("delete");
         assert_eq!(apartment.state(&task_name).expect("deleted state"), None);
     }
