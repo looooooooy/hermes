@@ -56,22 +56,19 @@ fn main() {
     }
 
     #[cfg(windows)]
-    let manager = RuntimeManager::new_persistent(
+    let manager = match RuntimeManager::new_persistent(
         Arc::new(WindowsTaskServiceManager::new()),
         layout.clone(),
-    );
-    #[cfg(not(windows))]
-    let manager = RuntimeManager::new_persistent(
-        Arc::new(FailClosedServiceManager),
-        layout.clone(),
-    );
-    let manager = Arc::new(match manager {
+    ) {
         Ok(manager) => manager,
         Err(error) => {
             eprintln!("runtime_manager_persistent_state_error: {error}");
             std::process::exit(2);
         }
-    });
+    };
+    #[cfg(not(windows))]
+    let manager = RuntimeManager::new(Arc::new(FailClosedServiceManager), layout.clone());
+    let manager = Arc::new(manager);
 
     match command {
         "status" | "--status-json" => match manager.snapshot() {
