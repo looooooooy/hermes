@@ -1,0 +1,83 @@
+name: Hermes Windows Observer Endpoint
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-observer-streaming-*"
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_observer_endpoint_foundation.py"
+      - "hermes-connector/tests/platform/windows/test_control_relay_foundation.py"
+      - "hermes-connector/tests/platform/windows/test_control_client_foundation.py"
+      - ".github/workflows/hermes-windows-observer-endpoint.yml"
+  pull_request:
+    paths:
+      - "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/**"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/platform/windows/test_observer_endpoint_foundation.py"
+      - "hermes-connector/tests/platform/windows/test_control_relay_foundation.py"
+      - "hermes-connector/tests/platform/windows/test_control_client_foundation.py"
+      - ".github/workflows/hermes-windows-observer-endpoint.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-observer-endpoint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-contract:
+    name: Windows Observer endpoint contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint Windows Observer endpoint slice
+        run: >-
+          ruff check
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/framed_pipe.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/observer_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/control_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_relay.py
+          hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/availability.py
+          hermes-connector/tests/platform/windows/test_observer_endpoint_foundation.py
+      - name: Preserve Connector partial fail-closed boundary
+        run: >-
+          python -m pytest
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-observer-endpoint:
+    name: Plugin Observer + Catalog duplex / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Test Observer, Catalog, and framed-Pipe Control regressions
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_observer_endpoint_foundation.py
+          hermes-connector/tests/platform/windows/test_control_relay_foundation.py
+          hermes-connector/tests/platform/windows/test_control_client_foundation.py
