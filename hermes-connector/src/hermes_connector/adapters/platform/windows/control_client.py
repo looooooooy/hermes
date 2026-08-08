@@ -58,8 +58,8 @@ class WindowsControlRelayClient:
         self._provider = provider
         self._client_instance_id = client_instance_id
         self._session_key = session_key
-        self._connect_timeout_seconds = connect_timeout_seconds
-        self._io_timeout_seconds = io_timeout_seconds
+        self._connect_timeout_seconds = float(connect_timeout_seconds)
+        self._io_timeout_seconds = float(io_timeout_seconds)
         self._connection: WindowsPipeConnection | None = None
         self._request_lock = threading.Lock()
         self._next_id = 0
@@ -103,6 +103,7 @@ class WindowsControlRelayClient:
                     }
                 },
                 request_id="attach-1",
+                timeout_seconds=self._io_timeout_seconds,
             )
             result = response.get("result")
             if (
@@ -121,12 +122,22 @@ class WindowsControlRelayClient:
         self,
         method: str,
         params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
     ) -> dict:
         if not isinstance(method, str) or not method or method != method.strip():
             raise ValueError("Windows control relay method is invalid")
         if not isinstance(params, Mapping):
             raise TypeError("Windows control relay params must be a mapping")
-        return await asyncio.to_thread(self._request_sync, method, dict(params))
+        timeout = self._io_timeout_seconds if timeout_seconds is None else timeout_seconds
+        if not isinstance(timeout, int | float) or isinstance(timeout, bool) or timeout <= 0:
+            raise ValueError("Windows control relay request timeout must be positive")
+        return await asyncio.to_thread(
+            self._request_sync,
+            method,
+            dict(params),
+            timeout_seconds=float(timeout),
+        )
 
     def _request_sync(
         self,
@@ -134,10 +145,12 @@ class WindowsControlRelayClient:
         params: Mapping[str, object],
         *,
         request_id: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict:
         connection = self._connection
         if connection is None:
             raise RuntimeError("Windows control relay is not open")
+        timeout = self._io_timeout_seconds if timeout_seconds is None else timeout_seconds
         with self._request_lock:
             if request_id is None:
                 self._next_id += 1
@@ -151,7 +164,7 @@ class WindowsControlRelayClient:
                     "params": dict(params),
                 },
             )
-            response = self._recv_frame(connection)
+            response = self._recv_frame(connection, timeout_seconds=float(timeout))
             if response.get("id") != request_id:
                 raise RuntimeError("Windows control relay response id is invalid")
             return response
@@ -167,8 +180,13 @@ class WindowsControlRelayClient:
             raise ValueError("Windows control relay request is oversized")
         write_all(connection.handle, struct.pack(">I", len(encoded)) + encoded)
 
-    def _recv_frame(self, connection: WindowsPipeConnection) -> dict:
-        deadline = time.monotonic() + self._io_timeout_seconds
+    def _recv_frame(
+        self,
+        connection: WindowsPipeConnection,
+        *,
+        timeout_seconds: float,
+    ) -> dict:
+        deadline = time.monotonic() + timeout_seconds
         prefix = read_exact(connection.handle, 4, deadline=deadline)
         size = struct.unpack(">I", prefix)[0]
         if size == 0 or size > _MAX_FRAME_BYTES:
