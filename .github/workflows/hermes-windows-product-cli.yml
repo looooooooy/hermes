@@ -31,8 +31,8 @@ concurrency:
 
 jobs:
   existing-cli:
-    name: Existing CLI compatibility / ubuntu-latest
-    runs-on: ubuntu-latest
+    name: Existing CLI compatibility / macos-latest
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
           hermes-connector/src/hermes_connector/cli.py
           hermes-connector/src/hermes_connector/bootstrap/windows_provision.py
           hermes-connector/tests/platform/windows/test_product_cli.py
-      - name: Regress existing CLI behavior
+      - name: Regress existing CLI behavior on macOS
         run: >-
           python -m pytest -vv
           hermes-connector/tests/unit/bootstrap/test_cli.py
