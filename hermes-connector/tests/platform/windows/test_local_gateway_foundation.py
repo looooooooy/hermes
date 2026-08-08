@@ -29,6 +29,9 @@ from hermes_connector.adapters.platform.windows.instance_lock import (
 from hermes_connector.adapters.platform.windows.local_gateway_transport import (
     WindowsLocalGatewayTransport,
 )
+from hermes_connector.adapters.platform.windows.private_state import (
+    ensure_private_directory,
+)
 from hermes_connector.domain.contract_messages import (
     LocalHello,
     LocalWelcome,
@@ -118,7 +121,8 @@ async def test_wrong_profile_does_not_discover_endpoint() -> None:
 
 
 def test_windows_instance_lock_is_nonblocking_and_releasable(tmp_path) -> None:
-    lock_path = tmp_path / "connector.lock"
+    state = ensure_private_directory(tmp_path / "state")
+    lock_path = state / "connector.lock"
     first = WindowsInstanceLock(lock_path)
     second = WindowsInstanceLock(lock_path)
     first.acquire()
