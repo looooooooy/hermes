@@ -1,5 +1,5 @@
 use hermes_runtime_manager::platform::DefaultInstallLayout;
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 use hermes_runtime_manager::platform::FailClosedServiceManager;
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
@@ -8,6 +8,8 @@ use hermes_runtime_manager::{
     verify_release_control_files, PrivatePythonManagedReleaseStager, PrivateToolchainInstaller,
     RuntimeManager,
 };
+#[cfg(target_os = "macos")]
+use hermes_runtime_manager::MacOSLaunchAgentServiceManager;
 #[cfg(windows)]
 use hermes_runtime_manager::WindowsTaskServiceManager;
 use std::path::PathBuf;
@@ -55,6 +57,37 @@ fn main() {
         return;
     }
 
+    #[cfg(target_os = "macos")]
+    let manager = {
+        let application_root = match layout.application_root() {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("runtime_manager_layout_error: {error}");
+                std::process::exit(2);
+            }
+        };
+        let logs_root = match layout.logs_root() {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("runtime_manager_layout_error: {error}");
+                std::process::exit(2);
+            }
+        };
+        let service_manager = match MacOSLaunchAgentServiceManager::new(application_root, logs_root) {
+            Ok(manager) => manager,
+            Err(error) => {
+                eprintln!("runtime_manager_macos_service_error: {error}");
+                std::process::exit(2);
+            }
+        };
+        match RuntimeManager::new_persistent(Arc::new(service_manager), layout.clone()) {
+            Ok(manager) => manager,
+            Err(error) => {
+                eprintln!("runtime_manager_persistent_state_error: {error}");
+                std::process::exit(2);
+            }
+        }
+    };
     #[cfg(windows)]
     let manager = match RuntimeManager::new_persistent(
         Arc::new(WindowsTaskServiceManager::new()),
@@ -66,7 +99,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     let manager = RuntimeManager::new(Arc::new(FailClosedServiceManager), layout.clone());
     let manager = Arc::new(manager);
 
@@ -83,9 +116,11 @@ fn main() {
         },
         "doctor" => {
             println!("Hermes Runtime Manager foundation is installed.");
+            #[cfg(target_os = "macos")]
+            println!("Platform adapter status: macOS LaunchAgent service projection selected.");
             #[cfg(windows)]
             println!("Platform adapter status: Windows Task Scheduler service projection selected.");
-            #[cfg(not(windows))]
+            #[cfg(target_os = "linux")]
             println!("Platform adapter status: fail-closed until a verified adapter is selected.");
         }
         "serve-read-only" => serve_read_only(manager, layout),
@@ -276,10 +311,7 @@ fn print_read_only_ipc_endpoint(_layout: &DefaultInstallLayout) {
 }
 
 #[cfg(unix)]
-fn serve_read_only(
-    manager: Arc<RuntimeManager>,
-    layout: Arc<DefaultInstallLayout>,
-) {
+fn serve_read_only(manager: Arc<RuntimeManager>, layout: Arc<DefaultInstallLayout>) {
     use hermes_runtime_manager::local_ipc::ReadOnlyUnixServer;
 
     let endpoint = match layout.state_root() {
@@ -305,10 +337,7 @@ fn serve_read_only(
 }
 
 #[cfg(windows)]
-fn serve_read_only(
-    manager: Arc<RuntimeManager>,
-    _layout: Arc<DefaultInstallLayout>,
-) {
+fn serve_read_only(manager: Arc<RuntimeManager>, _layout: Arc<DefaultInstallLayout>) {
     use hermes_runtime_manager::windows_pipe::{
         current_user_pipe_name, ReadOnlyWindowsPipeServer,
     };
