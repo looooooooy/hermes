@@ -72,11 +72,11 @@ def select_platform_adapters(
             raise PlatformUnavailable(
                 "Hermes Connector Windows adapters require a Windows host"
             )
-        from hermes_connector.adapters.platform.windows.availability import (
-            AVAILABILITY,
-        )
         from hermes_connector.adapters.platform.windows.agent_discovery import (
             WindowsAgentDiscovery,
+        )
+        from hermes_connector.adapters.platform.windows.availability import (
+            AVAILABILITY,
         )
         from hermes_connector.adapters.platform.windows.instance_lock import (
             WindowsInstanceLock,
