@@ -96,12 +96,18 @@ def _peek_available(kernel32: Any, pipe: int) -> int:
     return int(available.value)
 
 
-def _read_exact(kernel32: Any, pipe: int, size: int, *, deadline: float) -> bytes:
+def _read_exact(
+    kernel32: Any,
+    pipe: int,
+    size: int,
+    *,
+    deadline: float | None,
+) -> bytes:
     if size < 0 or size > MAX_FRAME_BYTES:
         raise ValueError("Windows framed Pipe read size is invalid")
     result = bytearray()
     while len(result) < size:
-        if time.monotonic() >= deadline:
+        if deadline is not None and time.monotonic() >= deadline:
             raise TimeoutError("Windows framed Pipe read timed out")
         available = _peek_available(kernel32, pipe)
         if available < 0:
@@ -151,10 +157,10 @@ class WindowsFramedPipeConnection:
         self,
         pipe: int,
         *,
-        io_timeout_seconds: float = _DEFAULT_IO_TIMEOUT_S,
+        io_timeout_seconds: float | None = _DEFAULT_IO_TIMEOUT_S,
     ) -> None:
-        if io_timeout_seconds <= 0:
-            raise ValueError("io_timeout_seconds must be positive")
+        if io_timeout_seconds is not None and io_timeout_seconds <= 0:
+            raise ValueError("io_timeout_seconds must be positive when bounded")
         self._pipe = pipe
         self._io_timeout_seconds = io_timeout_seconds
         self._authenticated = False
@@ -166,7 +172,11 @@ class WindowsFramedPipeConnection:
             raise EOFError("Windows framed Pipe connection is closed")
         kernel32, _ = libraries()
         _configure_pipe_api(kernel32)
-        deadline = time.monotonic() + self._io_timeout_seconds
+        deadline = (
+            None
+            if self._io_timeout_seconds is None
+            else time.monotonic() + self._io_timeout_seconds
+        )
         prefix = _read_exact(kernel32, self._pipe, 4, deadline=deadline)
         size = struct.unpack(">I", prefix)[0]
         if size == 0 or size > MAX_FRAME_BYTES:
@@ -208,7 +218,7 @@ class WindowsFramedPipeServer:
         pipe_name: str,
         handler: Callable[[WindowsFramedPipeConnection], None],
         *,
-        io_timeout_seconds: float = _DEFAULT_IO_TIMEOUT_S,
+        io_timeout_seconds: float | None = _DEFAULT_IO_TIMEOUT_S,
         max_instances: int = 1,
     ) -> None:
         if not isinstance(pipe_name, str) or not pipe_name.startswith("\\\\.\\pipe\\"):
@@ -217,8 +227,8 @@ class WindowsFramedPipeServer:
             raise TypeError("handler must be callable")
         if type(max_instances) is not int or not 1 <= max_instances <= _MAX_SERVER_INSTANCES:
             raise ValueError("Windows framed Pipe instance bound is invalid")
-        if io_timeout_seconds <= 0:
-            raise ValueError("io_timeout_seconds must be positive")
+        if io_timeout_seconds is not None and io_timeout_seconds <= 0:
+            raise ValueError("io_timeout_seconds must be positive when bounded")
         self._pipe_name = pipe_name
         self._handler = handler
         self._io_timeout_seconds = io_timeout_seconds
