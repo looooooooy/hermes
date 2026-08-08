@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from datetime import UTC, datetime, timedelta
@@ -149,7 +148,10 @@ async def test_windows_readiness_receipt_binds_live_process_and_lifecycle(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_windows_receipt_atomic_publish_failure_preserves_previous(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_windows_receipt_atomic_publish_failure_preserves_previous(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     process = current_process_identity(os.getpid())
     assert process is not None
     store = _store(tmp_path)
@@ -168,7 +170,9 @@ async def test_windows_receipt_atomic_publish_failure_preserves_previous(tmp_pat
 
 
 @pytest.mark.asyncio
-async def test_windows_receipt_reader_rejects_unknown_or_corrupt_content(tmp_path: Path) -> None:
+async def test_windows_receipt_reader_rejects_unknown_or_corrupt_content(
+    tmp_path: Path,
+) -> None:
     process = current_process_identity(os.getpid())
     assert process is not None
     store = _store(tmp_path)
