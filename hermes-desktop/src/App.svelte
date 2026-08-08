@@ -10,6 +10,8 @@
   let nativeChecked = false;
   let nativeSource = false;
   let refreshing = false;
+  let workspaceConnecting = false;
+  let workspaceError = '';
 
   onMount(loadNativeSnapshot);
 
@@ -38,6 +40,22 @@
     }
   }
 
+  async function connectWorkspace(endpoint: string) {
+    if (workspaceConnecting) return;
+    workspaceConnecting = true;
+    workspaceError = '';
+    try {
+      await invoke('workspace_connect', { endpoint });
+      await refreshEvidence();
+    } catch (error) {
+      workspaceError = typeof error === 'string'
+        ? error
+        : 'Hermes workspace sign-in did not complete.';
+    } finally {
+      workspaceConnecting = false;
+    }
+  }
+
   function componentHealthy(id: string) {
     return snapshot.components.some((component) => component.id === id && component.state === 'healthy');
   }
@@ -49,6 +67,7 @@
     const devicePaired = componentHealthy('connector');
     const providerConfigured = snapshot.providers.some((provider) => provider.state === 'connected');
     return managerConnected
+      && snapshot.workspaceAuthenticated
       && snapshot.cloudConnected
       && devicePaired
       && localAuthorityReady
@@ -63,7 +82,14 @@
     <span>Verifying local runtime authority…</span>
   </div>
 {:else if nativeSource && !onboardingComplete()}
-  <Onboarding {snapshot} {refreshing} onRefresh={refreshEvidence} />
+  <Onboarding
+    {snapshot}
+    {refreshing}
+    {workspaceConnecting}
+    {workspaceError}
+    onRefresh={refreshEvidence}
+    onConnectWorkspace={connectWorkspace}
+  />
 {:else}
   <RuntimeCockpit />
 {/if}
