@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -20,7 +22,9 @@ from hermes_connector.adapters.platform.windows.instance_lock import WindowsInst
 from hermes_connector.adapters.platform.windows.pairing_projection import (
     WindowsPairedProjectionStore,
 )
-from hermes_connector.adapters.platform.windows.private_state import ensure_private_directory
+from hermes_connector.adapters.platform.windows.private_state import (
+    ensure_private_directory,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.runtime import build_service_runner
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
@@ -65,11 +69,6 @@ def _settings(tmp_path: Path) -> ConnectorRuntimeSettings:
         profile="default",
         database_file=state / "connector.sqlite3",
         lock_file=state / "connector.lock",
-        instance_state_file=state / "instance.json",
-        paired_projection_file=state / "paired.json",
-        pairing_offer_projection_file=state / "pairing-offer.json",
-        pairing_command_lock_file=state / "pairing-command.lock",
-        status_receipt_file=state / "status.json",
         state_directory=state,
         local_gateway_registry_directory=roles / "local-registry",
         local_gateway_socket_directory=roles / "local-socket",
@@ -125,7 +124,9 @@ def _gateway():
     return resource
 
 
-def test_windows_instance_lock_is_a_valid_explicit_service_runner_factory(tmp_path: Path) -> None:
+def test_windows_instance_lock_is_a_valid_explicit_service_runner_factory(
+    tmp_path: Path,
+) -> None:
     state = ensure_private_directory(tmp_path / "state")
     runner = build_service_runner(
         lock_path=state / "connector.lock",
