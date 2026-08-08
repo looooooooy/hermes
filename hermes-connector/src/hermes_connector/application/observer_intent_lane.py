@@ -3,13 +3,10 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import deque
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Protocol
 
-from hermes_connector.adapters.platform.macos.observer_client import (
-    ObserverResnapshotRequired,
-)
 from hermes_connector.domain.observer import (
     SessionEvent,
     SessionObserveClose,
@@ -19,6 +16,11 @@ from hermes_connector.domain.observer import (
     StreamNack,
 )
 from hermes_connector.domain.storage import ObserverOutboxRecord
+from hermes_connector.ports.observer import (
+    ObserverLocalClientPort,
+    ObserverResnapshotRequired,
+    ObserverSubscriptionPort,
+)
 
 
 class ObserverIntentMismatch(ValueError):
@@ -27,25 +29,6 @@ class ObserverIntentMismatch(ValueError):
 
 class ObserverSubscriptionLimitExceeded(RuntimeError):
     """The bounded local Observer subscription capacity is exhausted."""
-
-
-class _Subscription(Protocol):
-    snapshot: SessionSnapshot
-
-    def events(self) -> AsyncIterator[SessionEvent]: ...
-
-    async def close(self) -> None: ...
-
-
-class _LocalClient(Protocol):
-    async def subscribe(
-        self,
-        *,
-        profile: str,
-        session_key: str,
-    ) -> _Subscription: ...
-
-    async def aclose(self) -> None: ...
 
 
 class _Publisher(Protocol):
@@ -62,7 +45,7 @@ class _Publisher(Protocol):
 @dataclass(slots=True)
 class _Active:
     intent: SessionObserveOpen
-    subscription: _Subscription | None
+    subscription: ObserverSubscriptionPort | None
     task: asyncio.Task[None] | None = None
     recovery: _Recovery | None = None
     recovered_nacks: set[tuple[str, str, int]] | None = None
@@ -85,12 +68,12 @@ class _Recovery:
 
 
 class ObserverIntentLane:
-    """Apply only Cloud-authorized Observer targets to the local UDS client."""
+    """Apply only Cloud-authorized Observer targets to the local client."""
 
     def __init__(
         self,
         *,
-        local_client: _LocalClient,
+        local_client: ObserverLocalClientPort,
         publisher: _Publisher,
         cleanup_timeout_seconds: float = 1.0,
         max_active_subscriptions: int = 32,
