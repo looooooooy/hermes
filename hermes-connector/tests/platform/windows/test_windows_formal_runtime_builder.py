@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -15,14 +17,27 @@ from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
     capture_windows_host_authority,
 )
 
-from hermes_connector.adapters.platform.windows.dpapi_secret_store import WindowsDPAPISecretStore
-from hermes_connector.adapters.platform.windows.instance_identity import WindowsInstanceIdentityStore
-from hermes_connector.adapters.platform.windows.pairing_projection import WindowsPairedProjectionStore
-from hermes_connector.adapters.platform.windows.private_state import ensure_private_directory, validate_private_file
-from hermes_connector.adapters.secure_store_device_identity import SecureStoreDeviceIdentity
+from hermes_connector.adapters.platform.windows.dpapi_secret_store import (
+    WindowsDPAPISecretStore,
+)
+from hermes_connector.adapters.platform.windows.instance_identity import (
+    WindowsInstanceIdentityStore,
+)
+from hermes_connector.adapters.platform.windows.pairing_projection import (
+    WindowsPairedProjectionStore,
+)
+from hermes_connector.adapters.platform.windows.private_state import (
+    ensure_private_directory,
+    validate_private_file,
+)
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
-from hermes_connector.bootstrap.windows_formal_runtime import build_windows_formal_runtime
+from hermes_connector.bootstrap.windows_formal_runtime import (
+    build_windows_formal_runtime,
+)
 from hermes_connector.domain.pairing import PairedProjection
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows formal runtime required")
