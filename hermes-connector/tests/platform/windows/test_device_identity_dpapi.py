@@ -7,11 +7,11 @@ from base64 import urlsafe_b64decode
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from hermes_connector.adapters.secure_store_device_identity import (
-    SecureStoreDeviceIdentity,
-)
 from hermes_connector.adapters.platform.windows.dpapi_secret_store import (
     WindowsDPAPISecretStore,
+)
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI required")
