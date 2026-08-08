@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
-from packaging.windows.hermes_windows_tasks import (
+WINDOWS_PACKAGING = Path(__file__).parents[2] / "packaging" / "windows"
+sys.path.insert(0, str(WINDOWS_PACKAGING))
+
+from hermes_windows_tasks import (
     WindowsTaskContractError,
     build_connector_task,
     create_task_command,
@@ -31,13 +35,15 @@ def _task(tmp_path: Path):
 
 def test_task_contract_points_only_to_exact_release(tmp_path: Path) -> None:
     task = _task(tmp_path)
+    launcher = render_connector_launcher(task).decode("utf-8")
 
     assert task.task_name == "Hermes Connector [default]"
     assert task.executable == task.release_dir / "connector" / "hermes-connector.exe"
     assert task.launcher == task.release_dir / "services" / "windows" / "run-connector.cmd"
-    assert task.release_id in render_connector_launcher(task).decode("utf-8")
-    assert "hermes-connector.exe" in task.task_action
-    assert str(task.release_dir.name) in task.task_action
+    assert task.release_id in launcher
+    assert "hermes-connector.exe" in launcher
+    assert task.release_dir.name in task.task_action
+    assert "run-connector.cmd" in task.task_action
 
 
 def test_launcher_contains_no_plaintext_credentials(tmp_path: Path) -> None:
