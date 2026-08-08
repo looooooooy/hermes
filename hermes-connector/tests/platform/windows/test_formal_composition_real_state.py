@@ -153,6 +153,7 @@ async def test_real_runtime_sqlite_and_lock_files_are_current_user_private(
     await _prepare_real_paired_state(settings)
     resource = _start_gateway()
     runtime = None
+    instance_lock = None
     try:
         runtime = build_windows_runtime(
             settings,
@@ -161,11 +162,14 @@ async def test_real_runtime_sqlite_and_lock_files_are_current_user_private(
             logger=_Logger(),
         )
         await runtime.storage.start()
-        validate_private_file(settings.database_file)
-        runtime.runner._lock.acquire()
+        for path in runtime.storage.private_file_family:
+            validate_private_file(path)
+        instance_lock = runtime.runner._instance_lock
+        instance_lock.acquire()
         validate_private_file(settings.lock_file)
     finally:
+        if instance_lock is not None:
+            instance_lock.close()
         if runtime is not None:
-            runtime.runner._lock.close()
             await runtime.storage.stop()
         resource.stop(time.monotonic() + 3.0)
