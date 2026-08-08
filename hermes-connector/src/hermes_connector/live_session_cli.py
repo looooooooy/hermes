@@ -10,7 +10,10 @@ from collections.abc import Mapping, Sequence
 
 from hermes_connector.adapters.platform.availability import PlatformUnavailable
 from hermes_connector.bootstrap.platform import select_platform_adapters
-from hermes_connector.bootstrap.settings import RuntimeConfigurationError, load_runtime_settings
+from hermes_connector.bootstrap.settings import (
+    RuntimeConfigurationError,
+    load_runtime_settings,
+)
 
 
 def main(
