@@ -4,7 +4,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 
 from hermes_connector.adapters.cloud.codec import ConnectorProtocolCodec
-from hermes_connector.domain.identifiers import canonical_uuid
 from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
 from hermes_connector.domain.observer import SessionEvent, SessionSnapshot
 
@@ -104,80 +103,84 @@ def ready_payload(
     *,
     observer_contract: int,
 ) -> Mapping[str, object] | None:
-    if frame.get("jsonrpc") != "2.0" or frame.get("method") != "event":
+    if frame.get("method") != "event":
         return None
+    if set(frame) != {"jsonrpc", "method", "params"} or frame.get("jsonrpc") != "2.0":
+        raise ObserverProtocolError("Observer local envelope is invalid")
     params = frame.get("params")
-    if not isinstance(params, Mapping) or params.get("type") != "gateway.ready":
+    if not isinstance(params, dict):
+        raise ObserverProtocolError("Observer ready params are invalid")
+    if params.get("type") != "gateway.ready":
         return None
+    if set(params) != {"type", "payload"}:
+        raise ObserverProtocolError("Observer ready params contain an unknown field")
     payload = params.get("payload")
-    if not isinstance(payload, Mapping):
-        raise ObserverProtocolError("Observer ready payload is invalid")
     if observer_contract == 2:
-        if set(payload) != {"observer_contract", "connection_role"}:
-            raise ObserverProtocolError("Observer v2 ready payload is invalid")
-        if payload.get("observer_contract") != 2:
-            raise ObserverProtocolError("Observer v2 contract marker is invalid")
-        if payload.get("connection_role") != "observer":
-            raise ObserverProtocolError("Observer connection role is invalid")
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"observer_contract", "connection_role"}
+            or payload.get("observer_contract") != 2
+            or payload.get("connection_role") != "observer"
+        ):
+            raise ObserverProtocolError("Observer ready contract is invalid")
         return payload
-    if set(payload) != {
-        "local_gateway_protocol",
-        "observer_contract",
-        "connection_role",
-        "profile",
-        "runtime_generation",
-        "instance_id",
-    }:
-        raise ObserverProtocolError("Observer ready payload is invalid")
-    if payload.get("observer_contract") != 1:
-        raise ObserverProtocolError("Observer v1 contract marker is invalid")
-    if payload.get("local_gateway_protocol") != 1:
-        raise ObserverProtocolError("Observer local protocol marker is invalid")
-    if payload.get("connection_role") != "observer":
-        raise ObserverProtocolError("Observer connection role is invalid")
+    if (
+        not isinstance(payload, dict)
+        or set(payload)
+        != {
+            "observer_contract",
+            "local_gateway_protocol",
+            "connection_role",
+            "profile",
+            "runtime_generation",
+            "instance_id",
+        }
+        or type(payload["observer_contract"]) is not int
+        or payload["observer_contract"] != 1
+        or type(payload["local_gateway_protocol"]) is not int
+        or payload["local_gateway_protocol"] != 1
+        or payload["connection_role"] != "observer"
+    ):
+        raise ObserverProtocolError("Observer ready contract is invalid")
     return payload
 
 
 def validate_ready_identity(
-    ready: Mapping[str, object],
+    payload: Mapping[str, object],
     *,
     profile: str,
     runtime_generation: str,
     instance_id: str,
 ) -> None:
-    if ready.get("profile") != profile:
-        raise ObserverResnapshotRequired("Observer ready profile authority changed")
-    if ready.get("runtime_generation") != runtime_generation:
-        raise ObserverResnapshotRequired("Observer ready runtime authority changed")
-    try:
-        ready_instance = str(canonical_uuid(ready.get("instance_id")))
-        expected_instance = str(canonical_uuid(instance_id))
-    except (TypeError, ValueError):
-        raise ObserverProtocolError("Observer ready instance id is invalid") from None
-    if ready_instance != expected_instance:
-        raise ObserverResnapshotRequired("Observer ready instance authority changed")
+    if (
+        payload.get("profile") != profile
+        or payload.get("runtime_generation") != runtime_generation
+        or payload.get("instance_id") != instance_id
+    ):
+        raise ObserverResnapshotRequired(
+            "Observer ready identity does not match runtime authority"
+        )
 
 
 def is_event_notification(frame: Mapping[str, object]) -> bool:
     return (
-        frame.get("jsonrpc") == "2.0"
+        set(frame) == {"jsonrpc", "method", "params"}
+        and frame.get("jsonrpc") == "2.0"
         and frame.get("method") == "event"
-        and "id" not in frame
+        and isinstance(frame.get("params"), dict)
     )
 
 
 def same_authority_identity(
-    left: LocalRuntimeAuthority,
-    right: LocalRuntimeAuthority,
+    current: LocalRuntimeAuthority,
+    expected: LocalRuntimeAuthority,
 ) -> bool:
     return (
-        left.profile == right.profile
-        and left.runtime_generation == right.runtime_generation
-        and left.instance_id == right.instance_id
-        and left.host_bundle_id == right.host_bundle_id
-        and left.process_identity == right.process_identity
-        and left.required_capabilities == right.required_capabilities
-        and left.optional_capabilities == right.optional_capabilities
+        current.profile == expected.profile
+        and current.runtime_generation == expected.runtime_generation
+        and current.instance_id == expected.instance_id
+        and current.host_bundle_id == expected.host_bundle_id
+        and current.process_identity == expected.process_identity
     )
 
 
@@ -186,18 +189,12 @@ async def require_authority(
     *,
     expected_authority: LocalRuntimeAuthority | None = None,
 ) -> LocalRuntimeAuthority:
-    try:
-        authority = await provider()
-    except BaseException as error:
-        raise ObserverResnapshotRequired("Observer runtime authority is unavailable") from error
-    if authority is None:
-        raise ObserverResnapshotRequired("Observer runtime authority is unavailable")
-    capabilities = {
+    authority = await provider()
+    if authority is None or "session.observe" not in {
         *authority.required_capabilities,
         *authority.optional_capabilities,
-    }
-    if "session.observe" not in capabilities:
-        raise ObserverResnapshotRequired("Observer capability is unavailable")
+    }:
+        raise ObserverResnapshotRequired("Observer runtime authority is unavailable")
     if expected_authority is not None and not same_authority_identity(
         authority,
         expected_authority,
@@ -215,21 +212,78 @@ def snapshot_from_result(
     session_key: str,
     observer_contract: int,
 ) -> SessionSnapshot:
-    try:
-        snapshot = codec.decode_session_snapshot(
-            result,
-            profile=profile,
-            runtime_generation=runtime_generation,
-            session_key=session_key,
-            observer_contract=observer_contract,
-        )
-    except (TypeError, ValueError) as error:
-        raise ObserverProtocolError("Observer snapshot is invalid") from error
-    if snapshot.runtime_generation != runtime_generation:
+    if observer_contract == 2:
+        allowed = {
+            "subscription_id",
+            "observer_contract",
+            "profile",
+            "runtime_generation",
+            "session_key",
+            "runtime_session_id",
+            "running",
+            "status",
+            "event_sequence",
+            "snapshot_event_sequence",
+            "messages",
+            "inflight",
+            "todo_sections",
+            "subagents",
+            "tools",
+            "terminals",
+            "replay_events",
+            "extensions",
+        }
+        required = allowed - {"subscription_id", "extensions"}
+        if set(result) - allowed or not required <= set(result):
+            raise ObserverProtocolError(
+                "Observer v2 snapshot does not match the exact result schema"
+            )
+        payload = {
+            key: value for key, value in result.items() if key != "subscription_id"
+        }
+        try:
+            snapshot = codec.decode_session_snapshot_v2_payload(payload)
+        except ValueError as error:
+            raise ObserverProtocolError(
+                "Observer v2 snapshot contract is invalid"
+            ) from error
+        if snapshot.session_key != session_key:
+            raise ObserverResnapshotRequired("Observer snapshot session does not match")
+        if snapshot.profile != profile:
+            raise ObserverResnapshotRequired("Observer snapshot profile does not match")
+        if snapshot.runtime_generation != runtime_generation:
+            raise ObserverResnapshotRequired(
+                "Observer snapshot runtime authority changed"
+            )
+        return snapshot
+
+    allowed = {
+        "subscription_id",
+        "profile",
+        "runtime_generation",
+        "session_key",
+        "runtime_session_id",
+        "running",
+        "status",
+        "event_sequence",
+        "snapshot_event_sequence",
+        "messages",
+        "inflight",
+        "replay_events",
+    }
+    if set(result) - allowed:
+        raise ObserverProtocolError("Observer snapshot contains an unexpected field")
+    required = allowed - {"subscription_id"}
+    if not required <= set(result):
+        raise ObserverProtocolError("Observer snapshot is missing an explicit field")
+    if result.get("session_key") != session_key:
+        raise ObserverResnapshotRequired("Observer snapshot session does not match")
+    if result["profile"] != profile:
+        raise ObserverResnapshotRequired("Observer snapshot profile does not match")
+    if result.get("runtime_generation") != runtime_generation:
         raise ObserverResnapshotRequired("Observer snapshot runtime authority changed")
-    if snapshot.profile != profile or snapshot.session_key != session_key:
-        raise ObserverProtocolError("Observer snapshot binding is invalid")
-    return snapshot
+    payload = {key: value for key, value in result.items() if key != "subscription_id"}
+    return codec.decode_session_snapshot_payload(payload)
 
 
 def session_event_from_frame(
@@ -238,25 +292,26 @@ def session_event_from_frame(
     *,
     profile: str,
     runtime_generation: str,
-    observer_contract: int,
+    observer_contract: int = 1,
 ) -> SessionEvent:
-    if frame.get("jsonrpc") != "2.0" or frame.get("method") != "event":
-        raise ObserverProtocolError("Observer event envelope is invalid")
+    if not is_event_notification(frame):
+        raise ObserverProtocolError("Observer live frame is invalid")
     params = frame.get("params")
-    if not isinstance(params, Mapping):
+    if not isinstance(params, dict):
         raise ObserverProtocolError("Observer event params are invalid")
-    try:
-        event = codec.decode_session_event(
-            params,
-            profile=profile,
-            runtime_generation=runtime_generation,
-            observer_contract=observer_contract,
+    if params.get("profile") != profile:
+        raise ObserverResnapshotRequired("Observer event profile does not match")
+    if params.get("runtime_generation") != runtime_generation:
+        raise ObserverResnapshotRequired(
+            "Observer event runtime authority does not match"
         )
-    except (TypeError, ValueError) as error:
-        raise ObserverProtocolError("Observer event payload is invalid") from error
-    if event.runtime_generation != runtime_generation or event.profile != profile:
-        raise ObserverResnapshotRequired("Observer event runtime authority changed")
-    return event
+    payload = dict(params)
+    try:
+        if observer_contract == 2:
+            return codec.decode_session_event_v2_payload(payload)
+        return codec.decode_session_event_payload(payload)
+    except ValueError as error:
+        raise ObserverProtocolError("Observer live event contract is invalid") from error
 
 
 __all__ = [
