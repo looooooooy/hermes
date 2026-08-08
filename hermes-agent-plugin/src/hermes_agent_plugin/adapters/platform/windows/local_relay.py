@@ -1,4 +1,4 @@
-"""Windows Local Relay backend with validated Gateway and Control roles."""
+"""Windows Local Relay backend with validated Gateway, Control, and Observer roles."""
 
 from __future__ import annotations
 
@@ -6,13 +6,14 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from ....ports.local_relay import current_observer_endpoint_contract
 from ..capabilities import PlatformLocalGatewayUnavailable
-from . import control_relay
+from . import control_relay, observer_relay
 from .local_gateway_transport import create_local_gateway_resource
 
 _STARTUP_TIMEOUT_SECONDS = 3.0
 _SHUTDOWN_TIMEOUT_SECONDS = 3.0
-_UNAVAILABLE = "windows_observer_or_control_hub_not_implemented"
+_UNAVAILABLE = "windows_cross_process_relay_hub_not_implemented"
 
 
 class _Registration:
@@ -28,7 +29,7 @@ class _Registration:
 
 
 class WindowsLocalRelayBackend:
-    """Run implemented Windows relay roles and fail closed for unfinished roles."""
+    """Run implemented Windows relay roles and fail closed for unfinished hubs."""
 
     def start_local_gateway_endpoint(self, **kwargs: Any) -> _Registration:
         resource = create_local_gateway_resource(**kwargs)
@@ -43,18 +44,22 @@ class WindowsLocalRelayBackend:
     def list_control_endpoints(self) -> list[object]:
         return list(control_relay.list_control_endpoints())
 
+    def start_observer_endpoint(self, **kwargs: Any) -> object:
+        kwargs.setdefault(
+            "observer_contract",
+            current_observer_endpoint_contract(),
+        )
+        return observer_relay.start_observer_endpoint(**kwargs)
+
+    def list_observer_endpoints(self) -> list[object]:
+        return list(observer_relay.list_observer_endpoints())
+
     @staticmethod
     def _unavailable() -> None:
         raise PlatformLocalGatewayUnavailable(_UNAVAILABLE)
 
     def create_control_relay_hub(self, *, current_pid: int | None) -> None:
         del current_pid
-        self._unavailable()
-
-    def start_observer_endpoint(self, **_kwargs: object) -> None:
-        self._unavailable()
-
-    def list_observer_endpoints(self) -> list[object]:
         self._unavailable()
 
     def create_observer_relay_hub(self, *, current_pid: int | None) -> None:
