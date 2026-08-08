@@ -6,6 +6,9 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+from .private_file import ensure_private_empty_file
+from .private_state import validate_private_file
+
 
 class InstanceLockError(RuntimeError):
     pass
@@ -56,9 +59,13 @@ class WindowsInstanceLock:
         if self._path.is_symlink():
             raise UnsafeLockFile("lock path must not be a symlink")
         try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor = os.open(self._path, os.O_RDWR | os.O_CREAT | os.O_BINARY, 0o600)
-        except OSError as error:
+            ensure_private_empty_file(self._path)
+            validate_private_file(self._path)
+            descriptor = os.open(
+                self._path,
+                os.O_RDWR | getattr(os, "O_BINARY", 0),
+            )
+        except (OSError, ValueError) as error:
             raise InstanceLockError("unable to open connector instance lock") from error
         try:
             metadata = os.fstat(descriptor)
