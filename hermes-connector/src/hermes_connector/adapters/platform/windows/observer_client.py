@@ -6,20 +6,20 @@ import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 
 from hermes_connector.adapters.cloud.codec import ConnectorProtocolCodec
-from hermes_connector.adapters.platform.macos.observer_client import (
+from hermes_connector.adapters.observer_protocol import (
     MAX_PRE_SNAPSHOT_EVENTS,
     ObserverProtocolError,
     ObserverResnapshotRequired,
-    _is_event_notification,
-    _observer_contract,
-    _ready_payload,
-    _require_authority,
-    _same_authority_identity,
-    _session_event_from_frame,
-    _snapshot_from_result,
-    _subscribe_request,
-    _unsubscribe_request,
-    _validate_ready_identity,
+    PreparedObserverSubscription,
+    is_event_notification,
+    observer_contract,
+    ready_payload,
+    require_authority,
+    session_event_from_frame,
+    snapshot_from_result,
+    subscribe_request,
+    unsubscribe_request,
+    validate_ready_identity,
 )
 from hermes_connector.application.observer_projection_v2 import (
     ObserverProjectionV2,
@@ -31,7 +31,11 @@ from hermes_connector.application.observer_sequence import (
 )
 from hermes_connector.domain.identifiers import canonical_uuid
 from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
-from hermes_connector.domain.observer import ObserverEvent, SessionEvent, SessionSnapshot
+from hermes_connector.domain.observer import (
+    ObserverEvent,
+    SessionEvent,
+    SessionSnapshot,
+)
 
 from .duplex_pipe import (
     WindowsAuthorityBoundDuplexPipe,
@@ -86,7 +90,7 @@ class WindowsObserverClient:
             or "\x00" in session_key
         ):
             raise ValueError("Observer session_key is invalid")
-        authority = await _require_authority(self._authority)
+        authority = await require_authority(self._authority)
         if authority.profile != profile:
             raise ObserverResnapshotRequired("Observer profile authority changed")
         stream: WindowsAuthorityBoundDuplexPipe | None = None
@@ -103,17 +107,17 @@ class WindowsObserverClient:
                     session_key=session_key,
                     authority=authority,
                 )
-                current = await _require_authority(
+                current = await require_authority(
                     self._authority,
                     expected_authority=authority,
                 )
-                snapshot = _snapshot_from_result(
+                snapshot = snapshot_from_result(
                     self._codec,
                     pending.result,
                     profile=profile,
                     runtime_generation=current.runtime_generation,
                     session_key=session_key,
-                    observer_contract=_observer_contract(current),
+                    observer_contract=observer_contract(current),
                 )
                 if snapshot.observer_contract == 2:
                     guard = ObserverProjectionV2.from_snapshot(
@@ -154,30 +158,30 @@ class WindowsObserverClient:
         profile: str,
         session_key: str,
         authority: LocalRuntimeAuthority,
-    ) -> _PreparedSubscription:
+    ) -> PreparedObserverSubscription:
         runtime_generation = authority.runtime_generation
-        observer_contract = _observer_contract(authority)
+        contract = observer_contract(authority)
         while True:
-            ready = _ready_payload(
+            ready = ready_payload(
                 await stream.recv(),
-                observer_contract=observer_contract,
+                observer_contract=contract,
             )
             if ready is None:
                 continue
-            if observer_contract == 1:
-                _validate_ready_identity(
+            if contract == 1:
+                validate_ready_identity(
                     ready,
                     profile=profile,
                     runtime_generation=runtime_generation,
                     instance_id=authority.instance_id,
                 )
             break
-        await _require_authority(
+        await require_authority(
             self._authority,
             expected_authority=authority,
         )
-        request = _subscribe_request(
-            observer_contract=observer_contract,
+        request = subscribe_request(
+            observer_contract=contract,
             profile=profile,
             session_key=session_key,
             runtime_generation=runtime_generation,
@@ -188,7 +192,7 @@ class WindowsObserverClient:
         while True:
             frame = await stream.recv()
             if frame.get("id") != subscribe_id:
-                if _is_event_notification(frame):
+                if is_event_notification(frame):
                     if len(pending) >= MAX_PRE_SNAPSHOT_EVENTS:
                         raise ObserverProtocolError(
                             "Observer pre-snapshot event queue exceeded its bound"
@@ -216,7 +220,7 @@ class WindowsObserverClient:
                 subscription_id = str(canonical_uuid(result.get("subscription_id")))
             except (TypeError, ValueError):
                 raise ObserverProtocolError("Observer subscription id is invalid") from None
-            return _PreparedSubscription(
+            return PreparedObserverSubscription(
                 result=result,
                 subscription_id=subscription_id,
                 events=tuple(pending),
@@ -270,7 +274,7 @@ class WindowsObserverSubscription:
                 else:
                     frame = await self._receive_frame()
                 await self._ensure_authority()
-                event = _session_event_from_frame(
+                event = session_event_from_frame(
                     self._codec,
                     frame,
                     profile=self.snapshot.profile,
@@ -309,7 +313,7 @@ class WindowsObserverSubscription:
             try:
                 async with asyncio.timeout(self._close_timeout_seconds):
                     await self._stream.send(
-                        _unsubscribe_request(
+                        unsubscribe_request(
                             observer_contract=self._observer_contract,
                             subscription_id=self._subscription_id,
                         )
@@ -330,7 +334,7 @@ class WindowsObserverSubscription:
             raise cancelled
 
     async def _ensure_authority(self) -> None:
-        await _require_authority(
+        await require_authority(
             self._authority,
             expected_authority=self._expected_authority,
         )
@@ -362,19 +366,6 @@ class WindowsObserverSubscription:
                 return
             await _close_quietly(self._stream)
             self._closed = True
-
-
-class _PreparedSubscription:
-    def __init__(
-        self,
-        *,
-        result: Mapping[str, object],
-        subscription_id: str,
-        events: tuple[Mapping[str, object], ...],
-    ) -> None:
-        self.result = result
-        self.subscription_id = subscription_id
-        self.events = events
 
 
 async def _close_quietly(stream: WindowsAuthorityBoundDuplexPipe) -> None:
