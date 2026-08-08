@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 hermes-connector = "hermes_connector.cli:main"
+hermes-connector-live-session = "hermes_connector.live_session_cli:main"
 
 [dependency-groups]
 dev = [
