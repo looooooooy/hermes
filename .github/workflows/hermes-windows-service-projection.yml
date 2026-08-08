@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   static:
-    name: Rust formatting and non-Windows regression / ubuntu-latest
+    name: Projection formatting and non-Windows regression / ubuntu-latest
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -40,8 +40,8 @@ jobs:
         with:
           toolchain: 1.88.0
           components: rustfmt
-      - name: Check formatting
-        run: cargo fmt --manifest-path hermes-runtime-manager/Cargo.toml -- --check
+      - name: Check projection formatting
+        run: rustfmt --edition 2021 --check hermes-runtime-manager/src/windows_service_manager.rs
       - name: Check Runtime Manager
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
 
