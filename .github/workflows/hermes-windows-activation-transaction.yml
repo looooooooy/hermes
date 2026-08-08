@@ -1,0 +1,74 @@
+name: Hermes Windows Activation Transaction
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-activation-transaction-*"
+    paths:
+      - "hermes-connector/packaging/windows/hermes_windows_tasks.py"
+      - "hermes-connector/packaging/windows/hermes_windows_release.py"
+      - "hermes-connector/packaging/windows/hermes_windows_activation.py"
+      - "hermes-connector/packaging/windows/hermes_windows_activation_platform.py"
+      - "hermes-connector/tests/packaging/test_windows_activation_transaction.py"
+      - "hermes-connector/tests/packaging/test_windows_activation_smoke.py"
+      - ".github/workflows/hermes-windows-activation-transaction.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/packaging/windows/hermes_windows_tasks.py"
+      - "hermes-connector/packaging/windows/hermes_windows_release.py"
+      - "hermes-connector/packaging/windows/hermes_windows_activation.py"
+      - "hermes-connector/packaging/windows/hermes_windows_activation_platform.py"
+      - "hermes-connector/tests/packaging/test_windows_activation_transaction.py"
+      - "hermes-connector/tests/packaging/test_windows_activation_smoke.py"
+      - ".github/workflows/hermes-windows-activation-transaction.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-activation-transaction-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  transaction-contract:
+    name: Activation transaction contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install pytest ruff==0.16.1
+      - name: Lint activation slice
+        run: >-
+          ruff check
+          hermes-connector/packaging/windows/hermes_windows_release.py
+          hermes-connector/packaging/windows/hermes_windows_activation.py
+          hermes-connector/packaging/windows/hermes_windows_activation_platform.py
+          hermes-connector/tests/packaging/test_windows_activation_transaction.py
+          hermes-connector/tests/packaging/test_windows_activation_smoke.py
+      - name: Verify release evidence and rollback state machine
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/packaging/test_windows_activation_transaction.py
+
+  windows-effects:
+    name: Real Scheduled Task activation rollback / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector and test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+      - name: Switch candidate task projection and rollback on health failure
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/packaging/test_windows_activation_smoke.py
