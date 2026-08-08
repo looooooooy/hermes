@@ -16,6 +16,7 @@ pub mod platform;
 pub mod portable_plugin_signature;
 pub mod ports;
 pub mod release_control;
+pub mod startup_reconcile;
 pub mod toolchain;
 pub mod update_adapters;
 pub mod update_connector_lane;
@@ -36,6 +37,8 @@ pub mod windows_service_manager;
 pub mod windows_task_execution;
 #[cfg(windows)]
 pub mod windows_task_scheduler;
+#[cfg(windows)]
+pub mod windows_update_health;
 
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
@@ -69,6 +72,9 @@ pub use release_control::{
     ReleaseControlObservedStateV1, ReleaseControlVerificationReportV1,
     ReleaseSecurityPolicyV1, ReleaseSourceV1, ReleaseTrustKeyV1, ReleaseTrustStoreV1,
     RollbackAuthorizationV1, SignedReleaseEnvelopeV1,
+};
+pub use startup_reconcile::{
+    RuntimeStartupReconciler, StartupReadinessProbe, StartupReconcileOutcome,
 };
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 pub use update_adapters::{
@@ -112,4 +118,9 @@ pub use windows_task_execution::{
 #[cfg(windows)]
 pub use windows_task_scheduler::{
     WindowsScheduledAction, WindowsTaskRegistration, WindowsTaskSchedulerBootstrap,
+};
+#[cfg(windows)]
+pub use windows_update_health::{
+    WindowsAuthoritativeUpdateHealthGate, WindowsConnectorCommandHealth,
+    WindowsConnectorReadinessEvidence, WindowsStartupReadinessProbe,
 };
