@@ -1,4 +1,4 @@
-"""Safe asyncio command-line entrypoint for the macOS Connector service."""
+"""Safe asyncio command-line entrypoint for the Hermes Connector service."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from hermes_connector.adapters.platform.availability import PlatformUnavailable
+from hermes_connector.adapters.status_receipt_codec import encode_status_receipt
 from hermes_connector.application.file_credential_migration import (
     FileCredentialMigrationDisplay,
 )
@@ -47,12 +48,17 @@ class SignalLoop(Protocol):
 
     def remove_signal_handler(self, selected: signal.Signals) -> bool: ...
 
+    def call_soon_threadsafe(
+        self,
+        callback: Callable[[], None],
+    ) -> object: ...
+
 
 class Runner(Protocol):
     async def run_until(self, stop_event: asyncio.Event) -> None: ...
 
 
-class MacOSRuntime(Protocol):
+class Runtime(Protocol):
     runner: Runner
 
 
@@ -92,7 +98,7 @@ def build_macos_runtime(
     release_id: str,
     config: ConnectorConfig,
     logger: SafeStructuredLogger,
-) -> MacOSRuntime:
+) -> Runtime:
     from hermes_connector.bootstrap.macos import build_macos_runtime as build
 
     return build(settings, release_id=release_id, config=config, logger=logger)
@@ -134,6 +140,51 @@ def build_macos_file_credential_migration(
     return build(settings)
 
 
+def check_windows_runtime(settings: ConnectorRuntimeSettings) -> None:
+    from hermes_connector.bootstrap.windows import check_windows_runtime as check
+
+    check(settings)
+
+
+def build_windows_runtime(
+    settings: ConnectorRuntimeSettings,
+    *,
+    release_id: str,
+    config: ConnectorConfig,
+    logger: SafeStructuredLogger,
+) -> Runtime:
+    from hermes_connector.bootstrap.windows import build_windows_runtime as build
+
+    return build(settings, release_id=release_id, config=config, logger=logger)
+
+
+def read_windows_status(
+    settings: ConnectorRuntimeSettings,
+) -> ConnectorStatusReceipt | None:
+    from hermes_connector.bootstrap.windows import read_windows_status as read
+
+    value = read(settings)
+    return value if isinstance(value, ConnectorStatusReceipt) else None
+
+
+def build_windows_pairing_runtime(
+    settings: ConnectorRuntimeSettings,
+) -> PairingRuntime:
+    from hermes_connector.bootstrap.windows import (
+        build_windows_pairing_runtime as build,
+    )
+
+    return build(settings)
+
+
+def provision_windows_runtime_state(settings: ConnectorRuntimeSettings) -> None:
+    from hermes_connector.bootstrap.windows_provision import (
+        provision_windows_runtime_state as provision,
+    )
+
+    provision(settings)
+
+
 def install_stop_signal_handlers(
     loop: SignalLoop,
     stop_event: asyncio.Event,
@@ -153,9 +204,47 @@ def remove_stop_signal_handlers(
         loop.remove_signal_handler(selected)
 
 
-async def run_service(runner: Runner) -> None:
+def install_windows_stop_signal_handlers(
+    loop: SignalLoop,
+    stop_event: asyncio.Event,
+) -> tuple[tuple[signal.Signals, object], ...]:
+    installed: list[tuple[signal.Signals, object]] = []
+
+    def request_stop(_signum: int, _frame: object) -> None:
+        loop.call_soon_threadsafe(stop_event.set)
+
+    selected_signals = [signal.SIGINT]
+    sigbreak = getattr(signal, "SIGBREAK", None)
+    if sigbreak is not None:
+        selected_signals.append(sigbreak)
+    for selected in selected_signals:
+        previous = signal.getsignal(selected)
+        signal.signal(selected, request_stop)
+        installed.append((selected, previous))
+    return tuple(installed)
+
+
+def remove_windows_stop_signal_handlers(
+    installed: Sequence[tuple[signal.Signals, object]],
+) -> None:
+    for selected, previous in installed:
+        signal.signal(selected, previous)
+
+
+async def run_service(
+    runner: Runner,
+    *,
+    platform_name: str = "macos",
+) -> None:
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
+    if platform_name == "windows":
+        installed_windows = install_windows_stop_signal_handlers(loop, stop_event)
+        try:
+            await runner.run_until(stop_event)
+        finally:
+            remove_windows_stop_signal_handlers(installed_windows)
+        return
     installed = install_stop_signal_handlers(loop, stop_event)
     try:
         await runner.run_until(stop_event)
@@ -182,28 +271,35 @@ def main(
     previous_umask = os.umask(0o077)
     try:
         try:
-            settings = load_runtime_settings(environment)
             selected = select_platform_adapters(platform_name)
-            if selected.platform_name != "macos":
-                raise PlatformUnavailable("selected platform is unavailable")
+            settings = load_runtime_settings(
+                environment,
+                platform_name=selected.platform_name,
+            )
             if command.action == "status":
-                receipt = read_macos_status(settings)
+                receipt = _read_status(selected.platform_name, settings)
                 if receipt is None:
                     status_sink('{"ready":false}')
                     return 3
                 status_sink(_status_json(receipt))
                 return 0 if receipt.ready else 2
             if command.action == "check":
-                check_macos_runtime(settings)
+                _check_runtime(selected.platform_name, settings)
                 diagnostic_sink("hermes-connector: configuration_valid")
                 return 0
             if command.action.startswith("pair:"):
-                pairing_runtime = build_macos_pairing_runtime(settings)
+                action = command.action.removeprefix("pair:")
+                if selected.platform_name == "windows" and action == "start":
+                    provision_windows_runtime_state(settings)
+                pairing_runtime = _build_pairing_runtime(
+                    selected.platform_name,
+                    settings,
+                )
                 try:
                     asyncio.run(
                         run_pairing_action(
                             pairing_runtime,
-                            command.action.removeprefix("pair:"),
+                            action,
                             diagnostic_sink,
                         )
                     )
@@ -212,7 +308,7 @@ def main(
                     return 1
                 return 0
             if command.action == "credential:migrate-file":
-                if settings.credential_store != "file":
+                if selected.platform_name != "macos" or settings.credential_store != "file":
                     raise RuntimeConfigurationError(
                         "file credential migration mode is required"
                     )
@@ -228,14 +324,10 @@ def main(
                     diagnostic_sink("hermes-connector: credential_migration_failed")
                     return 1
                 return 0
-            if settings.credential_store != "keychain":
-                raise RuntimeConfigurationError(
-                    "formal runtime requires Keychain credentials"
-                )
-            runtime = build_macos_runtime(
+            runtime = _build_runtime(
+                selected.platform_name,
                 settings,
                 release_id=command.require_release_id(),
-                config=ConnectorConfig(),
                 logger=SafeStructuredLogger(diagnostic_sink),
             )
         except PlatformUnavailable:
@@ -258,7 +350,12 @@ def main(
             return 2
 
         try:
-            asyncio.run(run_service(runtime.runner))
+            asyncio.run(
+                run_service(
+                    runtime.runner,
+                    platform_name=selected.platform_name,
+                )
+            )
         except KeyboardInterrupt:
             diagnostic_sink("hermes-connector: interrupted")
             return 130
@@ -277,6 +374,73 @@ def main(
         return 0
     finally:
         os.umask(previous_umask)
+
+
+def _read_status(
+    platform_name: str,
+    settings: ConnectorRuntimeSettings,
+) -> ConnectorStatusReceipt | None:
+    if platform_name == "macos":
+        return read_macos_status(settings)
+    if platform_name == "windows":
+        return read_windows_status(settings)
+    raise PlatformUnavailable("selected platform is unavailable")
+
+
+def _check_runtime(
+    platform_name: str,
+    settings: ConnectorRuntimeSettings,
+) -> None:
+    if platform_name == "macos":
+        check_macos_runtime(settings)
+        return
+    if platform_name == "windows":
+        check_windows_runtime(settings)
+        return
+    raise PlatformUnavailable("selected platform is unavailable")
+
+
+def _build_pairing_runtime(
+    platform_name: str,
+    settings: ConnectorRuntimeSettings,
+) -> PairingRuntime:
+    if platform_name == "macos":
+        return build_macos_pairing_runtime(settings)
+    if platform_name == "windows":
+        return build_windows_pairing_runtime(settings)
+    raise PlatformUnavailable("selected platform is unavailable")
+
+
+def _build_runtime(
+    platform_name: str,
+    settings: ConnectorRuntimeSettings,
+    *,
+    release_id: str,
+    logger: SafeStructuredLogger,
+) -> Runtime:
+    if platform_name == "macos":
+        if settings.credential_store != "keychain":
+            raise RuntimeConfigurationError(
+                "formal runtime requires Keychain credentials"
+            )
+        return build_macos_runtime(
+            settings,
+            release_id=release_id,
+            config=ConnectorConfig(),
+            logger=logger,
+        )
+    if platform_name == "windows":
+        if settings.credential_store != "dpapi":
+            raise RuntimeConfigurationError(
+                "formal Windows runtime requires DPAPI credentials"
+            )
+        return build_windows_runtime(
+            settings,
+            release_id=release_id,
+            config=ConnectorConfig(),
+            logger=logger,
+        )
+    raise PlatformUnavailable("selected platform is unavailable")
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,10 +494,6 @@ def _stdout(message: str) -> None:
 
 
 def _status_json(receipt: ConnectorStatusReceipt) -> str:
-    from hermes_connector.adapters.platform.macos.status_receipt import (
-        encode_status_receipt,
-    )
-
     return encode_status_receipt(receipt).decode("ascii")
 
 
