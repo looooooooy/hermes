@@ -80,8 +80,23 @@ jobs:
           hermes-connector/tests/platform/windows/test_state_projections.py
           hermes-connector/tests/platform/windows/test_status_receipt.py
           hermes-connector/tests/platform/windows/test_runtime_adapter_parity.py
-      - name: Test formal Windows runtime composition and ACLs
+      - name: Compose formal Windows runtime
         run: >-
           python -m pytest -vv
           --timeout=60 --timeout-method=thread
-          hermes-connector/tests/platform/windows/test_formal_composition.py
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_formal_runtime_composes_verified_adapters_without_availability_switch
+      - name: Compose Windows pairing runtime
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_pairing_runtime_uses_dpapi_and_windows_projection_stores
+      - name: Verify Windows runtime check is side-effect bounded
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_runtime_check_is_side_effect_bounded_and_dpapi_only
+      - name: Verify SQLite and service-lock ACLs
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition.py::test_windows_sqlite_and_lock_files_inherit_required_private_acl
