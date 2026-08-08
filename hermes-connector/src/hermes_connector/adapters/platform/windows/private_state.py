@@ -82,11 +82,12 @@ _LIBRARIES: tuple[object, object] | None = None
 
 def _libraries() -> tuple[object, object]:
     global _LIBRARIES
-    if os.name != "nt":
-        raise RuntimeError("Windows private state requires Windows")
     if _LIBRARIES is None:
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            raise RuntimeError("Windows private state requires Win32 APIs")
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        advapi32 = win_dll("advapi32", use_last_error=True)
         _configure(kernel32, advapi32)
         _LIBRARIES = kernel32, advapi32
     return _LIBRARIES
