@@ -12,8 +12,21 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 _MAX_CONFIG_BYTES = 65_536
-_MAX_PATH_BYTES = int(os.pathconf("/", "PC_PATH_MAX"))
-_MAX_NAME_BYTES = int(os.pathconf("/", "PC_NAME_MAX"))
+
+
+def _pathconf_limit(name: str, fallback: int) -> int:
+    pathconf = getattr(os, "pathconf", None)
+    if pathconf is None:
+        return fallback
+    try:
+        value = int(pathconf("/", name))
+    except (OSError, TypeError, ValueError):
+        return fallback
+    return value if value > 0 else fallback
+
+
+_MAX_PATH_BYTES = _pathconf_limit("PC_PATH_MAX", 32_767)
+_MAX_NAME_BYTES = _pathconf_limit("PC_NAME_MAX", 255)
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _SEMVER = re.compile(
     r"^[0-9]+\.[0-9]+\.[0-9]+"
