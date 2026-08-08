@@ -79,6 +79,22 @@ def _dispatch_request(
         transport.write(response)
 
 
+def _await_rejected_peer_close(connection: WindowsFramedPipeConnection) -> None:
+    """Give a rejected client a bounded window to read the error before disconnect."""
+
+    try:
+        connection.recv()
+    except (
+        EOFError,
+        OSError,
+        PermissionError,
+        TimeoutError,
+        UnicodeError,
+        ValueError,
+    ):
+        pass
+
+
 def _handle_control_connection(
     connection: WindowsFramedPipeConnection,
     *,
@@ -113,6 +129,7 @@ def _handle_control_connection(
                             )
                         )
                     )
+                    _await_rejected_peer_close(connection)
                     return
                 transport = _ControlPipeTransport(connection, claims)
                 transport.write(
