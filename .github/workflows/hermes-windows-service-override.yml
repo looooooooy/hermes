@@ -1,0 +1,42 @@
+name: Hermes Windows Service Override
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-formal-composition-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_service.py"
+      - "hermes-connector/tests/platform/windows/test_formal_windows_service_override.py"
+      - ".github/workflows/hermes-windows-service-override.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_service.py"
+      - "hermes-connector/tests/platform/windows/test_formal_windows_service_override.py"
+      - ".github/workflows/hermes-windows-service-override.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-service-override:
+    name: Windows explicit ServiceRunner / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Verify formal runtime with explicit Windows ServiceRunner
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_windows_service_override.py
