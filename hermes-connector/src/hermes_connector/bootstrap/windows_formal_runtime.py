@@ -17,7 +17,9 @@ from hermes_connector.adapters.foundation_projection import (
     FoundationNoOpLocalProjectionInvalidator,
 )
 from hermes_connector.adapters.local_runtime_preflight import LocalRuntimePreflight
-from hermes_connector.adapters.platform.windows.agent_discovery import WindowsAgentDiscovery
+from hermes_connector.adapters.platform.windows.agent_discovery import (
+    WindowsAgentDiscovery,
+)
 from hermes_connector.adapters.platform.windows.dpapi_secret_store import (
     WindowsDPAPISecretStore,
 )
@@ -27,7 +29,9 @@ from hermes_connector.adapters.platform.windows.instance_identity import (
 from hermes_connector.adapters.platform.windows.local_gateway_transport import (
     WindowsLocalGatewayTransport,
 )
-from hermes_connector.adapters.platform.windows.observer_client import WindowsObserverClient
+from hermes_connector.adapters.platform.windows.observer_client import (
+    WindowsObserverClient,
+)
 from hermes_connector.adapters.platform.windows.pairing_projection import (
     WindowsPairedProjectionStore,
 )
@@ -44,8 +48,12 @@ from hermes_connector.adapters.platform.windows.session_catalog_client import (
 from hermes_connector.adapters.platform.windows.status_receipt import (
     WindowsStatusReceiptStore,
 )
-from hermes_connector.adapters.secure_store_cloud_token import SecureStoreCloudTokenProvider
-from hermes_connector.adapters.secure_store_device_identity import SecureStoreDeviceIdentity
+from hermes_connector.adapters.secure_store_cloud_token import (
+    SecureStoreCloudTokenProvider,
+)
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
+)
 from hermes_connector.adapters.sqlite_storage import SQLiteStorageComponent
 from hermes_connector.application.cloud_wss_client import CloudClientConfig
 from hermes_connector.application.command_lane import CommandLane, CommandScope
