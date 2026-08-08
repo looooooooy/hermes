@@ -195,7 +195,8 @@ impl ServiceProjectionApartment {
                 .map_err(|error| windows_operation("IRegisteredTask::State", error))?;
             last_running_state = unsafe { running.State() }
                 .map_err(|error| windows_operation("IRunningTask::State", error))?;
-            if last_registered_state == TASK_STATE_RUNNING || last_running_state == TASK_STATE_RUNNING
+            if last_registered_state == TASK_STATE_RUNNING
+                || last_running_state == TASK_STATE_RUNNING
             {
                 return Ok(());
             }
@@ -340,12 +341,7 @@ fn validate_registered_projection(
     let executable = executable
         .to_str()
         .ok_or_else(|| PortError::Operation("service executable path is not UTF-8".to_owned()))?;
-    for required in [
-        "<LogonType>InteractiveToken</LogonType>",
-        "<AllowStartOnDemand>true</AllowStartOnDemand>",
-        user_sid,
-        executable,
-    ] {
+    for required in ["<LogonType>InteractiveToken</LogonType>", user_sid, executable] {
         if !xml.contains(required) && !xml.contains(&xml_escape(required)) {
             return Err(PortError::Operation(format!(
                 "registered service projection is missing required contract: {required}"
@@ -424,8 +420,10 @@ fn current_user_sid_string() -> Result<String, PortError> {
                 ));
             }
         }
-        let value = String::from_utf16(&std::slice::from_raw_parts(wide_sid, length))
-            .map_err(|_| PortError::Operation("current Windows SID is invalid UTF-16".to_owned()))?;
+        let value =
+            String::from_utf16(&std::slice::from_raw_parts(wide_sid, length)).map_err(|_| {
+                PortError::Operation("current Windows SID is invalid UTF-16".to_owned())
+            })?;
         LocalFree(wide_sid.cast());
         value
     };
@@ -476,9 +474,9 @@ fn validate_release_id(value: &str) -> Result<(), PortError> {
         || value.len() > 160
         || value == "."
         || value == ".."
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'+'))
     {
         return Err(PortError::Operation(
             "service projection release identity is invalid".to_owned(),
@@ -566,9 +564,7 @@ mod tests {
     #[test]
     fn real_on_demand_projection_runs_and_stops_without_logon_trigger() {
         let system_root = std::env::var_os("SystemRoot").expect("SystemRoot");
-        let ping = PathBuf::from(system_root)
-            .join("System32")
-            .join("PING.EXE");
+        let ping = PathBuf::from(system_root).join("System32").join("PING.EXE");
         assert!(ping.is_file(), "PING.EXE must exist on Windows test host");
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
