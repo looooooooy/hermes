@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -18,7 +20,9 @@ from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
 from hermes_connector.adapters.platform.windows.instance_identity import (
     WindowsInstanceIdentityStore,
 )
-from hermes_connector.adapters.platform.windows.observer_client import WindowsObserverClient
+from hermes_connector.adapters.platform.windows.observer_client import (
+    WindowsObserverClient,
+)
 from hermes_connector.adapters.platform.windows.pairing_projection import (
     WindowsPairedProjectionStore,
 )
@@ -36,8 +40,12 @@ from hermes_connector.adapters.platform.windows.session_catalog_client import (
 from hermes_connector.adapters.platform.windows.status_receipt import (
     WindowsStatusReceiptStore,
 )
-from hermes_connector.adapters.secure_store_cloud_token import SecureStoreCloudTokenProvider
-from hermes_connector.adapters.secure_store_device_identity import SecureStoreDeviceIdentity
+from hermes_connector.adapters.secure_store_cloud_token import (
+    SecureStoreCloudTokenProvider,
+)
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
 from hermes_connector.bootstrap.windows import (
@@ -67,11 +75,6 @@ def _settings(tmp_path: Path) -> ConnectorRuntimeSettings:
         profile="default",
         database_file=state / "connector.sqlite3",
         lock_file=state / "connector.lock",
-        instance_state_file=state / "instance.json",
-        paired_projection_file=state / "paired.json",
-        pairing_offer_projection_file=state / "pairing-offer.json",
-        pairing_command_lock_file=state / "pairing-command.lock",
-        status_receipt_file=state / "status.json",
         state_directory=state,
         local_gateway_registry_directory=roles / "local-registry",
         local_gateway_socket_directory=roles / "local-socket",
@@ -157,7 +160,10 @@ async def test_windows_formal_runtime_composes_verified_adapters_without_availab
     assert isinstance(runtime.observer_client, WindowsObserverClient)
     assert isinstance(runtime.session_catalog_client, WindowsSessionCatalogClient)
     assert isinstance(runtime.control_relay, WindowsPluginControlRelay)
-    assert isinstance(runtime.owner_control_factory, WindowsPluginOwnerControlChannelFactory)
+    assert isinstance(
+        runtime.owner_control_factory,
+        WindowsPluginOwnerControlChannelFactory,
+    )
     assert isinstance(runtime.status_receipt._store, WindowsStatusReceiptStore)
     assert not any(
         "macos" in type(component).__module__ for component in runtime.components
@@ -179,7 +185,9 @@ async def test_windows_pairing_runtime_uses_dpapi_and_windows_projection_stores(
         await runtime.aclose()
 
 
-def test_windows_runtime_check_is_side_effect_bounded_and_dpapi_only(tmp_path: Path) -> None:
+def test_windows_runtime_check_is_side_effect_bounded_and_dpapi_only(
+    tmp_path: Path,
+) -> None:
     settings = _settings(tmp_path)
     check_windows_runtime(settings)
     assert not settings.instance_state_file.exists()
