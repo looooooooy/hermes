@@ -1,15 +1,21 @@
 use hermes_runtime_manager::platform::DefaultInstallLayout;
 #[cfg(not(windows))]
 use hermes_runtime_manager::platform::FailClosedServiceManager;
-#[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
+#[cfg(windows)]
+use hermes_runtime_manager::ports::ServiceManager;
 use hermes_runtime_manager::{
     pack_managed_payload, run_blank_machine_toolchain_gate, verify_portable_plugin_signature,
     verify_release_control_files, PrivatePythonManagedReleaseStager, PrivateToolchainInstaller,
     RuntimeManager,
 };
 #[cfg(windows)]
-use hermes_runtime_manager::WindowsTaskServiceManager;
+use hermes_runtime_manager::{
+    RuntimeStartupReconciler, ServiceManagerReleaseActivator, StartupReconcileOutcome,
+    WindowsConnectorCommandHealth, WindowsStartupReadinessProbe, WindowsTaskServiceManager,
+};
+#[cfg(windows)]
+use hermes_runtime_manager::model::PlatformKind;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -56,10 +62,9 @@ fn main() {
     }
 
     #[cfg(windows)]
-    let manager = match RuntimeManager::new_persistent(
-        Arc::new(WindowsTaskServiceManager::new()),
-        layout.clone(),
-    ) {
+    let services: Arc<dyn ServiceManager> = Arc::new(WindowsTaskServiceManager::new());
+    #[cfg(windows)]
+    let manager = match RuntimeManager::new_persistent(services.clone(), layout.clone()) {
         Ok(manager) => manager,
         Err(error) => {
             eprintln!("runtime_manager_persistent_state_error: {error}");
@@ -88,7 +93,11 @@ fn main() {
             #[cfg(not(windows))]
             println!("Platform adapter status: fail-closed until a verified adapter is selected.");
         }
-        "serve-read-only" => serve_read_only(manager, layout),
+        "serve-read-only" => {
+            #[cfg(windows)]
+            reconcile_windows_startup(manager.clone(), layout.clone(), services.clone());
+            serve_read_only(manager, layout)
+        }
         "--version" | "version" => println!("{}", env!("CARGO_PKG_VERSION")),
         other => {
             eprintln!("unsupported command: {other}");
@@ -96,6 +105,73 @@ fn main() {
                 "supported commands: status, doctor, serve-read-only, ipc-endpoint, install-toolchain, blank-machine-toolchain-gate, verify-plugin-signature, verify-release-control, pack-managed-payload, stage-managed-payload, version"
             );
             std::process::exit(64);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn reconcile_windows_startup(
+    manager: Arc<RuntimeManager>,
+    layout: Arc<DefaultInstallLayout>,
+    services: Arc<dyn ServiceManager>,
+) {
+    let hermes_home = match layout.application_root() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("runtime_manager_startup_layout_error: {error}");
+            return;
+        }
+    };
+    let releases_root = match layout.releases_root() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("runtime_manager_startup_layout_error: {error}");
+            return;
+        }
+    };
+    let profile = "default";
+    let config_file = hermes_home
+        .join("connector")
+        .join("profiles")
+        .join(profile)
+        .join("config.json");
+    let connector_health = match WindowsConnectorCommandHealth::new(
+        releases_root.clone(),
+        hermes_home,
+        profile,
+        config_file,
+    ) {
+        Ok(value) => Arc::new(value),
+        Err(error) => {
+            eprintln!("runtime_manager_startup_health_composition_error: {error}");
+            return;
+        }
+    };
+    let activator = match ServiceManagerReleaseActivator::new(
+        services,
+        releases_root,
+        PlatformKind::Windows,
+    ) {
+        Ok(value) => Arc::new(value),
+        Err(error) => {
+            eprintln!("runtime_manager_startup_activator_error: {error}");
+            return;
+        }
+    };
+    let readiness = Arc::new(WindowsStartupReadinessProbe::new(connector_health));
+    let reconciler = RuntimeStartupReconciler::new(manager, activator, readiness);
+    match reconciler.reconcile() {
+        Ok(StartupReconcileOutcome::NoActiveRelease) => {
+            eprintln!("runtime_manager_startup_reconcile: no_active_release");
+        }
+        Ok(StartupReconcileOutcome::AlreadyReady { release_id }) => {
+            eprintln!("runtime_manager_startup_reconcile: already_ready release_id={release_id}");
+        }
+        Ok(StartupReconcileOutcome::Reconciled { release_id }) => {
+            eprintln!("runtime_manager_startup_reconcile: reconciled release_id={release_id}");
+        }
+        Err(error) => {
+            eprintln!("runtime_manager_startup_reconcile_failed: {error}");
         }
     }
 }
