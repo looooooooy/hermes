@@ -59,10 +59,7 @@ jobs:
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
       - name: Run real Windows service projection tests
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml windows_service_manager -- --nocapture
-      - name: Regress generic release activator and Connector lane
-        run: >-
-          cargo test
-          --manifest-path hermes-runtime-manager/Cargo.toml
-          update_adapters::tests
-          update_connector_lane::tests
-          -- --nocapture
+      - name: Regress generic release activator
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_adapters::tests -- --nocapture
+      - name: Regress Connector drain and reconcile lane
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_connector_lane::tests -- --nocapture
