@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -46,11 +48,6 @@ def _settings(tmp_path: Path) -> ConnectorRuntimeSettings:
         profile="default",
         database_file=state / "connector.sqlite3",
         lock_file=state / "connector.lock",
-        instance_state_file=state / "instance.json",
-        paired_projection_file=state / "paired.json",
-        pairing_offer_projection_file=state / "pairing-offer.json",
-        pairing_command_lock_file=state / "pairing-command.lock",
-        status_receipt_file=state / "status.json",
         state_directory=state,
         local_gateway_registry_directory=roles / "local-registry",
         local_gateway_socket_directory=roles / "local-socket",
@@ -116,7 +113,10 @@ def _build(settings: ConnectorRuntimeSettings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reaches_sqlite_constructor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reaches_sqlite_constructor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_paired(settings)
     resource = _start_gateway()
@@ -133,7 +133,10 @@ async def test_reaches_sqlite_constructor(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
-async def test_reaches_local_gateway_constructor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reaches_local_gateway_constructor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_paired(settings)
     resource = _start_gateway()
@@ -150,7 +153,10 @@ async def test_reaches_local_gateway_constructor(tmp_path: Path, monkeypatch: py
 
 
 @pytest.mark.asyncio
-async def test_reaches_cloud_wss_constructor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reaches_cloud_wss_constructor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_paired(settings)
     resource = _start_gateway()
@@ -167,7 +173,10 @@ async def test_reaches_cloud_wss_constructor(tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_reaches_service_runner_constructor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reaches_service_runner_constructor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_paired(settings)
     resource = _start_gateway()
