@@ -1,0 +1,98 @@
+name: Hermes Windows Device Identity
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-device-identity-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/secure_store_device_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/device_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/unit/adapters/test_secure_store_device_identity.py"
+      - "hermes-connector/tests/platform/macos/test_device_identity_keychain.py"
+      - "hermes-connector/tests/platform/windows/test_device_identity_dpapi.py"
+      - "hermes-connector/tests/platform/windows/test_secure_state_foundation.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-device-identity.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/adapters/secure_store_device_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/device_identity.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/windows/**"
+      - "hermes-connector/tests/unit/adapters/test_secure_store_device_identity.py"
+      - "hermes-connector/tests/platform/macos/test_device_identity_keychain.py"
+      - "hermes-connector/tests/platform/windows/test_device_identity_dpapi.py"
+      - "hermes-connector/tests/platform/windows/test_secure_state_foundation.py"
+      - "hermes-connector/tests/platform/test_platform_boundaries.py"
+      - ".github/workflows/hermes-windows-device-identity.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-device-identity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-contract:
+    name: Shared device identity contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint shared identity slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/adapters/secure_store_device_identity.py
+          hermes-connector/src/hermes_connector/adapters/platform/macos/device_identity.py
+          hermes-connector/tests/unit/adapters/test_secure_store_device_identity.py
+          hermes-connector/tests/platform/windows/test_device_identity_dpapi.py
+      - name: Test platform-neutral identity contract
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/unit/adapters/test_secure_store_device_identity.py
+      - name: Regress macOS compatibility adapter
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/macos/test_device_identity_keychain.py
+      - name: Preserve platform boundaries
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/test_platform_boundaries.py
+
+  windows-dpapi-identity:
+    name: DPAPI device identity / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Regress Secure State foundation
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_secure_state_foundation.py
+      - name: Test device identity over DPAPI
+        run: >-
+          python -m pytest -vv
+          --timeout=45 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_device_identity_dpapi.py
