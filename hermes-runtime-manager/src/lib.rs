@@ -10,11 +10,13 @@ pub mod local_ipc;
 pub mod managed_payload_archive;
 pub mod managed_release_stager;
 pub mod manager;
+pub mod manager_state;
 pub mod model;
 pub mod platform;
 pub mod portable_plugin_signature;
 pub mod ports;
 pub mod release_control;
+pub mod startup_reconcile;
 pub mod toolchain;
 pub mod update_adapters;
 pub mod update_connector_lane;
@@ -32,9 +34,13 @@ pub mod windows_secret_store;
 #[cfg(windows)]
 pub mod windows_service_manager;
 #[cfg(windows)]
+pub mod windows_startup_health;
+#[cfg(windows)]
 pub mod windows_task_execution;
 #[cfg(windows)]
 pub mod windows_task_scheduler;
+#[cfg(windows)]
+pub mod windows_update_health;
 
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
@@ -53,6 +59,7 @@ pub use managed_payload_archive::{
 };
 pub use managed_release_stager::PrivatePythonManagedReleaseStager;
 pub use manager::{ManagerError, RuntimeManager};
+pub use manager_state::{ManagerStateError, ManagerStateFile, RestoredManagerState};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use portable_plugin_signature::{
     verify_portable_plugin_signature, verify_portable_plugin_signature_at,
@@ -67,6 +74,9 @@ pub use release_control::{
     ReleaseControlObservedStateV1, ReleaseControlVerificationReportV1,
     ReleaseSecurityPolicyV1, ReleaseSourceV1, ReleaseTrustKeyV1, ReleaseTrustStoreV1,
     RollbackAuthorizationV1, SignedReleaseEnvelopeV1,
+};
+pub use startup_reconcile::{
+    RuntimeStartupReconciler, StartupReadinessProbe, StartupReconcileOutcome,
 };
 pub use toolchain::{PrivateToolchainBundleV1, PrivateToolchainInstaller, ToolchainInstallError};
 pub use update_adapters::{
@@ -87,9 +97,7 @@ pub use update_download::{
     UpdateDownloadError,
 };
 pub use update_http::{HttpDownloadGrantV1, HttpRangeSource};
-pub use update_runtime::{
-    compose_managed_update_safe_window, ManagedUpdateSafeWindow,
-};
+pub use update_runtime::{compose_managed_update_safe_window, ManagedUpdateSafeWindow};
 #[cfg(target_os = "macos")]
 pub use update_runtime::compose_macos_authoritative_update_safe_window;
 #[cfg(windows)]
@@ -112,4 +120,9 @@ pub use windows_task_execution::{
 #[cfg(windows)]
 pub use windows_task_scheduler::{
     WindowsScheduledAction, WindowsTaskRegistration, WindowsTaskSchedulerBootstrap,
+};
+#[cfg(windows)]
+pub use windows_update_health::{
+    WindowsAuthoritativeUpdateHealthGate, WindowsConnectorCommandHealth,
+    WindowsConnectorReadinessEvidence, WindowsStartupReadinessProbe,
 };

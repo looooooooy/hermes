@@ -1,4 +1,6 @@
-use hermes_runtime_manager::platform::{DefaultInstallLayout, FailClosedServiceManager};
+use hermes_runtime_manager::platform::DefaultInstallLayout;
+#[cfg(not(windows))]
+use hermes_runtime_manager::platform::FailClosedServiceManager;
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
 use hermes_runtime_manager::{
@@ -6,6 +8,8 @@ use hermes_runtime_manager::{
     verify_release_control_files, PrivatePythonManagedReleaseStager, PrivateToolchainInstaller,
     RuntimeManager,
 };
+#[cfg(windows)]
+use hermes_runtime_manager::WindowsTaskServiceManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -51,10 +55,20 @@ fn main() {
         return;
     }
 
-    let manager = Arc::new(RuntimeManager::new(
-        Arc::new(FailClosedServiceManager),
+    #[cfg(windows)]
+    let manager = match RuntimeManager::new_persistent(
+        Arc::new(WindowsTaskServiceManager::new()),
         layout.clone(),
-    ));
+    ) {
+        Ok(manager) => manager,
+        Err(error) => {
+            eprintln!("runtime_manager_persistent_state_error: {error}");
+            std::process::exit(2);
+        }
+    };
+    #[cfg(not(windows))]
+    let manager = RuntimeManager::new(Arc::new(FailClosedServiceManager), layout.clone());
+    let manager = Arc::new(manager);
 
     match command {
         "status" | "--status-json" => match manager.snapshot() {
@@ -69,6 +83,9 @@ fn main() {
         },
         "doctor" => {
             println!("Hermes Runtime Manager foundation is installed.");
+            #[cfg(windows)]
+            println!("Platform adapter status: Windows Task Scheduler service projection selected.");
+            #[cfg(not(windows))]
             println!("Platform adapter status: fail-closed until a verified adapter is selected.");
         }
         "serve-read-only" => serve_read_only(manager, layout),

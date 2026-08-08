@@ -1,0 +1,97 @@
+name: Hermes Windows Authoritative Health
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-authoritative-health-*"
+    paths:
+      - "hermes-runtime-manager/src/startup_reconcile.rs"
+      - "hermes-runtime-manager/src/windows_startup_health.rs"
+      - "hermes-runtime-manager/src/windows_update_health.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_live_session.py"
+      - "hermes-connector/src/hermes_connector/live_session_cli.py"
+      - "hermes-connector/pyproject.toml"
+      - "hermes-connector/tests/platform/windows/test_live_session_probe.py"
+      - ".github/workflows/hermes-windows-authoritative-health.yml"
+  pull_request:
+    paths:
+      - "hermes-runtime-manager/src/startup_reconcile.rs"
+      - "hermes-runtime-manager/src/windows_startup_health.rs"
+      - "hermes-runtime-manager/src/windows_update_health.rs"
+      - "hermes-runtime-manager/src/lib.rs"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_live_session.py"
+      - "hermes-connector/src/hermes_connector/live_session_cli.py"
+      - "hermes-connector/pyproject.toml"
+      - "hermes-connector/tests/platform/windows/test_live_session_probe.py"
+      - ".github/workflows/hermes-windows-authoritative-health.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-authoritative-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-static:
+    name: Startup reconcile contract / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - name: Check Runtime Manager
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
+      - name: Verify startup reconcile state machine
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml startup_reconcile::tests -- --nocapture
+
+  windows-rust:
+    name: Windows exact-release health contract / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - name: Compile Runtime Manager
+        run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
+      - name: Verify generation-bound update health
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml windows_update_health::tests -- --nocapture
+      - name: Verify startup reconcile state machine
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml startup_reconcile::tests -- --nocapture
+
+  windows-live-session:
+    name: Real Agent Session Catalog probe / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector, Plugin and test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          -e hermes-agent-plugin
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint live Session probe slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/bootstrap/windows_live_session.py
+          hermes-connector/src/hermes_connector/live_session_cli.py
+          hermes-connector/tests/platform/windows/test_live_session_probe.py
+      - name: Verify real Windows live Session probe
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_live_session_probe.py
+      - name: Regress authoritative Windows status receipt
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_status_receipt.py
