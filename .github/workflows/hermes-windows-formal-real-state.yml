@@ -1,0 +1,46 @@
+name: Hermes Windows Formal Real State
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-formal-composition-*"
+    paths:
+      - "hermes-connector/tests/platform/windows/test_formal_composition_real_state.py"
+      - ".github/workflows/hermes-windows-formal-real-state.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/tests/platform/windows/test_formal_composition_real_state.py"
+      - ".github/workflows/hermes-windows-formal-real-state.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-real-state:
+    name: Windows formal runtime from real paired state / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Plugin and Connector dependencies
+        run: >-
+          python -m pip install
+          -e hermes-agent-plugin
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          pytest-timeout
+      - name: Build formal runtime from real paired state
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition_real_state.py::test_formal_runtime_builds_from_real_dpapi_paired_state
+      - name: Verify real runtime SQLite and lock ACLs
+        if: always()
+        run: >-
+          python -m pytest -vv
+          --timeout=60 --timeout-method=thread
+          hermes-connector/tests/platform/windows/test_formal_composition_real_state.py::test_real_runtime_sqlite_and_lock_files_are_current_user_private
