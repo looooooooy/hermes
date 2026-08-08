@@ -45,6 +45,9 @@ from hermes_connector.adapters.platform.windows.process_identity import (
 from hermes_connector.adapters.platform.windows.session_catalog_client import (
     WindowsSessionCatalogClient,
 )
+from hermes_connector.adapters.platform.windows.sqlite_storage import (
+    WindowsPrivateSQLiteStorageComponent,
+)
 from hermes_connector.adapters.platform.windows.status_receipt import (
     WindowsStatusReceiptStore,
 )
@@ -54,7 +57,6 @@ from hermes_connector.adapters.secure_store_cloud_token import (
 from hermes_connector.adapters.secure_store_device_identity import (
     SecureStoreDeviceIdentity,
 )
-from hermes_connector.adapters.sqlite_storage import SQLiteStorageComponent
 from hermes_connector.application.cloud_wss_client import CloudClientConfig
 from hermes_connector.application.command_lane import CommandLane, CommandScope
 from hermes_connector.application.device_bound_token_provider import (
@@ -157,7 +159,7 @@ def build_windows_formal_runtime(
 
     tenant_id = str(paired.tenant_id)
     device_id = str(paired.device_id)
-    storage = SQLiteStorageComponent(settings.database_file, config)
+    storage = WindowsPrivateSQLiteStorageComponent(settings.database_file, config)
     codec = ConnectorProtocolCodec()
     foundation_invalidator = FoundationNoOpLocalProjectionInvalidator()
     local_gateway = LocalGatewayClient(
