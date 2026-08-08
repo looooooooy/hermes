@@ -34,6 +34,8 @@ pub mod windows_secret_store;
 #[cfg(windows)]
 pub mod windows_service_manager;
 #[cfg(windows)]
+pub mod windows_startup_health;
+#[cfg(windows)]
 pub mod windows_task_execution;
 #[cfg(windows)]
 pub mod windows_task_scheduler;
