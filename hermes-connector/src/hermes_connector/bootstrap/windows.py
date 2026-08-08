@@ -14,7 +14,9 @@ from hermes_connector.adapters.foundation_projection import (
     FoundationNoOpLocalProjectionInvalidator,
 )
 from hermes_connector.adapters.local_runtime_preflight import LocalRuntimePreflight
-from hermes_connector.adapters.platform.windows.agent_discovery import WindowsAgentDiscovery
+from hermes_connector.adapters.platform.windows.agent_discovery import (
+    WindowsAgentDiscovery,
+)
 from hermes_connector.adapters.platform.windows.dpapi_secret_store import (
     WindowsDPAPISecretStore,
 )
@@ -22,11 +24,15 @@ from hermes_connector.adapters.platform.windows.instance_identity import (
     InstanceIdentities,
     WindowsInstanceIdentityStore,
 )
-from hermes_connector.adapters.platform.windows.instance_lock import WindowsInstanceLock
+from hermes_connector.adapters.platform.windows.instance_lock import (
+    WindowsInstanceLock,
+)
 from hermes_connector.adapters.platform.windows.local_gateway_transport import (
     WindowsLocalGatewayTransport,
 )
-from hermes_connector.adapters.platform.windows.observer_client import WindowsObserverClient
+from hermes_connector.adapters.platform.windows.observer_client import (
+    WindowsObserverClient,
+)
 from hermes_connector.adapters.platform.windows.pairing_command_lock import (
     WindowsPairingCommandLock,
 )
@@ -49,11 +55,18 @@ from hermes_connector.adapters.platform.windows.process_identity import (
 from hermes_connector.adapters.platform.windows.session_catalog_client import (
     WindowsSessionCatalogClient,
 )
+from hermes_connector.adapters.platform.windows.sqlite_storage import (
+    WindowsPrivateSQLiteStorageComponent,
+)
 from hermes_connector.adapters.platform.windows.status_receipt import (
     WindowsStatusReceiptStore,
 )
-from hermes_connector.adapters.secure_store_cloud_token import SecureStoreCloudTokenProvider
-from hermes_connector.adapters.secure_store_device_identity import SecureStoreDeviceIdentity
+from hermes_connector.adapters.secure_store_cloud_token import (
+    SecureStoreCloudTokenProvider,
+)
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
+)
 from hermes_connector.adapters.sqlite_storage import SQLiteStorageComponent
 from hermes_connector.application.cloud_wss_client import (
     CloudClientConfig,
@@ -213,7 +226,9 @@ def build_windows_runtime(
     if expected_local_endpoint is None:
         raise LocalRuntimeUnavailable()
 
-    identities = WindowsInstanceIdentityStore(settings.instance_state_file).load_or_create()
+    identities = WindowsInstanceIdentityStore(
+        settings.instance_state_file
+    ).load_or_create()
     account = f"connector-instance:{identities.connector_instance_id}"
     device_identity = SecureStoreDeviceIdentity(
         WindowsDPAPISecretStore(
@@ -243,7 +258,7 @@ def build_windows_runtime(
         initial_lifecycle_state=paired.lifecycle_state,
     )
 
-    storage = SQLiteStorageComponent(settings.database_file, config)
+    storage = WindowsPrivateSQLiteStorageComponent(settings.database_file, config)
     protocol_codec = ConnectorProtocolCodec()
     foundation_invalidator = FoundationNoOpLocalProjectionInvalidator()
     local_gateway = LocalGatewayClient(
@@ -388,7 +403,9 @@ def build_windows_pairing_runtime(
     """Compose one explicit Windows pairing command without starting the service."""
 
     check_windows_runtime(settings)
-    identities = WindowsInstanceIdentityStore(settings.instance_state_file).load_or_create()
+    identities = WindowsInstanceIdentityStore(
+        settings.instance_state_file
+    ).load_or_create()
     account = f"connector-instance:{identities.connector_instance_id}"
     device_identity = SecureStoreDeviceIdentity(
         WindowsDPAPISecretStore(
@@ -426,9 +443,14 @@ def build_windows_pairing_runtime(
         token_store=token_store,
         now=lambda: datetime.now(UTC),
         new_idempotency_key=uuid4,
-        command_lock=WindowsPairingCommandLock(settings.pairing_command_lock_file),
+        command_lock=WindowsPairingCommandLock(
+            settings.pairing_command_lock_file
+        ),
     )
-    return WindowsPairingRuntime(coordinator=coordinator, pairing_http=pairing_http)
+    return WindowsPairingRuntime(
+        coordinator=coordinator,
+        pairing_http=pairing_http,
+    )
 
 
 def read_windows_status(
