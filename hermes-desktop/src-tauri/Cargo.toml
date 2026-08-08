@@ -13,7 +13,14 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64 = "0.22"
 hermes-runtime-manager = { path = "../../hermes-runtime-manager" }
+rand = "0.8"
+reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tauri = { version = "2", features = ["tray-icon"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
