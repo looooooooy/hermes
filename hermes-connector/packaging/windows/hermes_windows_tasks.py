@@ -116,7 +116,7 @@ def delete_task_command(task: WindowsConnectorTask) -> tuple[str, ...]:
 
 def query_task_command(task: WindowsConnectorTask) -> tuple[str, ...]:
     _validate_task(task)
-    return ("schtasks.exe", "/Query", "/TN", task.task_name, "/FO", "LIST", "/V")
+    return ("schtasks.exe", "/Query", "/TN", task.task_name, "/XML")
 
 
 def _validate_task(task: WindowsConnectorTask) -> None:
