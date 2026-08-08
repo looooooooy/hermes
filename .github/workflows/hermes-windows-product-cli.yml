@@ -1,0 +1,78 @@
+name: Hermes Windows Product CLI
+
+on:
+  push:
+    branches:
+      - "feature/hermes-windows-formal-composition-*"
+    paths:
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/settings.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_provision.py"
+      - "hermes-connector/tests/unit/bootstrap/test_cli.py"
+      - "hermes-connector/tests/platform/windows/test_product_cli.py"
+      - ".github/workflows/hermes-windows-product-cli.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/settings.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows.py"
+      - "hermes-connector/src/hermes_connector/bootstrap/windows_provision.py"
+      - "hermes-connector/tests/unit/bootstrap/test_cli.py"
+      - "hermes-connector/tests/platform/windows/test_product_cli.py"
+      - ".github/workflows/hermes-windows-product-cli.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-windows-product-cli-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  existing-cli:
+    name: Existing CLI compatibility / ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+          ruff==0.16.1
+      - name: Lint product CLI slice
+        run: >-
+          ruff check
+          hermes-connector/src/hermes_connector/cli.py
+          hermes-connector/src/hermes_connector/bootstrap/windows_provision.py
+          hermes-connector/tests/platform/windows/test_product_cli.py
+      - name: Regress existing CLI behavior
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/unit/bootstrap/test_cli.py
+
+  windows-cli:
+    name: Windows product CLI / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Connector test dependencies
+        run: >-
+          python -m pip install
+          -e hermes-connector
+          pytest
+          pytest-asyncio
+      - name: Verify Windows dispatch, provisioning, status, run, and stop bridge
+        run: >-
+          python -m pytest -vv
+          hermes-connector/tests/platform/windows/test_product_cli.py
