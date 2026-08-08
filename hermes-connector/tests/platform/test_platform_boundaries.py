@@ -368,10 +368,13 @@ if any(name == macos_prefix or name.startswith(macos_prefix + ".") for name in s
                 "agent_discovery.py",
                 "availability.py",
                 "control_client.py",
+                "duplex_pipe.py",
                 "instance_lock.py",
                 "local_gateway_transport.py",
                 "named_pipe.py",
+                "observer_client.py",
                 "process_identity.py",
+                "session_catalog_client.py",
             ],
         )
         windows = importlib.import_module("hermes_connector.adapters.platform.windows")
