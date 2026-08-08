@@ -4,7 +4,6 @@ import asyncio
 import ctypes
 import hashlib
 import hmac
-import os
 from ctypes import wintypes
 from pathlib import Path
 
@@ -38,11 +37,12 @@ _LIBRARIES: tuple[object, object] | None = None
 
 def _libraries() -> tuple[object, object]:
     global _LIBRARIES
-    if os.name != "nt":
-        raise RuntimeError("Windows DPAPI secret store requires Windows")
     if _LIBRARIES is None:
-        crypt32 = ctypes.WinDLL("crypt32", use_last_error=True)
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            raise RuntimeError("Windows DPAPI secret store requires Win32 APIs")
+        crypt32 = win_dll("crypt32", use_last_error=True)
+        kernel32 = win_dll("kernel32", use_last_error=True)
         _configure(crypt32, kernel32)
         _LIBRARIES = crypt32, kernel32
     return _LIBRARIES
