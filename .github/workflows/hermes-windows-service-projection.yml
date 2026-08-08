@@ -6,6 +6,7 @@ on:
       - "feature/hermes-windows-service-projection-*"
     paths:
       - "hermes-runtime-manager/src/windows_service_manager.rs"
+      - "hermes-runtime-manager/src/manager_state.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-runtime-manager/src/manager.rs"
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - "hermes-runtime-manager/src/windows_service_manager.rs"
+      - "hermes-runtime-manager/src/manager_state.rs"
       - "hermes-runtime-manager/src/lib.rs"
       - "hermes-runtime-manager/src/main.rs"
       - "hermes-runtime-manager/src/manager.rs"
@@ -31,7 +33,7 @@ concurrency:
 
 jobs:
   static:
-    name: Projection formatting and non-Windows regression / ubuntu-latest
+    name: Projection persistence regression / ubuntu-latest
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -40,13 +42,20 @@ jobs:
         with:
           toolchain: 1.88.0
           components: rustfmt
-      - name: Check projection formatting
-        run: rustfmt --edition 2021 --check hermes-runtime-manager/src/windows_service_manager.rs
+      - name: Check new persistence formatting
+        run: >-
+          rustfmt --edition 2021 --check
+          hermes-runtime-manager/src/manager_state.rs
+          hermes-runtime-manager/src/manager.rs
       - name: Check Runtime Manager
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
+      - name: Verify persistent state contract
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml manager_state::tests -- --nocapture
+      - name: Verify Runtime Manager reboot identity semantics
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml manager::tests -- --nocapture
 
   windows:
-    name: Real on-demand Task Scheduler projection / windows-latest
+    name: Real Windows projection and reboot identity / windows-latest
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
@@ -59,6 +68,10 @@ jobs:
         run: cargo check --manifest-path hermes-runtime-manager/Cargo.toml
       - name: Run real Windows service projection tests
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml windows_service_manager -- --nocapture
+      - name: Verify Windows persistent state atomic replacement
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml manager_state::tests -- --nocapture
+      - name: Verify Windows Runtime Manager reboot identity semantics
+        run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml manager::tests -- --nocapture
       - name: Regress generic release activator
         run: cargo test --manifest-path hermes-runtime-manager/Cargo.toml update_adapters::tests -- --nocapture
       - name: Regress Connector drain and reconcile lane
