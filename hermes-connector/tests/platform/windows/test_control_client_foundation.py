@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -15,6 +14,10 @@ from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
 from hermes_connector.adapters.platform.windows.control_client import (
     WindowsControlRelayClient,
 )
+from hermes_connector.adapters.platform.windows.process_identity import (
+    normalize_process_identity,
+)
+from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows Named Pipes required")
 
@@ -25,6 +28,17 @@ async def test_high_level_control_client_attaches_and_dispatches() -> None:
         profile="default",
         host_bundle_id="com.hermes.windows-control-client-test",
     ).bind_runtime("generation-windows-control-client-1")
+    connector_identity = normalize_process_identity(authority.process_identity)
+    assert connector_identity is not None
+    runtime_authority = LocalRuntimeAuthority(
+        profile=authority.profile,
+        runtime_generation=authority.runtime_generation,
+        instance_id=authority.instance_id,
+        host_bundle_id=authority.host_bundle_id,
+        process_identity=connector_identity,
+        required_capabilities=("session.observe",),
+        optional_capabilities=("session.control",),
+    )
     observed: list[tuple[dict, object]] = []
 
     def dispatcher(request: dict, transport: object) -> dict:
@@ -41,12 +55,6 @@ async def test_high_level_control_client_attaches_and_dispatches() -> None:
     registration = start_control_endpoint(
         authority=authority,
         dispatcher=dispatcher,
-    )
-    runtime_authority = SimpleNamespace(
-        pid=authority.pid,
-        profile=authority.profile,
-        runtime_generation=authority.runtime_generation,
-        process_identity=authority.process_identity,
     )
     client = WindowsControlRelayClient(
         runtime_authority,
