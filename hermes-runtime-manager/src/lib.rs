@@ -7,6 +7,8 @@ pub mod linux_secret_service;
 #[cfg(target_os = "linux")]
 pub mod linux_systemd_user;
 pub mod local_ipc;
+#[cfg(target_os = "macos")]
+pub mod macos_service_manager;
 pub mod managed_payload_archive;
 pub mod managed_release_stager;
 pub mod manager;
@@ -53,6 +55,8 @@ pub use host_update_safety_ipc::{
 pub use linux_secret_service::LinuxSecretServiceStore;
 #[cfg(target_os = "linux")]
 pub use linux_systemd_user::{LinuxSystemdUserBootstrap, LinuxSystemdUserStatus};
+#[cfg(target_os = "macos")]
+pub use macos_service_manager::MacOSLaunchAgentServiceManager;
 pub use managed_payload_archive::{
     pack_managed_payload, unpack_managed_payload, ManagedPayloadArchiveError,
     ManagedPayloadArchiveReceiptV1,
