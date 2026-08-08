@@ -17,6 +17,7 @@ use tauri::{Manager, RunEvent};
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod tray;
+mod workspace_auth;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +60,9 @@ struct RuntimeSnapshot {
     runtime_version: String,
     runtime_generation: String,
     state: String,
+    workspace_authenticated: bool,
+    workspace_endpoint: Option<String>,
+    workspace_user: Option<String>,
     cloud_connected: bool,
     agent_ready: bool,
     active_sessions: u8,
@@ -79,10 +83,20 @@ fn local_device_name() -> String {
 
 #[tauri::command]
 fn runtime_snapshot() -> RuntimeSnapshot {
+    let workspace = workspace_auth::status();
     match fetch_manager_snapshot() {
-        Ok(snapshot) => from_manager_snapshot(snapshot),
-        Err(error) => offline_snapshot(error),
+        Ok(snapshot) => from_manager_snapshot(snapshot, workspace),
+        Err(error) => offline_snapshot(error, workspace),
     }
+}
+
+#[tauri::command]
+async fn workspace_connect(
+    endpoint: String,
+) -> Result<workspace_auth::WorkspaceAuthStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || workspace_auth::connect(&endpoint))
+        .await
+        .map_err(|_| "Hermes workspace sign-in task did not complete.".to_owned())?
 }
 
 #[cfg(unix)]
@@ -122,7 +136,10 @@ fn fetch_manager_snapshot_from_pipe(pipe_name: &str) -> Result<ManagerSnapshotV1
     }
 }
 
-fn from_manager_snapshot(snapshot: ManagerSnapshotV1) -> RuntimeSnapshot {
+fn from_manager_snapshot(
+    snapshot: ManagerSnapshotV1,
+    workspace: workspace_auth::WorkspaceAuthStatus,
+) -> RuntimeSnapshot {
     let cloud_connected = component_ready(&snapshot, "Hermes Cloud");
     let core_ready = component_ready(&snapshot, "Hermes Core");
     let plugin_ready = component_ready(&snapshot, "Agent Plugin");
@@ -154,6 +171,9 @@ fn from_manager_snapshot(snapshot: ManagerSnapshotV1) -> RuntimeSnapshot {
             .clone()
             .unwrap_or_else(|| "manager-connected".to_owned()),
         state: lifecycle_name(snapshot.state).to_owned(),
+        workspace_authenticated: workspace.authenticated,
+        workspace_endpoint: workspace.endpoint,
+        workspace_user: workspace.user_id,
         cloud_connected,
         agent_ready,
         active_sessions: 0,
@@ -179,7 +199,10 @@ fn from_manager_snapshot(snapshot: ManagerSnapshotV1) -> RuntimeSnapshot {
     }
 }
 
-fn offline_snapshot(error: String) -> RuntimeSnapshot {
+fn offline_snapshot(
+    error: String,
+    workspace: workspace_auth::WorkspaceAuthStatus,
+) -> RuntimeSnapshot {
     RuntimeSnapshot {
         device_name: local_device_name(),
         profile_name: "Work".to_owned(),
@@ -189,6 +212,9 @@ fn offline_snapshot(error: String) -> RuntimeSnapshot {
         runtime_version: "not-connected".to_owned(),
         runtime_generation: "manager-not-connected".to_owned(),
         state: "offline".to_owned(),
+        workspace_authenticated: workspace.authenticated,
+        workspace_endpoint: workspace.endpoint,
+        workspace_user: workspace.user_id,
         cloud_connected: false,
         agent_ready: false,
         active_sessions: 0,
@@ -274,7 +300,7 @@ pub fn run() {
             tray::create_tray(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![runtime_snapshot]);
+        .invoke_handler(tauri::generate_handler![runtime_snapshot, workspace_connect]);
 
     let app = builder
         .build(tauri::generate_context!())
