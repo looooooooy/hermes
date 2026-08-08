@@ -10,6 +10,7 @@ pub mod local_ipc;
 pub mod managed_payload_archive;
 pub mod managed_release_stager;
 pub mod manager;
+pub mod manager_state;
 pub mod model;
 pub mod platform;
 pub mod portable_plugin_signature;
@@ -53,6 +54,7 @@ pub use managed_payload_archive::{
 };
 pub use managed_release_stager::PrivatePythonManagedReleaseStager;
 pub use manager::{ManagerError, RuntimeManager};
+pub use manager_state::{ManagerStateError, ManagerStateFile, RestoredManagerState};
 pub use model::{LifecycleState, ManagerSnapshotV1, ManagedReleaseManifestV1, ToolchainManifestV1};
 pub use portable_plugin_signature::{
     verify_portable_plugin_signature, verify_portable_plugin_signature_at,
@@ -87,9 +89,7 @@ pub use update_download::{
     UpdateDownloadError,
 };
 pub use update_http::{HttpDownloadGrantV1, HttpRangeSource};
-pub use update_runtime::{
-    compose_managed_update_safe_window, ManagedUpdateSafeWindow,
-};
+pub use update_runtime::{compose_managed_update_safe_window, ManagedUpdateSafeWindow};
 #[cfg(target_os = "macos")]
 pub use update_runtime::compose_macos_authoritative_update_safe_window;
 #[cfg(windows)]
