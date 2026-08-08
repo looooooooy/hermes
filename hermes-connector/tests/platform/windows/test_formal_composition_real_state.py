@@ -7,7 +7,9 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.local_gateway_transport import (
     create_local_gateway_resource,
 )
@@ -28,7 +30,9 @@ from hermes_connector.adapters.platform.windows.private_state import (
     ensure_private_directory,
     validate_private_file,
 )
-from hermes_connector.adapters.secure_store_device_identity import SecureStoreDeviceIdentity
+from hermes_connector.adapters.secure_store_device_identity import (
+    SecureStoreDeviceIdentity,
+)
 from hermes_connector.bootstrap.config import ConnectorConfig
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
 from hermes_connector.bootstrap.windows import build_windows_runtime
@@ -51,11 +55,6 @@ def _settings(tmp_path: Path) -> ConnectorRuntimeSettings:
         profile="default",
         database_file=state / "connector.sqlite3",
         lock_file=state / "connector.lock",
-        instance_state_file=state / "instance.json",
-        paired_projection_file=state / "paired.json",
-        pairing_offer_projection_file=state / "pairing-offer.json",
-        pairing_command_lock_file=state / "pairing-command.lock",
-        status_receipt_file=state / "status.json",
         state_directory=state,
         local_gateway_registry_directory=roles / "local-registry",
         local_gateway_socket_directory=roles / "local-socket",
@@ -147,7 +146,9 @@ async def test_formal_runtime_builds_from_real_dpapi_paired_state(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_real_runtime_sqlite_and_lock_files_are_current_user_private(tmp_path: Path) -> None:
+async def test_real_runtime_sqlite_and_lock_files_are_current_user_private(
+    tmp_path: Path,
+) -> None:
     settings = _settings(tmp_path)
     await _prepare_real_paired_state(settings)
     resource = _start_gateway()
