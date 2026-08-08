@@ -8,7 +8,9 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import LocalContractV1Adapter
+from hermes_agent_plugin.adapters.local_protocol.handshake_v1 import (
+    LocalContractV1Adapter,
+)
 from hermes_agent_plugin.adapters.platform.windows.control_relay import (
     start_control_endpoint,
 )
@@ -20,7 +22,9 @@ from hermes_agent_plugin.adapters.platform.windows.runtime_authority import (
 )
 
 from hermes_connector.adapters.local_runtime_preflight import LocalRuntimePreflight
-from hermes_connector.adapters.platform.windows.agent_discovery import WindowsAgentDiscovery
+from hermes_connector.adapters.platform.windows.agent_discovery import (
+    WindowsAgentDiscovery,
+)
 from hermes_connector.adapters.platform.windows.dpapi_secret_store import (
     WindowsDPAPISecretStore,
 )
@@ -41,7 +45,9 @@ from hermes_connector.adapters.platform.windows.private_state import (
 from hermes_connector.adapters.platform.windows.process_identity import (
     normalize_process_identity,
 )
-from hermes_connector.adapters.secure_store_cloud_token import SecureStoreCloudTokenProvider
+from hermes_connector.adapters.secure_store_cloud_token import (
+    SecureStoreCloudTokenProvider,
+)
 from hermes_connector.domain.cloud_protocol import CommandDelivery
 from hermes_connector.domain.local_gateway import LocalRuntimeAuthority
 from hermes_connector.domain.owner_control import OwnerControlOutcomeUnknown
