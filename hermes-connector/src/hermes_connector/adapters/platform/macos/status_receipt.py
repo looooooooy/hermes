@@ -8,19 +8,19 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from hermes_connector.adapters.status_receipt_codec import (
-    MAX_STATUS_RECEIPT_BYTES,
-    decode_status_receipt,
-    encode_status_receipt,
-    normalize_process_identity_evidence,
-    timestamp_is_current,
-)
 from hermes_connector.adapters.platform.macos.instance_identity import (
     _fsync_directory,
     _write_all,
 )
 from hermes_connector.adapters.platform.macos.process_identity import (
     ProcessIdentityProvider,
+)
+from hermes_connector.adapters.status_receipt_codec import (
+    MAX_STATUS_RECEIPT_BYTES,
+    decode_status_receipt,
+    encode_status_receipt,
+    normalize_process_identity_evidence,
+    timestamp_is_current,
 )
 from hermes_connector.domain.readiness_status import ConnectorStatusReceipt
 
