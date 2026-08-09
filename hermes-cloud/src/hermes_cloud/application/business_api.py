@@ -33,8 +33,15 @@ def build_business_api_application(
         from hermes_cloud.modules.cloud_api.adapters.fastapi import (
             build_fastapi_application,
         )
+        from hermes_cloud.modules.cloud_api.adapters.native_auth import (
+            register_native_auth_routes,
+        )
 
-        return build_fastapi_application(dependency_probes, **composition)
+        application = build_fastapi_application(dependency_probes, **composition)
+        service = getattr(application, "_cloud_api_service", None)
+        if service is not None:
+            register_native_auth_routes(application, authentication=service)
+        return application
     if composition:
         raise RuntimeError("Business API adapter dependencies are unavailable")
     return HealthApplication("business-api", dependency_probes)
