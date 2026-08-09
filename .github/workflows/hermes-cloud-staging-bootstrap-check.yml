@@ -1,0 +1,39 @@
+name: Hermes Cloud staging bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/staging/scripts/bootstrap_hermes_cloud_sqlite.sh"
+      - "deploy/staging/nginx/hermes-public-p0.conf.template"
+      - ".github/workflows/hermes-cloud-staging-bootstrap-check.yml"
+  pull_request:
+    paths:
+      - "deploy/staging/scripts/bootstrap_hermes_cloud_sqlite.sh"
+      - "deploy/staging/nginx/hermes-public-p0.conf.template"
+      - ".github/workflows/hermes-cloud-staging-bootstrap-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse bootstrap shell
+        run: bash -n deploy/staging/scripts/bootstrap_hermes_cloud_sqlite.sh
+      - name: Lint bootstrap shell
+        run: shellcheck deploy/staging/scripts/bootstrap_hermes_cloud_sqlite.sh
+      - name: Verify P0 Nginx template contract
+        run: |
+          set -euo pipefail
+          template=deploy/staging/nginx/hermes-public-p0.conf.template
+          grep -q '__SERVER_NAME__' "$template"
+          grep -q '__TLS_CERTIFICATE__' "$template"
+          grep -q '__TLS_CERTIFICATE_KEY__' "$template"
+          grep -q '127.0.0.1:8101' "$template"
+          grep -q '127.0.0.1:8102' "$template"
+          ! grep -q '127.0.0.1:8104' "$template"
+          grep -q '/hermes/auth/' "$template"
+          grep -q '/hermes/internal/connector/ws' "$template"
