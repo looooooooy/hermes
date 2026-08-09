@@ -23,6 +23,7 @@ CHALLENGE = base64.urlsafe_b64encode(
 ).rstrip(b"=").decode("ascii")
 STATE = "state-0123456789abcdef"
 REDIRECT = "http://127.0.0.1:55407/oauth/callback"
+REQUEST_ID = "r" * 43
 
 
 class _AuthService:
@@ -124,6 +125,100 @@ def test_native_pkce_code_is_loopback_bound_one_time_and_exchanges_tokens() -> N
     assert replay.status_code == 401
     assert "access-token" not in replay.text
     assert "refresh-token" not in replay.text
+
+
+def test_native_polling_flow_avoids_browser_loopback_navigation() -> None:
+    with TestClient(_application(), base_url="https://api.example.test") as client:
+        pending = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": VERIFIER,
+                "state": STATE,
+            },
+        )
+        authorization = client.post(
+            "/auth/native/authorize",
+            data={
+                **_params(request_id=REQUEST_ID),
+                "username": "user@example.test",
+                "password": "correct-password",
+            },
+            follow_redirects=False,
+        )
+        polled = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": VERIFIER,
+                "state": STATE,
+            },
+        )
+        replay_poll = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": VERIFIER,
+                "state": STATE,
+            },
+        )
+        code = polled.json()["code"]
+        exchanged = client.post(
+            "/auth/native/token",
+            json={"code": code, "code_verifier": VERIFIER},
+        )
+
+    assert pending.status_code == 202
+    assert pending.json() == {"status": "pending"}
+    assert authorization.status_code == 200
+    assert "Hermes sign-in complete" in authorization.text
+    assert "127.0.0.1" not in authorization.text
+    assert polled.status_code == 200
+    assert replay_poll.status_code == 202
+    assert exchanged.status_code == 200
+    assert exchanged.json()["access_token"] == "access-token"
+
+
+def test_native_polling_flow_requires_matching_pkce_and_state() -> None:
+    with TestClient(_application(), base_url="https://api.example.test") as client:
+        authorization = client.post(
+            "/auth/native/authorize",
+            data={
+                **_params(request_id=REQUEST_ID),
+                "username": "user@example.test",
+                "password": "correct-password",
+            },
+            follow_redirects=False,
+        )
+        wrong_state = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": VERIFIER,
+                "state": "different-state-0123456789",
+            },
+        )
+        wrong_verifier = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": "x" * 43,
+                "state": STATE,
+            },
+        )
+        correct = client.post(
+            "/auth/native/poll",
+            json={
+                "request_id": REQUEST_ID,
+                "code_verifier": VERIFIER,
+                "state": STATE,
+            },
+        )
+
+    assert authorization.status_code == 200
+    assert wrong_state.status_code == 202
+    assert wrong_verifier.status_code == 202
+    assert correct.status_code == 200
 
 
 def test_native_authorization_rejects_bad_password_without_issuing_code() -> None:
