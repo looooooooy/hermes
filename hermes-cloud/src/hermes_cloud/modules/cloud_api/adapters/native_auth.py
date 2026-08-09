@@ -114,10 +114,11 @@ def register_native_auth_routes(
 
     async def authorize_post(request: Request):
         form = await _read_form(request)
-        if form is None:
+        if form is None or set(form) != _REQUIRED_FORM_FIELDS:
             return _invalid_request()
-        parsed = _parse_authorization_request(form)
-        if parsed is None or set(form) != _REQUIRED_FORM_FIELDS:
+        oauth_fields = {key: form[key] for key in _REQUIRED_AUTHORIZE_FIELDS}
+        parsed = _parse_authorization_request(oauth_fields)
+        if parsed is None:
             return _invalid_request()
         username = form["username"]
         password = form["password"]
