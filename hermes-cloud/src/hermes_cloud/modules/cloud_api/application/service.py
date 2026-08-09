@@ -281,7 +281,12 @@ class CloudApiService:
                 token,
                 self._signing_key(),
                 algorithms=["HS256"],
-                options={"require": ["exp", "iat", "nbf"]},
+                options={
+                    "require": ["exp", "iat", "nbf"],
+                    "verify_exp": False,
+                    "verify_iat": False,
+                    "verify_nbf": False,
+                },
             )
             if not isinstance(claims, dict) or set(claims) != {
                 "tenant_id",
@@ -297,13 +302,14 @@ class CloudApiService:
                 raise AuthenticationFailed
             issued_at = claims["iat"]
             not_before = claims["nbf"]
-            expires_at = int(claims["exp"])
+            expires_at = claims["exp"]
+            current_time = int(self._now().timestamp())
             if (
                 type(issued_at) is not int
                 or type(not_before) is not int
-                or type(claims["exp"]) is not int
+                or type(expires_at) is not int
                 or not (
-                    issued_at <= not_before < expires_at
+                    issued_at <= not_before <= current_time < expires_at
                     and 0 < expires_at - issued_at <= 3_600
                 )
             ):
