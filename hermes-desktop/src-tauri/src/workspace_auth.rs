@@ -2,22 +2,19 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use rand::RngCore;
 use reqwest::blocking::Client;
-use reqwest::Url;
+use reqwest::{StatusCode, Url};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::io::{BufRead, BufReader, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CALLBACK_PATH: &str = "/oauth/callback";
 const KEYCHAIN_SERVICE: &str = "com.hermes.desktop.workspace-auth.v1";
 const KEYCHAIN_ACCOUNT: &str = "current";
-const CALLBACK_TIMEOUT: Duration = Duration::from_secs(600);
+const AUTH_TIMEOUT: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
-const MAX_REQUEST_LINE_BYTES: usize = 4096;
-const MAX_HEADER_LINE_BYTES: usize = 8192;
-const MAX_HEADER_LINES: usize = 64;
+const POLL_INTERVAL: Duration = Duration::from_millis(300);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,16 +49,16 @@ struct TokenPayload {
     user_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PollPayload {
+    code: String,
+}
+
 struct PkceCredentials {
     verifier: String,
     challenge: String,
     state: String,
-}
-
-struct AuthorizationCallback {
-    code: Option<String>,
-    state: String,
-    error: Option<String>,
+    request_id: String,
 }
 
 pub fn status() -> WorkspaceAuthStatus {
@@ -86,34 +83,29 @@ pub fn status() -> WorkspaceAuthStatus {
 pub fn connect(endpoint: &str) -> Result<WorkspaceAuthStatus, String> {
     let endpoint = normalize_endpoint(endpoint)?;
     let credentials = generate_pkce();
+
+    // Keep a unique RFC 8252 loopback redirect in the authorization request for
+    // backwards compatibility with existing native clients. Desktop no longer
+    // depends on the browser reaching this listener: it finishes through the
+    // authenticated PKCE polling channel below.
     let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))
-        .map_err(|_| "Could not start the secure local sign-in callback.".to_owned())?;
-    listener
-        .set_nonblocking(true)
-        .map_err(|_| "Could not configure the secure local sign-in callback.".to_owned())?;
+        .map_err(|_| "Could not reserve the secure local sign-in callback.".to_owned())?;
     let port = listener
         .local_addr()
         .map_err(|_| "Could not read the secure local sign-in callback address.".to_owned())?
         .port();
     let redirect_uri = format!("http://127.0.0.1:{port}{CALLBACK_PATH}");
+
     let authorization_url = build_authorization_url(
         &endpoint,
         &redirect_uri,
         &credentials.challenge,
         &credentials.state,
+        &credentials.request_id,
     )?;
     open_browser(&authorization_url)?;
-    let callback = wait_for_callback(&listener, port)?;
-    if !constant_time_eq(callback.state.as_bytes(), credentials.state.as_bytes()) {
-        return Err("Hermes sign-in response could not be verified.".to_owned());
-    }
-    if let Some(error) = callback.error {
-        return Err(format!("Hermes sign-in was denied ({error})."));
-    }
-    let code = callback
-        .code
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "Hermes sign-in returned no authorization code.".to_owned())?;
+
+    let code = wait_for_authorization(&endpoint, &credentials)?;
     let tokens = exchange_code(&endpoint, &code, &credentials.verifier)?;
     let stored = StoredWorkspaceTokens {
         schema_version: 1,
@@ -167,15 +159,19 @@ fn normalize_endpoint(raw: &str) -> Result<Url, String> {
 fn generate_pkce() -> PkceCredentials {
     let mut verifier_bytes = [0u8; 32];
     let mut state_bytes = [0u8; 24];
+    let mut request_bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut verifier_bytes);
     rand::thread_rng().fill_bytes(&mut state_bytes);
+    rand::thread_rng().fill_bytes(&mut request_bytes);
     let verifier = URL_SAFE_NO_PAD.encode(verifier_bytes);
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let state = URL_SAFE_NO_PAD.encode(state_bytes);
+    let request_id = URL_SAFE_NO_PAD.encode(request_bytes);
     PkceCredentials {
         verifier,
         challenge,
         state,
+        request_id,
     }
 }
 
@@ -184,6 +180,7 @@ fn build_authorization_url(
     redirect_uri: &str,
     challenge: &str,
     state: &str,
+    request_id: &str,
 ) -> Result<Url, String> {
     let mut url = endpoint
         .join("auth/native/authorize")
@@ -192,7 +189,8 @@ fn build_authorization_url(
         .append_pair("code_challenge", challenge)
         .append_pair("code_challenge_method", "S256")
         .append_pair("redirect_uri", redirect_uri)
-        .append_pair("state", state);
+        .append_pair("state", state)
+        .append_pair("request_id", request_id);
     Ok(url)
 }
 
@@ -214,100 +212,58 @@ fn open_browser(_url: &Url) -> Result<(), String> {
     Err("Native workspace sign-in is currently enabled only on macOS.".to_owned())
 }
 
-fn wait_for_callback(listener: &TcpListener, port: u16) -> Result<AuthorizationCallback, String> {
-    let deadline = std::time::Instant::now() + CALLBACK_TIMEOUT;
+fn wait_for_authorization(endpoint: &Url, credentials: &PkceCredentials) -> Result<String, String> {
+    let client = Client::builder()
+        .connect_timeout(HTTP_TIMEOUT)
+        .timeout(HTTP_TIMEOUT)
+        .build()
+        .map_err(|_| "Hermes secure sign-in client could not be initialized.".to_owned())?;
+    let deadline = Instant::now() + AUTH_TIMEOUT;
     loop {
-        match listener.accept() {
-            Ok((mut stream, peer)) => {
-                if !peer.ip().is_loopback() {
-                    continue;
-                }
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(5)))
-                    .map_err(|_| "Hermes sign-in callback could not be configured.".to_owned())?;
-                let callback = read_callback(&mut stream, port)?;
-                write_browser_response(&mut stream, callback.error.is_none());
-                return Ok(callback);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                if std::time::Instant::now() >= deadline {
-                    return Err("Hermes sign-in timed out. Try again.".to_owned());
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(_) => return Err("Hermes sign-in callback failed.".to_owned()),
+        if let Some(code) = poll_authorization(&client, endpoint, credentials)? {
+            return Ok(code);
         }
+        if Instant::now() >= deadline {
+            return Err("Hermes sign-in timed out. Try again.".to_owned());
+        }
+        std::thread::sleep(POLL_INTERVAL);
     }
 }
 
-fn read_callback(stream: &mut TcpStream, port: u16) -> Result<AuthorizationCallback, String> {
-    let mut reader = BufReader::new(stream.try_clone().map_err(|_| "Hermes sign-in callback failed.".to_owned())?);
-    let request_line = read_limited_line(&mut reader, MAX_REQUEST_LINE_BYTES)?;
-    for _ in 0..MAX_HEADER_LINES {
-        let line = read_limited_line(&mut reader, MAX_HEADER_LINE_BYTES)?;
-        if line.is_empty() {
-            break;
-        }
+fn poll_authorization(
+    client: &Client,
+    endpoint: &Url,
+    credentials: &PkceCredentials,
+) -> Result<Option<String>, String> {
+    let poll_url = endpoint
+        .join("auth/native/poll")
+        .map_err(|_| "Hermes Cloud polling URL could not be created.".to_owned())?;
+    let response = client
+        .post(poll_url)
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({
+            "request_id": credentials.request_id,
+            "code_verifier": credentials.verifier,
+            "state": credentials.state,
+        }))
+        .send()
+        .map_err(|_| "Hermes Cloud could not be reached while waiting for browser sign-in.".to_owned())?;
+    if response.status() == StatusCode::ACCEPTED {
+        return Ok(None);
     }
-    let mut parts = request_line.splitn(3, ' ');
-    if parts.next() != Some("GET") {
-        return Err("Hermes sign-in callback request is invalid.".to_owned());
+    if !response.status().is_success() {
+        return Err(format!(
+            "Hermes Cloud native sign-in polling is unavailable (HTTP {}).",
+            response.status().as_u16()
+        ));
     }
-    let target = parts
-        .next()
-        .ok_or_else(|| "Hermes sign-in callback request is invalid.".to_owned())?;
-    if !target.starts_with('/') || target.starts_with("//") {
-        return Err("Hermes sign-in callback target is invalid.".to_owned());
+    let payload: PollPayload = response
+        .json()
+        .map_err(|_| "Hermes Cloud returned an invalid browser sign-in result.".to_owned())?;
+    if payload.code.trim().is_empty() || payload.code.len() > 256 {
+        return Err("Hermes Cloud returned an invalid authorization code.".to_owned());
     }
-    let url = Url::parse(&format!("http://127.0.0.1:{port}{target}"))
-        .map_err(|_| "Hermes sign-in callback URL is invalid.".to_owned())?;
-    if url.path() != CALLBACK_PATH {
-        return Err("Hermes sign-in callback path is invalid.".to_owned());
-    }
-    let mut code = None;
-    let mut state = String::new();
-    let mut error = None;
-    for (key, value) in url.query_pairs() {
-        match key.as_ref() {
-            "code" => code = Some(value.into_owned()),
-            "state" => state = value.into_owned(),
-            "error" => error = Some(value.into_owned()),
-            _ => {}
-        }
-    }
-    Ok(AuthorizationCallback { code, state, error })
-}
-
-fn read_limited_line<R: BufRead>(reader: &mut R, maximum: usize) -> Result<String, String> {
-    let mut buffer = Vec::new();
-    let bytes = reader
-        .read_until(b'\n', &mut buffer)
-        .map_err(|_| "Hermes sign-in callback could not be read.".to_owned())?;
-    if bytes == 0 || buffer.len() > maximum {
-        return Err("Hermes sign-in callback line is invalid.".to_owned());
-    }
-    while matches!(buffer.last(), Some(b'\n' | b'\r')) {
-        buffer.pop();
-    }
-    String::from_utf8(buffer).map_err(|_| "Hermes sign-in callback is not ASCII/UTF-8.".to_owned())
-}
-
-fn write_browser_response(stream: &mut TcpStream, success: bool) {
-    let title = if success {
-        "Hermes sign-in received"
-    } else {
-        "Hermes sign-in could not be verified"
-    };
-    let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>{title}</title><p>{title}. You can return to Hermes Desktop.</p>"
-    );
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
+    Ok(Some(payload.code))
 }
 
 fn exchange_code(endpoint: &Url, code: &str, verifier: &str) -> Result<TokenPayload, String> {
@@ -354,17 +310,6 @@ fn unix_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|value| value.as_secs())
         .unwrap_or(0)
-}
-
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (&a, &b) in left.iter().zip(right.iter()) {
-        diff |= a ^ b;
-    }
-    diff == 0
 }
 
 #[cfg(target_os = "macos")]
