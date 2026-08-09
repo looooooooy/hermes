@@ -1,0 +1,116 @@
+# Hermes Cloud SQLite P0 public surface.
+# Managed by deploy/staging/scripts/bootstrap_hermes_cloud_sqlite.sh.
+# This profile intentionally excludes File Gateway /hermes/files/ (8104).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAME__;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+        default_type text/plain;
+    }
+
+    location / {
+        return 308 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name __SERVER_NAME__;
+    server_tokens off;
+
+    ssl_certificate __TLS_CERTIFICATE__;
+    ssl_certificate_key __TLS_CERTIFICATE_KEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:HermesSSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+
+    location = / {
+        return 302 /hermes/ready;
+    }
+
+    location /hermes/api/ {
+        client_max_body_size 1m;
+        proxy_connect_timeout 3s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /hermes;
+        proxy_pass http://127.0.0.1:8101/api/;
+    }
+
+    location /hermes/auth/ {
+        client_max_body_size 1m;
+        proxy_connect_timeout 3s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /hermes;
+        proxy_pass http://127.0.0.1:8101/auth/;
+    }
+
+    location = /hermes/api/ws {
+        access_log off;
+        client_max_body_size 256k;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 75s;
+        proxy_read_timeout 75s;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /hermes;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass http://127.0.0.1:8101/api/ws;
+    }
+
+    location = /hermes/internal/connector/ws {
+        access_log off;
+        client_max_body_size 256k;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 75s;
+        proxy_read_timeout 75s;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /hermes;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass http://127.0.0.1:8102/api/ws;
+    }
+
+    location = /hermes/live {
+        access_log off;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 2s;
+        proxy_pass http://127.0.0.1:8101/live;
+    }
+
+    location = /hermes/ready {
+        access_log off;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 2s;
+        proxy_pass http://127.0.0.1:8101/ready;
+    }
+}
