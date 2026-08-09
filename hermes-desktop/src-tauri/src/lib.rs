@@ -15,9 +15,11 @@ use serde::Serialize;
 use std::path::Path;
 use tauri::{Manager, RunEvent};
 
+mod device_pairing;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod tray;
 mod workspace_auth;
+mod workspace_session;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +65,9 @@ struct RuntimeSnapshot {
     workspace_authenticated: bool,
     workspace_endpoint: Option<String>,
     workspace_user: Option<String>,
+    device_paired: bool,
+    device_pairing_state: String,
+    device_credential_fingerprint: Option<String>,
     cloud_connected: bool,
     agent_ready: bool,
     active_sessions: u8,
@@ -84,9 +89,10 @@ fn local_device_name() -> String {
 #[tauri::command]
 fn runtime_snapshot() -> RuntimeSnapshot {
     let workspace = workspace_auth::status();
+    let pairing = device_pairing::evidence();
     match fetch_manager_snapshot() {
-        Ok(snapshot) => from_manager_snapshot(snapshot, workspace),
-        Err(error) => offline_snapshot(error, workspace),
+        Ok(snapshot) => from_manager_snapshot(snapshot, workspace, pairing),
+        Err(error) => offline_snapshot(error, workspace, pairing),
     }
 }
 
@@ -97,6 +103,20 @@ async fn workspace_connect(
     tauri::async_runtime::spawn_blocking(move || workspace_auth::connect(&endpoint))
         .await
         .map_err(|_| "Hermes workspace sign-in task did not complete.".to_owned())?
+}
+
+#[tauri::command]
+async fn device_pair() -> Result<device_pairing::DevicePairingStatus, String> {
+    tauri::async_runtime::spawn_blocking(device_pairing::pair)
+        .await
+        .map_err(|_| "Hermes device pairing task did not complete.".to_owned())?
+}
+
+#[tauri::command]
+async fn device_pair_cancel() -> Result<device_pairing::DevicePairingStatus, String> {
+    tauri::async_runtime::spawn_blocking(device_pairing::cancel)
+        .await
+        .map_err(|_| "Hermes device pairing cancellation did not complete.".to_owned())?
 }
 
 #[cfg(unix)]
@@ -139,6 +159,7 @@ fn fetch_manager_snapshot_from_pipe(pipe_name: &str) -> Result<ManagerSnapshotV1
 fn from_manager_snapshot(
     snapshot: ManagerSnapshotV1,
     workspace: workspace_auth::WorkspaceAuthStatus,
+    pairing: device_pairing::DevicePairingStatus,
 ) -> RuntimeSnapshot {
     let cloud_connected = component_ready(&snapshot, "Hermes Cloud");
     let core_ready = component_ready(&snapshot, "Hermes Core");
@@ -174,6 +195,9 @@ fn from_manager_snapshot(
         workspace_authenticated: workspace.authenticated,
         workspace_endpoint: workspace.endpoint,
         workspace_user: workspace.user_id,
+        device_paired: pairing.paired,
+        device_pairing_state: pairing.activation_state,
+        device_credential_fingerprint: pairing.credential_fingerprint,
         cloud_connected,
         agent_ready,
         active_sessions: 0,
@@ -202,6 +226,7 @@ fn from_manager_snapshot(
 fn offline_snapshot(
     error: String,
     workspace: workspace_auth::WorkspaceAuthStatus,
+    pairing: device_pairing::DevicePairingStatus,
 ) -> RuntimeSnapshot {
     RuntimeSnapshot {
         device_name: local_device_name(),
@@ -215,6 +240,9 @@ fn offline_snapshot(
         workspace_authenticated: workspace.authenticated,
         workspace_endpoint: workspace.endpoint,
         workspace_user: workspace.user_id,
+        device_paired: pairing.paired,
+        device_pairing_state: pairing.activation_state,
+        device_credential_fingerprint: pairing.credential_fingerprint,
         cloud_connected: false,
         agent_ready: false,
         active_sessions: 0,
@@ -300,7 +328,12 @@ pub fn run() {
             tray::create_tray(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![runtime_snapshot, workspace_connect]);
+        .invoke_handler(tauri::generate_handler![
+            runtime_snapshot,
+            workspace_connect,
+            device_pair,
+            device_pair_cancel
+        ]);
 
     let app = builder
         .build(tauri::generate_context!())
