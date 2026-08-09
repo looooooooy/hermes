@@ -11,6 +11,7 @@ on:
       - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - "deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh"
       - "deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh"
+      - "deploy/staging/scripts/repair_pairing_claim_and_resume.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
   pull_request:
     paths:
@@ -21,6 +22,7 @@ on:
       - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - "deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh"
       - "deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh"
+      - "deploy/staging/scripts/repair_pairing_claim_and_resume.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
 
 permissions:
@@ -59,3 +61,7 @@ jobs:
         run: bash -n deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh
       - name: Lint Cloud release update shell
         run: shellcheck deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh
+      - name: Parse pairing claim repair shell
+        run: bash -n deploy/staging/scripts/repair_pairing_claim_and_resume.sh
+      - name: Lint pairing claim repair shell
+        run: shellcheck deploy/staging/scripts/repair_pairing_claim_and_resume.sh
