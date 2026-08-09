@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
+      - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
   pull_request:
     paths:
       - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
+      - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
 
 permissions:
@@ -23,3 +25,7 @@ jobs:
         run: bash -n deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh
       - name: Lint repair shell
         run: shellcheck deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh
+      - name: Parse seed diagnostic shell
+        run: bash -n deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh
+      - name: Lint seed diagnostic shell
+        run: shellcheck deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh
