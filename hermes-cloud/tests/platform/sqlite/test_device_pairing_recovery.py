@@ -150,7 +150,7 @@ def _offer(
         connector_version="0.1.0",
         state=PairingSessionState.PENDING,
         revision=0,
-        expires_at=NOW + timedelta(minutes=10),
+        expires_at=NOW + timedelta(minutes=5),
         claimed_at=None,
         created_at=NOW,
     )
