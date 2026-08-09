@@ -3,12 +3,16 @@ name: Hermes Desktop bootstrap payload
 on:
   push:
     branches:
+      - "main"
       - "feature/hermes-desktop-foundation-*"
       - "feature/hermes-release-update-plane-*"
     paths:
       - "hermes-desktop/bootstrap/**"
       - "hermes-desktop/managed-release/install_managed_release_payload.py"
       - "hermes-desktop/managed-release/build_managed_release_installer_zipapp.py"
+      - "hermes-connector/src/**"
+      - "hermes-connector/pyproject.toml"
+      - "hermes-connector/uv.lock"
       - "hermes-connector/packaging/common/hermes_local_release.py"
       - "hermes-connector/packaging/common/hermes_managed_release.py"
       - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
@@ -21,6 +25,9 @@ on:
       - "hermes-desktop/bootstrap/**"
       - "hermes-desktop/managed-release/install_managed_release_payload.py"
       - "hermes-desktop/managed-release/build_managed_release_installer_zipapp.py"
+      - "hermes-connector/src/**"
+      - "hermes-connector/pyproject.toml"
+      - "hermes-connector/uv.lock"
       - "hermes-connector/packaging/common/hermes_local_release.py"
       - "hermes-connector/packaging/common/hermes_managed_release.py"
       - "hermes-connector/packaging/common/hermes_offline_wheelhouse.py"
@@ -47,16 +54,19 @@ jobs:
             target: linux-x86_64
             desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+            private_uv: uv/uv
           - os: macos-latest
             target: macos-aarch64
             desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager
+            private_uv: uv/uv
           - os: windows-latest
             target: windows-x86_64
             desktop_binary: hermes-desktop/src-tauri/target/release/hermes-desktop.exe
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager.exe
+            private_uv: uv/uv.exe
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -113,6 +123,14 @@ jobs:
           --bundle "${{ runner.temp }}/hermes-toolchain-unqualified"
           --license-lock hermes-runtime-manager/toolchains/license-source-lock-v1.json
           --output "${{ runner.temp }}/hermes-toolchain-qualified"
+      - name: Build pairing-only Bootstrap artifact
+        if: runner.os != 'Linux'
+        run: >-
+          python hermes-desktop/bootstrap/build_pairing_bootstrap.py
+          --target ${{ matrix.target }}
+          --uv "${{ runner.temp }}/hermes-toolchain-qualified/${{ matrix.private_uv }}"
+          --connector-project "${{ github.workspace }}/hermes-connector"
+          --output "${{ runner.temp }}/hermes-pairing-bootstrap"
       - name: Assemble Desktop bootstrap qualification payload
         run: >-
           python hermes-desktop/bootstrap/assemble_bootstrap_payload.py
@@ -127,6 +145,12 @@ jobs:
           python hermes-desktop/bootstrap/augment_bootstrap_with_update_installer.py
           --payload "${{ runner.temp }}/hermes-bootstrap-payload"
           --installer "${{ runner.temp }}/hermes-managed-release-installer.pyz"
+      - name: Bind pairing-only helper into Bootstrap manifest
+        if: runner.os != 'Linux'
+        run: >-
+          python hermes-desktop/bootstrap/augment_bootstrap_with_pairing.py
+          --payload "${{ runner.temp }}/hermes-bootstrap-payload"
+          --pairing "${{ runner.temp }}/hermes-pairing-bootstrap"
       - name: Verify payload with poisoned host PATH
         run: >-
           python hermes-desktop/bootstrap/validate_bootstrap_payload.py
