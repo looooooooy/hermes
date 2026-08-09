@@ -19,8 +19,11 @@
   export let refreshing = false;
   export let workspaceConnecting = false;
   export let workspaceError = '';
+  export let devicePairing = false;
+  export let devicePairingError = '';
   export let onRefresh: () => void;
   export let onConnectWorkspace: (endpoint: string) => void;
+  export let onPairDevice: () => void;
 
   type StepKey = 'foundation' | 'enterprise' | 'device' | 'runtime' | 'provider' | 'ready';
   type StepState = 'complete' | 'current' | 'pending';
@@ -50,7 +53,7 @@
   }
 
   function devicePaired() {
-    return componentHealthy('connector');
+    return snapshot.devicePaired;
   }
 
   function runtimeInstalled() {
@@ -103,7 +106,7 @@
     switch (currentStep()) {
       case 'foundation': return 'Prepare this computer for Hermes.';
       case 'enterprise': return 'Connect your enterprise workspace.';
-      case 'device': return 'Approve this device as an Agent host.';
+      case 'device': return 'Bind this Mac to your Hermes workspace.';
       case 'runtime': return 'Prepare the local Managed Runtime.';
       case 'provider': return 'Connect a model service locally.';
       case 'ready': return 'Hermes is ready to work.';
@@ -117,7 +120,7 @@
       case 'enterprise':
         return 'Sign in through your browser. Hermes Desktop uses PKCE and a loopback callback; workspace credentials are stored only in the native Keychain.';
       case 'device':
-        return 'Your enterprise identity is verified. The next gate is a device-bound pairing identity for this Mac.';
+        return 'Hermes will create a device-bound Ed25519 identity, claim it with your authenticated workspace session, verify the fingerprint and finish Connector pairing without copying secrets into the UI.';
       case 'runtime':
         return 'The device is paired. Hermes now requires the content-addressed private runtime, Core and Agent Plugin to become healthy.';
       case 'provider':
@@ -145,7 +148,7 @@
       case 'enterprise':
         return 'Enter the HTTPS address of your Hermes Cloud and complete the secure browser sign-in. No access token is copied into the Desktop UI.';
       case 'device':
-        return 'Pairing must produce a device-bound identity. A UI click alone is not accepted as proof; this is the next product gate we will close.';
+        return 'Pair this Mac once. Hermes accepts the step only after the Connector pairing protocol writes an active paired.json projection and stores the device credential in the native Keychain.';
       case 'runtime':
         return `Current runtime: ${snapshot.runtimeVersion}. Core and Agent Plugin must both report healthy before onboarding can continue.`;
       case 'provider':
@@ -234,17 +237,37 @@
             </div>
           {/if}
 
+          {#if currentStep() === 'device'}
+            <div class="workspace-form pairing-form">
+              <div class="pairing-head">
+                <div>
+                  <span>Device identity</span>
+                  <strong>{snapshot.deviceName}</strong>
+                </div>
+                <div class="pairing-state">{snapshot.devicePairingState}</div>
+              </div>
+              <button class="connect pairing-connect" on:click={onPairDevice} disabled={devicePairing || !snapshot.workspaceAuthenticated}>
+                {#if devicePairing}<span class="spinner"></span> Creating device identity…{:else}<ShieldCheck size={14} /> Pair this Mac{/if}
+              </button>
+              {#if devicePairingError}<div class="workspace-error">{devicePairingError}</div>{/if}
+              {#if snapshot.deviceCredentialFingerprint}
+                <div class="workspace-note fingerprint"><KeyRound size={12} /> {snapshot.deviceCredentialFingerprint}</div>
+              {/if}
+              <div class="workspace-note"><KeyRound size={12} /> Ed25519 device key · Connector pairing v1 · credential stored in macOS Keychain</div>
+            </div>
+          {/if}
+
           <div class="grid">
             <div><span>Runtime Manager</span><strong class:good={managerConnected()}>{managerConnected() ? 'Connected' : 'Missing'}</strong></div>
             <div><span>Workspace</span><strong class:good={workspaceConnected()}>{workspaceConnected() ? (snapshot.workspaceUser ?? 'Authenticated') : 'Sign in'}</strong></div>
-            <div><span>Device</span><strong class:good={devicePaired()}>{devicePaired() ? 'Paired' : 'Pending'}</strong></div>
+            <div><span>Device</span><strong class:good={devicePaired()}>{devicePaired() ? 'Paired' : snapshot.devicePairingState}</strong></div>
             <div><span>Runtime</span><strong class:good={localAuthorityReady()}>{localAuthorityReady() ? 'Healthy' : snapshot.runtimeVersion}</strong></div>
             <div><span>Provider</span><strong class:good={providerConfigured()}>{providerConfigured() ? 'Connected' : 'Not configured'}</strong></div>
           </div>
         </div>
 
         <div class="actions">
-          <button class="refresh" on:click={onRefresh} disabled={refreshing}>
+          <button class="refresh" on:click={onRefresh} disabled={refreshing || devicePairing}>
             <span class:spin={refreshing}><RefreshCw size={15} /></span>{refreshing ? 'Checking…' : 'Refresh evidence'}
           </button>
           <button class="cockpit" disabled={!completelyReady()}>Open Runtime Cockpit <ArrowRight size={15} /></button>
@@ -269,6 +292,7 @@
   .stage-icon{display:grid;place-items:center;width:48px;height:48px;margin-top:27px;border:1px solid rgba(111,227,189,.16);border-radius:14px;background:rgba(9,30,25,.72);color:#72cbb0}.content h1{max-width:720px;margin:24px 0 0;color:#e8f1ee;font-size:42px;line-height:1.04;letter-spacing:-.055em;font-weight:620}.description{max-width:720px;margin:15px 0 0;color:#718981;font-size:11.5px;line-height:1.75}
   .evidence-card{margin-top:31px;padding:18px;border:1px solid rgba(212,238,231,.10);border-radius:14px;background:rgba(8,23,19,.72);box-shadow:0 18px 55px rgba(0,0,0,.12)}.evidence-heading{display:flex;align-items:center;justify-content:space-between}.evidence-heading>div:first-child span{display:block;color:#526f66;font-size:7.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.evidence-heading strong{display:block;margin-top:6px;font-size:11px;color:#d4dfdc}.evidence-status{display:flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid rgba(210,165,75,.18);border-radius:999px;color:#bc9550;font-size:8px;font-weight:700}.evidence-status.verified{color:#67b89d;border-color:rgba(103,184,157,.2)}.evidence-card>p{margin:11px 0 0;color:#5f766f;font-size:9.5px;line-height:1.6}
   .workspace-form{margin-top:16px;padding:13px;border:1px solid rgba(111,227,189,.09);border-radius:11px;background:rgba(6,18,15,.52)}.workspace-form label{display:block;margin-bottom:7px;color:#6d8a81;font-size:8px;font-weight:700;letter-spacing:.06em}.workspace-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.workspace-row input{min-width:0;height:36px;padding:0 11px;border:1px solid rgba(212,238,231,.11);border-radius:8px;outline:none;background:#071310;color:#cbd8d4;font-size:10px}.workspace-row input:focus{border-color:rgba(111,227,189,.35);box-shadow:0 0 0 3px rgba(111,227,189,.04)}.connect{display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border:1px solid rgba(111,227,189,.18);border-radius:8px;background:#15362d;color:#bfe5d8;font-size:9px;font-weight:650;cursor:pointer}.connect:disabled{opacity:.45;cursor:not-allowed}.spinner{width:11px;height:11px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}.workspace-error{margin-top:8px;color:#d49278;font-size:8.8px;line-height:1.45}.workspace-note{display:flex;align-items:center;gap:6px;margin-top:9px;color:#506b63;font-size:8px}
+  .pairing-form{display:grid;gap:10px}.pairing-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.pairing-head span{display:block;color:#526f66;font-size:7.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.pairing-head strong{display:block;margin-top:5px;color:#c7d8d2;font-size:10px}.pairing-state{padding:5px 8px;border:1px solid rgba(212,238,231,.08);border-radius:999px;color:#718981;font-size:7.5px;text-transform:uppercase;letter-spacing:.06em}.pairing-connect{width:max-content}.fingerprint{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
   .grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:15px;border:1px solid rgba(212,238,231,.07);border-radius:9px;overflow:hidden}.grid>div{min-width:0;padding:9px 11px;border-right:1px solid rgba(212,238,231,.06)}.grid>div:last-child{border-right:0}.grid span{display:block;color:#476158;font-size:6.7px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.grid strong{display:block;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a98749;font-size:8px}.grid strong.good{color:#68b99e}
   .actions{display:flex;gap:8px;margin-top:13px}.actions button{display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;border-radius:8px;font-size:9px;font-weight:630}.refresh{border:1px solid rgba(212,238,231,.10);background:#091714;color:#87a19a;cursor:pointer}.cockpit{border:0;background:#91aaa2;color:#12201c}.cockpit:disabled{opacity:.42}.privacy{display:flex;align-items:center;gap:6px;margin-top:11px;color:#4d665e;font-size:8px}.spin{display:inline-flex;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
   @media(max-width:900px){.main{grid-template-columns:220px minmax(0,1fr)}.rail{padding-left:18px;padding-right:18px}.content{width:calc(100% - 42px)}.content h1{font-size:34px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.workspace-row{grid-template-columns:1fr}.connect{justify-content:center}}
