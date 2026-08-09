@@ -12,6 +12,8 @@
   let refreshing = false;
   let workspaceConnecting = false;
   let workspaceError = '';
+  let devicePairing = false;
+  let devicePairingError = '';
 
   onMount(loadNativeSnapshot);
 
@@ -56,6 +58,23 @@
     }
   }
 
+  async function pairDevice() {
+    if (devicePairing) return;
+    devicePairing = true;
+    devicePairingError = '';
+    try {
+      await invoke('device_pair');
+      await refreshEvidence();
+    } catch (error) {
+      devicePairingError = typeof error === 'string'
+        ? error
+        : 'Hermes device pairing did not complete.';
+      await refreshEvidence();
+    } finally {
+      devicePairing = false;
+    }
+  }
+
   function componentHealthy(id: string) {
     return snapshot.components.some((component) => component.id === id && component.state === 'healthy');
   }
@@ -64,12 +83,11 @@
     const managerConnected = snapshot.runtimeGeneration !== 'manager-not-connected'
       && !['not-connected', 'not-installed'].includes(snapshot.runtimeVersion);
     const localAuthorityReady = snapshot.agentReady && componentHealthy('core') && componentHealthy('plugin');
-    const devicePaired = componentHealthy('connector');
     const providerConfigured = snapshot.providers.some((provider) => provider.state === 'connected');
     return managerConnected
       && snapshot.workspaceAuthenticated
       && snapshot.cloudConnected
-      && devicePaired
+      && snapshot.devicePaired
       && localAuthorityReady
       && providerConfigured;
   }
@@ -87,8 +105,11 @@
     {refreshing}
     {workspaceConnecting}
     {workspaceError}
+    {devicePairing}
+    {devicePairingError}
     onRefresh={refreshEvidence}
     onConnectWorkspace={connectWorkspace}
+    onPairDevice={pairDevice}
   />
 {:else}
   <RuntimeCockpit />
