@@ -106,13 +106,13 @@ def register_native_auth_routes(
 ) -> None:
     codes = _AuthorizationCodeStore()
 
-    async def authorize_get(request: Request) -> HTMLResponse | JSONResponse:
+    async def authorize_get(request: Request):
         parsed = _parse_authorization_request(dict(request.query_params))
         if parsed is None:
             return _invalid_request()
         return _login_page(parsed)
 
-    async def authorize_post(request: Request) -> HTMLResponse | JSONResponse | RedirectResponse:
+    async def authorize_post(request: Request):
         form = await _read_form(request)
         if form is None:
             return _invalid_request()
@@ -140,7 +140,7 @@ def register_native_auth_routes(
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
 
-    async def exchange(request: Request) -> JSONResponse:
+    async def exchange(request: Request):
         try:
             body = await request.json()
         except ValueError:
@@ -171,18 +171,21 @@ def register_native_auth_routes(
         authorize_get,
         methods=["GET"],
         include_in_schema=False,
+        response_model=None,
     )
     application.add_api_route(
         "/auth/native/authorize",
         authorize_post,
         methods=["POST"],
         include_in_schema=False,
+        response_model=None,
     )
     application.add_api_route(
         "/auth/native/token",
         exchange,
         methods=["POST"],
         include_in_schema=False,
+        response_model=None,
     )
 
 
