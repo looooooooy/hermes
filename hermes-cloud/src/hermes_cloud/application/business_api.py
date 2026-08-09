@@ -36,11 +36,21 @@ def build_business_api_application(
         from hermes_cloud.modules.cloud_api.adapters.native_auth import (
             register_native_auth_routes,
         )
+        from hermes_cloud.modules.device.onboarding_http import (
+            register_pairing_context_route,
+        )
 
+        pairing_context_resolver = composition.pop("pairing_context_resolver", None)
         application = build_fastapi_application(dependency_probes, **composition)
         service = getattr(application, "_cloud_api_service", None)
         if service is not None:
             register_native_auth_routes(application, authentication=service)
+            if pairing_context_resolver is not None:
+                register_pairing_context_route(
+                    application,
+                    authentication=service,
+                    resolver=pairing_context_resolver,
+                )
         return application
     if composition:
         raise RuntimeError("Business API adapter dependencies are unavailable")
