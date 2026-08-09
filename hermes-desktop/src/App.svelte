@@ -79,6 +79,31 @@
     }
   }
 
+  function pairingErrorMessage(error: unknown) {
+    const message = typeof error === 'string'
+      ? error
+      : error instanceof Error
+        ? error.message
+        : '';
+
+    if (message.includes('pairing helper failed safely')) {
+      return '设备绑定组件没有完成初始化，Hermes 已安全停止本次绑定。请更新到最新版本后重新绑定。';
+    }
+    if (message.includes('pairing helper could not be started')) {
+      return '设备绑定组件无法启动，请更新到最新版本后重新绑定。';
+    }
+    if (message.includes('pairing bootstrap payload is not installed')) {
+      return '设备绑定组件尚未安装完整。';
+    }
+    if (message.includes('pairing context')) {
+      return 'Hermes Cloud 暂时无法提供设备绑定信息。';
+    }
+    if (message.includes('blocked or expired')) {
+      return '本次设备绑定已过期或被 Cloud 拒绝，请重新绑定。';
+    }
+    return message || '设备绑定没有完成，请重新尝试。';
+  }
+
   async function pairDevice() {
     if (devicePairing) return;
     devicePairing = true;
@@ -87,9 +112,7 @@
       await invoke('device_pair');
       await refreshEvidence();
     } catch (error) {
-      devicePairingError = typeof error === 'string'
-        ? error
-        : '设备绑定没有完成，请重新尝试。';
+      devicePairingError = pairingErrorMessage(error);
       await refreshEvidence();
     } finally {
       devicePairing = false;
