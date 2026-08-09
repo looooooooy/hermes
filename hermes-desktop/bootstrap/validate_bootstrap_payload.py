@@ -447,8 +447,9 @@ def execute_pairing_bootstrap_offline(
             timeout=20,
             env=env,
         )
+        output = completed.stdout + completed.stderr
         for action in ("pair start", "pair status", "pair cancel"):
-            if action not in completed.stdout:
+            if action not in output:
                 raise BootstrapPayloadError(
                     f"pairing bootstrap CLI is missing action {action}"
                 )
