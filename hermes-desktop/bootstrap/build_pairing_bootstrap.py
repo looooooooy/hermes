@@ -111,6 +111,16 @@ def main() -> int:
             env=sanitized_environment(),
         )
 
+        # uv intentionally writes an output-directory .gitignore for developer
+        # convenience. It is build metadata, not part of the customer artifact.
+        # Remove only that exact regular file, then keep the wheelhouse fail-closed:
+        # every remaining entry must be a declared wheel with a verified digest.
+        uv_gitignore = wheels / ".gitignore"
+        if uv_gitignore.exists() or uv_gitignore.is_symlink():
+            if uv_gitignore.is_symlink() or not uv_gitignore.is_file():
+                raise PairingBootstrapError("uv wheelhouse metadata path is unsafe")
+            uv_gitignore.unlink()
+
         artifacts = wheel_artifacts(wheels)
         connector_wheels = [
             item for item in artifacts if item["filename"].startswith("hermes_connector-")
