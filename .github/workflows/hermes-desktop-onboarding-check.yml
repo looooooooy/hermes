@@ -6,6 +6,7 @@ on:
     paths:
       - "hermes-desktop/src/**"
       - "hermes-desktop/src-tauri/**"
+      - "hermes-desktop/scripts/**"
       - "hermes-desktop/package.json"
       - "hermes-desktop/package-lock.json"
       - ".github/workflows/hermes-desktop-onboarding-check.yml"
@@ -13,6 +14,7 @@ on:
     paths:
       - "hermes-desktop/src/**"
       - "hermes-desktop/src-tauri/**"
+      - "hermes-desktop/scripts/**"
       - "hermes-desktop/package.json"
       - "hermes-desktop/package-lock.json"
       - ".github/workflows/hermes-desktop-onboarding-check.yml"
@@ -38,6 +40,8 @@ jobs:
       - name: Install frontend dependencies
         working-directory: hermes-desktop
         run: npm install --no-audit --no-fund
+      - name: Validate Tauri dev bootstrap script
+        run: node --check hermes-desktop/scripts/before-tauri-dev.mjs
       - name: Build Svelte onboarding
         working-directory: hermes-desktop
         run: npm run build
