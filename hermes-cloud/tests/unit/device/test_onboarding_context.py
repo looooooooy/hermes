@@ -10,7 +10,6 @@ from hermes_cloud.modules.cloud_api.domain import Principal
 from hermes_cloud.modules.device.onboarding_context import PairingTarget
 from hermes_cloud.modules.device.onboarding_http import register_pairing_context_route
 
-
 _PRINCIPAL = Principal(
     tenant_id=UUID("a495873f-cc49-5e21-b9fd-a581e3159ec8"),
     user_id=UUID("5f4da0f1-0e21-53bc-9fd6-5a7c35831b08"),
