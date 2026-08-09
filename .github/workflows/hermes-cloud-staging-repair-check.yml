@@ -1,0 +1,25 @@
+name: Hermes Cloud staging repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
+      - ".github/workflows/hermes-cloud-staging-repair-check.yml"
+  pull_request:
+    paths:
+      - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
+      - ".github/workflows/hermes-cloud-staging-repair-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse repair shell
+        run: bash -n deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh
+      - name: Lint repair shell
+        run: shellcheck deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh
