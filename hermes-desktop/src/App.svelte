@@ -112,6 +112,15 @@
       && localAuthorityReady
       && providerConfigured;
   }
+
+  function onboardingStateKey() {
+    return [
+      snapshot.workspaceAuthenticated ? 'workspace-on' : 'workspace-off',
+      snapshot.devicePaired ? 'device-on' : 'device-off',
+      snapshot.runtimeVersion,
+      snapshot.agentReady ? 'agent-on' : 'agent-off',
+    ].join(':');
+  }
 </script>
 
 {#if !nativeChecked}
@@ -121,17 +130,19 @@
     <span>正在验证本机运行环境…</span>
   </div>
 {:else if nativeSource && !onboardingComplete()}
-  <Onboarding
-    {snapshot}
-    {refreshing}
-    {workspaceConnecting}
-    {workspaceError}
-    {devicePairing}
-    {devicePairingError}
-    onRefresh={refreshEvidence}
-    onConnectWorkspace={connectWorkspace}
-    onPairDevice={pairDevice}
-  />
+  {#key onboardingStateKey()}
+    <Onboarding
+      {snapshot}
+      {refreshing}
+      {workspaceConnecting}
+      {workspaceError}
+      {devicePairing}
+      {devicePairingError}
+      onRefresh={refreshEvidence}
+      onConnectWorkspace={connectWorkspace}
+      onPairDevice={pairDevice}
+    />
+  {/key}
 {:else}
   <RuntimeCockpit />
 {/if}
