@@ -41,6 +41,9 @@ from hermes_cloud.platform.sqlalchemy.observer_projection import (
 from hermes_cloud.platform.sqlalchemy.observer_subscription import (
     SqlAlchemyObserverSubscriptionRouter,
 )
+from hermes_cloud.platform.sqlalchemy.pairing_context import (
+    SqlAlchemyPairingContextResolver,
+)
 from hermes_cloud.platform.sqlalchemy.session_catalog import (
     SqlAlchemySessionCatalogRepository,
 )
@@ -210,6 +213,7 @@ def build_production_business_api_application(
         session_catalog_repository = SqlAlchemySessionCatalogRepository(
             session_factory
         )
+        pairing_context_resolver = SqlAlchemyPairingContextResolver(session_factory)
         pairing_service = None
         connector_signing_path = environment.get("HERMES_CONNECTOR_SIGNING_SECRET_FILE")
         if connector_signing_path is not None:
@@ -259,6 +263,7 @@ def build_production_business_api_application(
             ),
             control_runtime=control_runtime,
             pairing_service=pairing_service,
+            pairing_context_resolver=pairing_context_resolver,
         )
     except asyncio.CancelledError:
         if engine is not None:
