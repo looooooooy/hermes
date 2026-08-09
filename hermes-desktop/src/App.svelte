@@ -6,6 +6,14 @@
   import { mockRuntimeSnapshot } from './lib/mock-runtime';
   import type { RuntimeSnapshot } from './lib/types';
 
+  type WorkspaceAuthStatus = {
+    authenticated: boolean;
+    endpoint?: string | null;
+    userId?: string | null;
+    provider?: string | null;
+    expiresAtEpochSeconds?: number | null;
+  };
+
   let snapshot: RuntimeSnapshot = mockRuntimeSnapshot;
   let nativeChecked = false;
   let nativeSource = false;
@@ -47,12 +55,28 @@
     workspaceConnecting = true;
     workspaceError = '';
     try {
-      await invoke('workspace_connect', { endpoint });
-      await refreshEvidence();
+      const result = await invoke<WorkspaceAuthStatus>('workspace_connect', { endpoint });
+      if (!result.authenticated) {
+        throw new Error('Hermes Cloud sign-in completed without an active workspace session.');
+      }
+
+      // The native command is the authority for this transition. Apply its
+      // authenticated result immediately instead of waiting for a second
+      // snapshot round-trip that can race with short-lived credential state.
+      snapshot = {
+        ...snapshot,
+        workspaceAuthenticated: true,
+        workspaceEndpoint: result.endpoint ?? endpoint,
+        workspaceUser: result.userId ?? snapshot.workspaceUser,
+        lastChecked: 'workspace authenticated',
+      };
+      nativeSource = true;
     } catch (error) {
       workspaceError = typeof error === 'string'
         ? error
-        : 'Hermes workspace sign-in did not complete.';
+        : error instanceof Error
+          ? error.message
+          : 'Hermes workspace sign-in did not complete.';
     } finally {
       workspaceConnecting = false;
     }
