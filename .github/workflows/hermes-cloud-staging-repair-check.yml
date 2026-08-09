@@ -6,11 +6,13 @@ on:
     paths:
       - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
       - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
+      - "deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
   pull_request:
     paths:
       - "deploy/staging/scripts/repair_and_resume_hermes_cloud_sqlite.sh"
       - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
+      - "deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
 
 permissions:
@@ -29,3 +31,7 @@ jobs:
         run: bash -n deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh
       - name: Lint seed diagnostic shell
         run: shellcheck deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh
+      - name: Parse workspace seed diagnostic shell
+        run: bash -n deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh
+      - name: Lint workspace seed diagnostic shell
+        run: shellcheck deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh
