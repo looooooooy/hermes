@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "ai.hermes.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node scripts/before-tauri-dev.mjs",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
