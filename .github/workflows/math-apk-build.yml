@@ -1,9 +1,9 @@
-name: Build Math APK
+name: Build Math APK v3
 
 on:
   push:
     branches:
-      - ci/math-apk-build-20260809
+      - ci/math-apk-v3-20260809
 
 permissions:
   contents: read
@@ -35,14 +35,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Restore math app project
+      - name: Restore v2 base project
         shell: bash
         run: |
           cat .ci-temp/math-apk/project.b64.part* > /tmp/project.b64
           base64 -d /tmp/project.b64 > /tmp/math.zip
           unzip -q /tmp/math.zip -d .
           test -f grade2-math-android/app/build.gradle
-          test -f grade2-math-android/app/src/main/assets/www/index.html
+
+      - name: Apply v3 UI refactor patch
+        shell: bash
+        run: |
+          cat .ci-temp/math-apk-v3/patch.b64.part* > /tmp/v3patch.b64
+          base64 -d /tmp/v3patch.b64 > /tmp/v3.patch.bz2
+          bzip2 -dc /tmp/v3.patch.bz2 > /tmp/v3.patch
+          patch -p1 < /tmp/v3.patch
+          grep -q "versionName '3.0.0'" grade2-math-android/app/build.gradle
+          grep -q "APP_VERSION = '3.0'" grade2-math-android/app/src/main/assets/www/app.js
 
       - name: Build debug APK
         shell: bash
@@ -51,17 +60,17 @@ jobs:
       - name: Prepare APK artifact
         shell: bash
         run: |
-          cp grade2-math-android/app/build/outputs/apk/debug/app-debug.apk mathplanet-grade2-v2.0.0.apk
-          sha256sum mathplanet-grade2-v2.0.0.apk > mathplanet-grade2-v2.0.0.apk.sha256
-          ls -lh mathplanet-grade2-v2.0.0.apk
-          cat mathplanet-grade2-v2.0.0.apk.sha256
+          cp grade2-math-android/app/build/outputs/apk/debug/app-debug.apk mathplanet-grade2-v3.0.0.apk
+          sha256sum mathplanet-grade2-v3.0.0.apk > mathplanet-grade2-v3.0.0.apk.sha256
+          ls -lh mathplanet-grade2-v3.0.0.apk
+          cat mathplanet-grade2-v3.0.0.apk.sha256
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: mathplanet-grade2-v2-apk
+          name: mathplanet-grade2-v3-apk
           path: |
-            mathplanet-grade2-v2.0.0.apk
-            mathplanet-grade2-v2.0.0.apk.sha256
+            mathplanet-grade2-v3.0.0.apk
+            mathplanet-grade2-v3.0.0.apk.sha256
           if-no-files-found: error
           retention-days: 1
