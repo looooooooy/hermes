@@ -35,6 +35,9 @@ export interface RuntimeSnapshot {
   workspaceAuthenticated: boolean;
   workspaceEndpoint?: string;
   workspaceUser?: string;
+  devicePaired: boolean;
+  devicePairingState: string;
+  deviceCredentialFingerprint?: string;
   cloudConnected: boolean;
   agentReady: boolean;
   activeSessions: number;
