@@ -170,17 +170,36 @@ try:
             print("workspace_other_mismatched_fields=" + ",".join(drift))
             raise SystemExit(11)
 
+        # Use exactly the same identity selection semantics as seed_test_data.py:
+        # tenant + (stable user_id OR configured subject), then require every
+        # seeded field to match. This prevents the reconcile safety gate from
+        # disagreeing with the real seed path while remaining fail-closed.
         current_users = (
             session.query(module.UserModel)
             .filter(
-                module.UserModel.tenant_id == tenant_id,
-                module.UserModel.user_id == user_id,
+                module.and_(
+                    module.UserModel.tenant_id == tenant_id,
+                    module.or_(
+                        module.UserModel.user_id == user_id,
+                        module.UserModel.subject == config.username,
+                    ),
+                )
             )
             .limit(2)
             .all()
         )
-        if len(current_users) != 1 or not module._matches(current_users[0], user_expected):
+        if len(current_users) != 1:
+            print("reconcile_refused=current_seed_user_identity_not_unique")
+            print(f"current_seed_user_match_count={len(current_users)}")
+            raise SystemExit(12)
+        user_drift = sorted(
+            field
+            for field, expected in user_expected.items()
+            if getattr(current_users[0], field) != expected
+        )
+        if user_drift:
             print("reconcile_refused=current_seed_user_not_exact")
+            print("current_seed_user_mismatched_fields=" + ",".join(user_drift))
             raise SystemExit(12)
 
         memberships = (
@@ -200,10 +219,18 @@ try:
             .limit(2)
             .all()
         )
-        if len(memberships) != 1 or not module._matches(
-            memberships[0], membership_expected
-        ):
+        if len(memberships) != 1:
+            print("reconcile_refused=current_seed_membership_identity_not_unique")
+            print(f"current_seed_membership_match_count={len(memberships)}")
+            raise SystemExit(13)
+        membership_drift = sorted(
+            field
+            for field, expected in membership_expected.items()
+            if getattr(memberships[0], field) != expected
+        )
+        if membership_drift:
             print("reconcile_refused=current_seed_membership_not_exact")
+            print("current_seed_membership_mismatched_fields=" + ",".join(membership_drift))
             raise SystemExit(13)
 
         old_creator = workspace.created_by
