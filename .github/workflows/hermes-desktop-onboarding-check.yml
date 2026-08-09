@@ -1,0 +1,47 @@
+name: Hermes Desktop onboarding check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hermes-desktop/src/**"
+      - "hermes-desktop/src-tauri/**"
+      - "hermes-desktop/package.json"
+      - "hermes-desktop/package-lock.json"
+      - ".github/workflows/hermes-desktop-onboarding-check.yml"
+  pull_request:
+    paths:
+      - "hermes-desktop/src/**"
+      - "hermes-desktop/src-tauri/**"
+      - "hermes-desktop/package.json"
+      - "hermes-desktop/package-lock.json"
+      - ".github/workflows/hermes-desktop-onboarding-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-desktop-onboarding-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Use stable Rust
+        run: rustup default stable
+      - name: Install frontend dependencies
+        working-directory: hermes-desktop
+        run: npm install --no-audit --no-fund
+      - name: Build Svelte onboarding
+        working-directory: hermes-desktop
+        run: npm run build
+      - name: Check Tauri native shell
+        run: cargo check --manifest-path hermes-desktop/src-tauri/Cargo.toml
+      - name: Test Tauri native shell
+        run: cargo test --manifest-path hermes-desktop/src-tauri/Cargo.toml --lib
