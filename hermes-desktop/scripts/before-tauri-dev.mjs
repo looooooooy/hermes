@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -29,6 +29,51 @@ function unixSocketReady(socketPath) {
     socket.once('connect', () => finish(true));
     socket.once('error', () => finish(false));
   });
+}
+
+function ensurePrivateDirectory(target) {
+  mkdirSync(target, { recursive: true, mode: 0o700 });
+  const before = lstatSync(target);
+  if (before.isSymbolicLink() || !before.isDirectory()) {
+    throw new Error(`Unsafe Hermes private directory: ${target}`);
+  }
+  if (typeof process.getuid === 'function' && before.uid !== process.getuid()) {
+    throw new Error(`Hermes private directory is not owned by the current user: ${target}`);
+  }
+  chmodSync(target, 0o700);
+  const after = lstatSync(target);
+  if ((after.mode & 0o777) !== 0o700) {
+    throw new Error(`Hermes private directory permissions are not 0700: ${target}`);
+  }
+}
+
+function ensureMacPairingState() {
+  if (process.platform !== 'darwin') return;
+  if (typeof process.getuid !== 'function') {
+    throw new Error('macOS pairing setup could not resolve the current user id.');
+  }
+
+  const applicationRoot = join(
+    homedir(),
+    'Library',
+    'Application Support',
+    'Hermes',
+  );
+  const uid = process.getuid();
+  const requiredDirectories = [
+    join(applicationRoot, 'connector', 'profiles', 'default', 'state'),
+    join(applicationRoot, 'runtime', 'local-gateways'),
+    join(applicationRoot, 'runtime', 'control-gateways'),
+    join(applicationRoot, 'runtime', 'observer-gateways'),
+    join('/tmp', `hermes-local-gateway-${uid}`),
+    join('/tmp', `hermes-control-${uid}`),
+    join('/tmp', `hermes-observer-${uid}`),
+  ];
+
+  for (const directory of requiredDirectories) {
+    ensurePrivateDirectory(directory);
+  }
+  console.log('[Hermes dev] Connector pairing state prepared.');
 }
 
 async function ensureMacRuntimeManager() {
@@ -93,6 +138,7 @@ async function ensureMacRuntimeManager() {
 
 async function main() {
   await ensureMacRuntimeManager();
+  ensureMacPairingState();
 
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const vite = spawn(npm, ['run', 'dev'], {
