@@ -5,10 +5,14 @@ from uuid import UUID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from hermes_cloud.modules.cloud_api.application.service import AuthenticationFailed
+from hermes_cloud.modules.cloud_api.application.service import (
+    AuthenticationFailed,
+)
 from hermes_cloud.modules.cloud_api.domain import Principal
 from hermes_cloud.modules.device.onboarding_context import PairingTarget
-from hermes_cloud.modules.device.onboarding_http import register_pairing_context_route
+from hermes_cloud.modules.device.onboarding_http import (
+    register_pairing_context_route,
+)
 
 
 _PRINCIPAL = Principal(
