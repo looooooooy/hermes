@@ -10,6 +10,7 @@ on:
       - "deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh"
       - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - "deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh"
+      - "deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
   pull_request:
     paths:
@@ -19,6 +20,7 @@ on:
       - "deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh"
       - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - "deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh"
+      - "deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
 
 permissions:
@@ -53,3 +55,7 @@ jobs:
         run: bash -n deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh
       - name: Lint existing Nginx host attach shell
         run: shellcheck deploy/staging/scripts/attach_hermes_p0_to_existing_nginx.sh
+      - name: Parse Cloud release update shell
+        run: bash -n deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh
+      - name: Lint Cloud release update shell
+        run: shellcheck deploy/staging/scripts/update_hermes_cloud_sqlite_release.sh
