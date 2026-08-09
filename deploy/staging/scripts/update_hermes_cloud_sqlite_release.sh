@@ -2,7 +2,6 @@
 set -euo pipefail
 
 GIT_REF=${HERMES_GIT_REF:-main}
-REPOSITORY_URL=${HERMES_REPOSITORY_URL:-https://github.com/looooooooy/hermes.git}
 DEPLOY_ROOT=/opt/hermes-cloud
 SOURCE_ROOT="$DEPLOY_ROOT/source-main"
 RELEASES_ROOT="$DEPLOY_ROOT/releases"
