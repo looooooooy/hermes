@@ -15,6 +15,7 @@ const KEYCHAIN_ACCOUNT: &str = "current";
 const AUTH_TIMEOUT: Duration = Duration::from_secs(600);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const POLL_INTERVAL: Duration = Duration::from_millis(300);
+const REFRESH_BEFORE_SECONDS: u64 = 30;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,17 +67,14 @@ pub fn status() -> WorkspaceAuthStatus {
         Ok(Some(value)) => value,
         _ => return disconnected_status(),
     };
-    let now = unix_seconds();
-    let authenticated = stored.expires_at > now.saturating_add(30)
-        && stored.token_type.eq_ignore_ascii_case("bearer")
-        && !stored.access_token.is_empty()
-        && !stored.refresh_token.is_empty();
-    WorkspaceAuthStatus {
-        authenticated,
-        endpoint: Some(stored.endpoint),
-        user_id: Some(stored.user_id),
-        provider: Some(stored.provider),
-        expires_at_epoch_seconds: Some(stored.expires_at),
+
+    if access_session_active(&stored) {
+        return status_from_tokens(stored, true);
+    }
+
+    match refresh_stored_tokens(&stored) {
+        Ok(refreshed) => status_from_tokens(refreshed, true),
+        Err(_) => status_from_tokens(stored, false),
     }
 }
 
@@ -107,19 +105,20 @@ pub fn connect(endpoint: &str) -> Result<WorkspaceAuthStatus, String> {
 
     let code = wait_for_authorization(&endpoint, &credentials)?;
     let tokens = exchange_code(&endpoint, &code, &credentials.verifier)?;
-    let stored = StoredWorkspaceTokens {
-        schema_version: 1,
-        endpoint: endpoint.to_string().trim_end_matches('/').to_owned(),
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_type: tokens.token_type,
-        expires_at: tokens.expires_at,
-        provider: tokens.provider,
-        user_id: tokens.user_id,
-    };
+    let stored = stored_from_payload(&endpoint, tokens);
     validate_tokens(&stored)?;
     store_tokens(&stored)?;
-    Ok(status())
+    Ok(status_from_tokens(stored, true))
+}
+
+fn status_from_tokens(tokens: StoredWorkspaceTokens, authenticated: bool) -> WorkspaceAuthStatus {
+    WorkspaceAuthStatus {
+        authenticated,
+        endpoint: Some(tokens.endpoint),
+        user_id: Some(tokens.user_id),
+        provider: Some(tokens.provider),
+        expires_at_epoch_seconds: Some(tokens.expires_at),
+    }
 }
 
 fn disconnected_status() -> WorkspaceAuthStatus {
@@ -284,10 +283,75 @@ fn exchange_code(endpoint: &Url, code: &str, verifier: &str) -> Result<TokenPayl
     if !response.status().is_success() {
         return Err(format!("Hermes Cloud rejected sign-in (HTTP {}).", response.status().as_u16()));
     }
+    response
+        .json()
+        .map_err(|_| "Hermes Cloud returned an invalid sign-in response.".to_owned())
+}
+
+fn refresh_stored_tokens(current: &StoredWorkspaceTokens) -> Result<StoredWorkspaceTokens, String> {
+    if current.schema_version != 1
+        || current.endpoint.is_empty()
+        || current.refresh_token.is_empty()
+        || current.provider.is_empty()
+        || current.user_id.is_empty()
+    {
+        return Err("Stored Hermes workspace refresh credentials are invalid.".to_owned());
+    }
+    let endpoint = normalize_endpoint(&current.endpoint)?;
+    let refresh_url = endpoint
+        .join("auth/native/refresh")
+        .map_err(|_| "Hermes Cloud refresh URL could not be created.".to_owned())?;
+    let client = Client::builder()
+        .connect_timeout(HTTP_TIMEOUT)
+        .timeout(HTTP_TIMEOUT)
+        .build()
+        .map_err(|_| "Hermes secure refresh client could not be initialized.".to_owned())?;
+    let response = client
+        .post(refresh_url)
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({
+            "refresh_token": current.refresh_token,
+            "provider": current.provider,
+        }))
+        .send()
+        .map_err(|_| "Hermes Cloud could not be reached to refresh the workspace session.".to_owned())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Hermes Cloud rejected workspace session refresh (HTTP {}).",
+            response.status().as_u16()
+        ));
+    }
     let payload: TokenPayload = response
         .json()
-        .map_err(|_| "Hermes Cloud returned an invalid sign-in response.".to_owned())?;
-    Ok(payload)
+        .map_err(|_| "Hermes Cloud returned an invalid workspace refresh response.".to_owned())?;
+    let refreshed = stored_from_payload(&endpoint, payload);
+    validate_tokens(&refreshed)?;
+    store_tokens(&refreshed)?;
+    Ok(refreshed)
+}
+
+fn stored_from_payload(endpoint: &Url, tokens: TokenPayload) -> StoredWorkspaceTokens {
+    StoredWorkspaceTokens {
+        schema_version: 1,
+        endpoint: endpoint.to_string().trim_end_matches('/').to_owned(),
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_type: tokens.token_type,
+        expires_at: tokens.expires_at,
+        provider: tokens.provider,
+        user_id: tokens.user_id,
+    }
+}
+
+fn access_session_active(tokens: &StoredWorkspaceTokens) -> bool {
+    tokens.schema_version == 1
+        && !tokens.endpoint.is_empty()
+        && !tokens.access_token.is_empty()
+        && !tokens.refresh_token.is_empty()
+        && tokens.token_type.eq_ignore_ascii_case("bearer")
+        && tokens.expires_at > unix_seconds().saturating_add(REFRESH_BEFORE_SECONDS)
+        && !tokens.provider.is_empty()
+        && !tokens.user_id.is_empty()
 }
 
 fn validate_tokens(tokens: &StoredWorkspaceTokens) -> Result<(), String> {
@@ -316,12 +380,9 @@ fn unix_seconds() -> u64 {
 fn load_tokens() -> Result<Option<StoredWorkspaceTokens>, String> {
     use security_framework::passwords::get_generic_password;
     match get_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT) {
-        Ok(bytes) => {
-            let value = serde_json::from_slice::<StoredWorkspaceTokens>(&bytes)
-                .map_err(|_| "Stored Hermes workspace credentials are invalid.".to_owned())?;
-            validate_tokens(&value)?;
-            Ok(Some(value))
-        }
+        Ok(bytes) => serde_json::from_slice::<StoredWorkspaceTokens>(&bytes)
+            .map(Some)
+            .map_err(|_| "Stored Hermes workspace credentials are invalid.".to_owned()),
         Err(_) => Ok(None),
     }
 }
