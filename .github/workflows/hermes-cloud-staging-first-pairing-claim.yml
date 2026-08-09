@@ -1,0 +1,41 @@
+name: Hermes Cloud staging first pairing claim
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hermes-cloud/src/**"
+      - "hermes-cloud/deploy/test_server/**"
+      - "hermes-cloud/tests/integration/test_staging_first_pairing_claim.py"
+      - ".github/workflows/hermes-cloud-staging-first-pairing-claim.yml"
+  pull_request:
+    paths:
+      - "hermes-cloud/src/**"
+      - "hermes-cloud/deploy/test_server/**"
+      - "hermes-cloud/tests/integration/test_staging_first_pairing_claim.py"
+      - ".github/workflows/hermes-cloud-staging-first-pairing-claim.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  staging-first-claim:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked Cloud environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install uv==0.12.0
+          cd hermes-cloud
+          uv sync --locked
+      - name: Lint first pairing claim regression
+        working-directory: hermes-cloud
+        run: uv run --locked ruff check tests/integration/test_staging_first_pairing_claim.py
+      - name: Run production-shaped first pairing claim
+        working-directory: hermes-cloud
+        run: uv run --locked pytest -q -s tests/integration/test_staging_first_pairing_claim.py
