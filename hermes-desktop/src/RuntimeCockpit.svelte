@@ -3,12 +3,10 @@
   import { invoke } from '@tauri-apps/api/core';
   import {
     Activity,
-    ArrowUpRight,
     Bot,
     Cable,
     Check,
     ChevronRight,
-    CircleDot,
     Cloud,
     Cpu,
     Download,
@@ -16,7 +14,6 @@
     KeyRound,
     MessagesSquare,
     RefreshCw,
-    Search,
     Settings2,
     ShieldCheck,
     Sparkles,
@@ -32,22 +29,15 @@
   let refreshing = false;
 
   const navigation: Array<{ key: NavigationKey; label: string }> = [
-    { key: 'overview', label: 'Overview' },
+    { key: 'overview', label: '运行总览' },
     { key: 'agents', label: 'Agent' },
-    { key: 'sessions', label: 'Sessions' },
-    { key: 'providers', label: 'Models' },
-    { key: 'updates', label: 'Updates' },
-    { key: 'diagnostics', label: 'Diagnostics' },
+    { key: 'sessions', label: '会话' },
+    { key: 'providers', label: '模型服务' },
+    { key: 'updates', label: '版本更新' },
+    { key: 'diagnostics', label: '诊断' },
   ];
 
-  onMount(async () => {
-    try {
-      snapshot = await invoke<RuntimeSnapshot>('runtime_snapshot');
-      nativeSource = true;
-    } catch {
-      nativeSource = false;
-    }
-  });
+  onMount(refreshSnapshot);
 
   async function refreshSnapshot() {
     if (refreshing) return;
@@ -56,90 +46,77 @@
       snapshot = await invoke<RuntimeSnapshot>('runtime_snapshot');
       nativeSource = true;
     } catch {
-      snapshot = { ...snapshot, lastChecked: 'just now' };
+      nativeSource = false;
     } finally {
-      window.setTimeout(() => (refreshing = false), 420);
+      refreshing = false;
     }
-  }
-
-  function iconFor(key: NavigationKey) {
-    return key;
   }
 
   function runtimeReady() {
-    return snapshot.state === 'healthy' && snapshot.agentReady && snapshot.cloudConnected;
+    return snapshot.agentReady && snapshot.cloudConnected;
   }
 
-  function heroStatus() {
-    if (runtimeReady()) return 'Runtime ready';
-    if (snapshot.agentReady) return 'Agent ready · Cloud offline';
-    return nativeSource ? 'Runtime not ready' : 'Runtime design preview';
+  function stateText(state: string) {
+    switch (state) {
+      case 'healthy':
+      case 'connected': return '正常';
+      case 'degraded': return '降级';
+      case 'offline': return '离线';
+      case 'updating': return '更新中';
+      case 'attention': return '需要处理';
+      case 'not-configured': return '未配置';
+      default: return state || '未知';
+    }
+  }
+
+  function componentName(id: string, fallback: string) {
+    switch (id) {
+      case 'cloud': return 'Hermes Cloud';
+      case 'connector': return 'Connector';
+      case 'plugin': return 'Agent Plugin';
+      case 'core': return 'Hermes Core';
+      default: return fallback;
+    }
   }
 
   function heroTitle() {
-    if (runtimeReady()) return 'Your Agent is ready to work.';
-    if (snapshot.agentReady) return 'Your Agent is running locally.';
-    return nativeSource ? 'Finish connecting your Hermes Runtime.' : 'Your Agent is ready to work.';
+    if (runtimeReady()) return 'Hermes 已经可以工作';
+    if (snapshot.agentReady) return '本地 Agent 已启动，正在等待云连接';
+    return '本地运行环境还没有完全就绪';
   }
 
   function heroDescription() {
-    if (runtimeReady()) {
-      return 'Execution stays on this computer. Cloud access is connected through the managed Connector.';
-    }
-    if (snapshot.agentReady) {
-      return 'Local execution is available, but remote Cloud control is not currently established.';
-    }
-    if (nativeSource) {
-      return 'The desktop shell is healthy, but a verified Runtime Manager authority has not attached yet.';
-    }
-    return 'Design preview data demonstrates the healthy customer experience before native runtime attachment.';
+    if (runtimeReady()) return '任务在这台电脑上执行，Hermes Cloud 负责连接、控制和状态同步。';
+    if (snapshot.agentReady) return '本地执行已经可用，但当前还没有建立完整的 Cloud 控制链路。';
+    return 'Hermes 会继续检查 Runtime Manager、Core、Agent Plugin 与 Connector 的真实运行状态。';
   }
 
-  function statusColor(healthy: boolean) {
-    return healthy ? 'var(--accent)' : 'var(--warning)';
+  function providerCount() {
+    return snapshot.providers.filter((provider) => provider.state === 'connected').length;
   }
-
-  const stateLabel = (state: string) => {
-    if (state === 'healthy' || state === 'connected') return 'Healthy';
-    if (state === 'not-configured') return 'Not configured';
-    return state.charAt(0).toUpperCase() + state.slice(1);
-  };
 </script>
 
-<div class="app-shell">
+<div class="cockpit-shell">
   <aside class="sidebar">
-    <div class="window-grab" data-tauri-drag-region></div>
-
-    <div class="brand-row">
-      <div class="brand-mark" aria-hidden="true">
-        <span class="brand-core"></span>
-        <span class="brand-orbit orbit-one"></span>
-        <span class="brand-orbit orbit-two"></span>
-      </div>
+    <div class="brand-row" data-tauri-drag-region>
+      <div class="brand-mark"><span></span></div>
       <div>
-        <div class="brand-name">Hermes</div>
-        <div class="brand-caption">Managed Runtime</div>
+        <strong>Hermes</strong>
+        <span>本地智能体运行中心</span>
       </div>
     </div>
 
-    <nav class="primary-nav" aria-label="Primary navigation">
+    <nav aria-label="主要导航">
       {#each navigation as item}
-        <button
-          class:active={selected === item.key}
-          class="nav-item"
-          on:click={() => (selected = item.key)}
-          aria-current={selected === item.key ? 'page' : undefined}
-        >
-          <span class="nav-icon">
-            {#if iconFor(item.key) === 'overview'}<Gauge size={17} strokeWidth={1.8} />{/if}
-            {#if iconFor(item.key) === 'agents'}<Bot size={17} strokeWidth={1.8} />{/if}
-            {#if iconFor(item.key) === 'sessions'}<MessagesSquare size={17} strokeWidth={1.8} />{/if}
-            {#if iconFor(item.key) === 'providers'}<Sparkles size={17} strokeWidth={1.8} />{/if}
-            {#if iconFor(item.key) === 'updates'}<RefreshCw size={17} strokeWidth={1.8} />{/if}
-            {#if iconFor(item.key) === 'diagnostics'}<Stethoscope size={17} strokeWidth={1.8} />{/if}
-          </span>
+        <button class:active={selected === item.key} on:click={() => (selected = item.key)}>
+          {#if item.key === 'overview'}<Gauge size={19} />{/if}
+          {#if item.key === 'agents'}<Bot size={19} />{/if}
+          {#if item.key === 'sessions'}<MessagesSquare size={19} />{/if}
+          {#if item.key === 'providers'}<Sparkles size={19} />{/if}
+          {#if item.key === 'updates'}<RefreshCw size={19} />{/if}
+          {#if item.key === 'diagnostics'}<Stethoscope size={19} />{/if}
           <span>{item.label}</span>
-          {#if item.key === 'updates' && snapshot.updateAvailable}<span class="nav-dot"></span>{/if}
+          {#if item.key === 'updates' && snapshot.updateAvailable}<i></i>{/if}
         </button>
       {/each}
     </nav>
@@ -147,236 +124,238 @@
     <div class="sidebar-spacer"></div>
 
     <div class="device-card">
-      <div class="device-avatar"><Cpu size={16} strokeWidth={1.8} /></div>
-      <div class="device-copy">
+      <Cpu size={20} />
+      <div>
         <strong>{snapshot.deviceName}</strong>
-        <span>{snapshot.profileName} · {snapshot.architecture}</span>
+        <span>{snapshot.platform} · {snapshot.architecture}</span>
       </div>
-      <button class="icon-button mini" aria-label="Device settings"><Settings2 size={15} /></button>
+      <Settings2 size={17} />
     </div>
 
-    <div class="sidebar-footer">
-      <span class="secure-dot" style:background={statusColor(snapshot.agentReady)}></span>
-      <span>{snapshot.agentReady ? 'Local authority protected' : 'Waiting for local authority'}</span>
+    <div class="sidebar-status">
+      <span class:good={snapshot.agentReady}></span>
+      {snapshot.agentReady ? '本机执行权限已就绪' : '等待本机执行权限'}
     </div>
   </aside>
 
   <main class="main-area">
     <header class="topbar" data-tauri-drag-region>
-      <div class="topbar-spacer"></div>
-      <button class="search-control" aria-label="Search Hermes">
-        <Search size={15} strokeWidth={1.9} />
-        <span>Search</span>
-        <kbd>⌘ K</kbd>
-      </button>
-      <div class="source-pill" title="Runtime data source">
-        <span class:native={nativeSource} class="source-dot"></span>
-        {nativeSource ? 'Live runtime' : 'Design preview'}
+      <div>
+        <strong>{navigation.find((item) => item.key === selected)?.label}</strong>
+        <span>{nativeSource ? '实时本机状态' : '等待本机状态'}</span>
       </div>
-      <button class="icon-button" on:click={refreshSnapshot} aria-label="Refresh runtime status">
-        <span class:spin={refreshing}><RefreshCw size={16} /></span>
+      <button class="refresh-button" on:click={refreshSnapshot} disabled={refreshing}>
+        <span class:spin={refreshing}><RefreshCw size={18} /></span>
+        {refreshing ? '刷新中…' : '刷新状态'}
       </button>
     </header>
 
     <div class="content-frame">
       {#if selected === 'overview'}
-        <section class="hero-row">
+        <section class="hero">
           <div>
-            <div class="hero-state">
-              <span
-                class="hero-state-dot"
-                style:background={statusColor(runtimeReady())}
-                style:box-shadow={runtimeReady() ? '0 0 14px rgba(111,227,189,.43)' : '0 0 12px rgba(242,199,119,.24)'}
-              ></span>
-              {heroStatus()}
-            </div>
+            <div class="hero-status"><span class:good={runtimeReady()}></span>{runtimeReady() ? '运行正常' : '正在准备'}</div>
             <h1>{heroTitle()}</h1>
             <p>{heroDescription()}</p>
           </div>
-          <div class="hero-actions">
-            <button class="button secondary"><Activity size={16} /> View activity</button>
-            <button class="button primary" disabled={!snapshot.agentReady}>Open Agent <ArrowUpRight size={16} /></button>
+          <button class="primary-action" disabled={!snapshot.agentReady}><Bot size={19} /> 打开 Agent</button>
+        </section>
+
+        <section class="metrics" aria-label="运行状态摘要">
+          <div>
+            <span>Agent</span>
+            <strong class:good={snapshot.agentReady}>{snapshot.agentReady ? '已就绪' : '未就绪'}</strong>
+          </div>
+          <div>
+            <span>Cloud</span>
+            <strong class:good={snapshot.cloudConnected}>{snapshot.cloudConnected ? '已连接' : '离线'}</strong>
+          </div>
+          <div>
+            <span>活动会话</span>
+            <strong>{snapshot.activeSessions}</strong>
+          </div>
+          <div>
+            <span>运行任务</span>
+            <strong>{snapshot.runningTasks}</strong>
+          </div>
+          <div>
+            <span>模型服务</span>
+            <strong class:good={providerCount() > 0}>{providerCount()} 个已连接</strong>
           </div>
         </section>
 
-        <section class="signal-strip" aria-label="Runtime summary">
-          <div class="signal-cell">
-            <span class="signal-label">Agent</span>
-            <div class="signal-value">
-              <span style:background={statusColor(snapshot.agentReady)}></span>
-              {snapshot.agentReady ? 'Ready' : 'Unavailable'}
-            </div>
-          </div>
-          <div class="signal-cell">
-            <span class="signal-label">Cloud</span>
-            <div class="signal-value">
-              <span style:background={statusColor(snapshot.cloudConnected)}></span>
-              {snapshot.cloudConnected ? 'Secure' : 'Offline'}
-            </div>
-          </div>
-          <div class="signal-cell">
-            <span class="signal-label">Active sessions</span>
-            <div class="signal-number">{snapshot.activeSessions}</div>
-          </div>
-          <div class="signal-cell">
-            <span class="signal-label">Running tasks</span>
-            <div class="signal-number">{snapshot.runningTasks}</div>
-          </div>
-          <div class="signal-cell wide">
-            <span class="signal-label">Managed Runtime</span>
-            <div class="runtime-version">{snapshot.runtimeVersion}<span>· {snapshot.lastChecked}</span></div>
-          </div>
-        </section>
-
-        <div class="overview-grid">
-          <section class="runtime-surface panel">
-            <div class="panel-heading">
+        <div class="overview-layout">
+          <section class="panel runtime-panel">
+            <div class="panel-title">
               <div>
-                <h2>Runtime path</h2>
-                <p>One authority chain from Cloud transport to local execution.</p>
+                <h2>本地运行链路</h2>
+                <p>从 Cloud 到本地执行，所有状态都来自真实组件。</p>
               </div>
-              <div class="verified-mark">
-                <ShieldCheck size={16} /> {runtimeReady() ? 'Verified' : 'Verification pending'}
-              </div>
+              <div class="verified"><ShieldCheck size={18} /> {runtimeReady() ? '已验证' : '等待验证'}</div>
             </div>
 
-            <div class="topology">
-              {#each snapshot.components as component, index}
-                <div class="topology-node">
-                  <div class="node-icon">
-                    {#if component.id === 'cloud'}<Cloud size={20} strokeWidth={1.7} />{/if}
-                    {#if component.id === 'connector'}<Cable size={20} strokeWidth={1.7} />{/if}
-                    {#if component.id === 'plugin'}<Zap size={20} strokeWidth={1.7} />{/if}
-                    {#if component.id === 'core'}<Cpu size={20} strokeWidth={1.7} />{/if}
+            <div class="runtime-chain">
+              {#each snapshot.components as component}
+                <div class="runtime-row">
+                  <div class="runtime-icon">
+                    {#if component.id === 'cloud'}<Cloud size={22} />{/if}
+                    {#if component.id === 'connector'}<Cable size={22} />{/if}
+                    {#if component.id === 'plugin'}<Zap size={22} />{/if}
+                    {#if component.id === 'core'}<Cpu size={22} />{/if}
                   </div>
-                  <div class="node-copy">
-                    <div class="node-title-row">
-                      <strong>{component.name}</strong>
-                      <span class="node-status">
-                        <span style:background={statusColor(component.state === 'healthy')}></span>
-                        {stateLabel(component.state)}
-                      </span>
-                    </div>
-                    <p>{component.detail}</p>
-                    {#if component.latencyMs !== undefined}<small>{component.latencyMs} ms</small>{/if}
+                  <div class="runtime-copy">
+                    <strong>{componentName(component.id, component.name)}</strong>
+                    <span>{component.detail}</span>
                   </div>
+                  <div class="runtime-state" class:good={component.state === 'healthy'}>{stateText(component.state)}</div>
                 </div>
-                {#if index < snapshot.components.length - 1}
-                  <div class="topology-link"><span></span></div>
-                {/if}
               {/each}
             </div>
 
             <div class="authority-bar">
-              <div><KeyRound size={15} /><span>Runtime generation</span></div>
-              <code>{snapshot.runtimeGeneration}</code>
-              <div class="authority-note">Credentials remain on this host</div>
+              <KeyRound size={17} />
+              <span>运行版本</span>
+              <strong>{snapshot.runtimeVersion}</strong>
+              <span class="generation">Generation {snapshot.runtimeGeneration}</span>
             </div>
           </section>
 
-          <aside class="activity-rail panel">
-            <div class="panel-heading compact">
+          <section class="panel activity-panel">
+            <div class="panel-title compact">
               <div>
-                <h2>Recent activity</h2>
-                <p>Runtime and transport events.</p>
+                <h2>最近活动</h2>
+                <p>本机运行与连接事件。</p>
               </div>
-              <button class="text-action">All events</button>
             </div>
-            <div class="event-list">
-              {#each snapshot.events as event}
-                <div class="event-row">
-                  <div class:success={event.tone === 'success'} class:attention={event.tone === 'attention'} class="event-marker"></div>
-                  <div class="event-copy">
-                    <div class="event-title"><strong>{event.title}</strong><time>{event.at}</time></div>
-                    <p>{event.detail}</p>
+            <div class="events">
+              {#if snapshot.events.length === 0}
+                <div class="empty">暂时没有新的运行事件。</div>
+              {:else}
+                {#each snapshot.events.slice(0, 6) as event}
+                  <div class="event-row">
+                    <span class:good={event.tone === 'success'} class:warn={event.tone === 'attention'}></span>
+                    <div>
+                      <strong>{event.title}</strong>
+                      <p>{event.detail}</p>
+                    </div>
+                    <time>{event.at}</time>
                   </div>
-                </div>
-              {/each}
+                {/each}
+              {/if}
             </div>
-          </aside>
+          </section>
         </div>
 
-        <div class="lower-grid">
-          <section class="provider-section panel">
-            <div class="panel-heading compact">
-              <div>
-                <h2>Model services</h2>
-                <p>Provider keys are stored locally and never copied to Cloud.</p>
-              </div>
-              <button class="text-action" on:click={() => (selected = 'providers')}>Manage</button>
+        <section class="panel provider-panel">
+          <div class="panel-title compact">
+            <div>
+              <h2>模型服务</h2>
+              <p>API Key 只保存在本机系统安全存储中。</p>
             </div>
-            <div class="provider-list">
-              {#each snapshot.providers.slice(0, 2) as provider}
-                <div class="provider-row">
-                  <div class="provider-monogram">{provider.name.slice(0, 1)}</div>
-                  <div class="provider-copy"><strong>{provider.name}</strong><span>{provider.model}</span></div>
-                  <div class="provider-security"><KeyRound size={13} /> {provider.note}</div>
-                  <div class:muted={provider.state !== 'connected'} class="connected-text">
-                    <span></span>{provider.state === 'connected' ? 'Connected' : stateLabel(provider.state)}
-                  </div>
+            <button class="text-action" on:click={() => (selected = 'providers')}>管理模型服务 <ChevronRight size={17} /></button>
+          </div>
+          <div class="provider-list">
+            {#each snapshot.providers as provider}
+              <div class="provider-row">
+                <div class="provider-logo">{provider.name.slice(0, 1)}</div>
+                <div>
+                  <strong>{provider.name}</strong>
+                  <span>{provider.model}</span>
                 </div>
-              {/each}
-            </div>
-          </section>
+                <div class="provider-note"><KeyRound size={15} /> {provider.note}</div>
+                <div class="provider-state" class:good={provider.state === 'connected'}>{stateText(provider.state)}</div>
+              </div>
+            {/each}
+          </div>
+        </section>
 
-          <section class="update-panel panel" class:available={snapshot.updateAvailable}>
-            <div class="update-icon"><Download size={20} /></div>
-            <div class="update-copy">
-              <span class="signal-label">Managed update</span>
-              <h3>{snapshot.updateAvailable ? `${snapshot.updateVersion} is ready` : 'You are up to date'}</h3>
-              <p>Signed, staged, health-gated and automatically reversible.</p>
-            </div>
-            <button class="button quiet" on:click={() => (selected = 'updates')}>Review <ChevronRight size={15} /></button>
-          </section>
-        </div>
+        <section class="update-strip" class:available={snapshot.updateAvailable}>
+          <Download size={22} />
+          <div>
+            <strong>{snapshot.updateAvailable ? `发现新版本 ${snapshot.updateVersion}` : '当前已经是最新版本'}</strong>
+            <span>更新包经过签名验证、健康检查，并支持失败自动回滚。</span>
+          </div>
+          <button on:click={() => (selected = 'updates')}>查看更新</button>
+        </section>
+
       {:else if selected === 'agents'}
         <section class="page-heading">
-          <div><span>Execution authority</span><h1>Agent</h1><p>The local Hermes Core remains the only authority allowed to execute work.</p></div>
-          <button class="button primary" disabled={!snapshot.agentReady}>Open Agent <ArrowUpRight size={16} /></button>
+          <h1>Agent</h1>
+          <p>查看这台电脑上的本地 Agent 执行状态与运行版本。</p>
         </section>
-        <section class="detail-panel panel">
+        <section class="panel detail-panel">
           <div class="agent-identity">
-            <div class="agent-glyph"><Bot size={28} /></div>
-            <div><h2>{snapshot.deviceName}</h2><p>{snapshot.profileName} profile · {snapshot.platform}</p></div>
-            <div class="large-health"><span style:background={statusColor(snapshot.agentReady)}></span>{snapshot.agentReady ? 'Ready' : 'Unavailable'}</div>
+            <div class="agent-icon"><Bot size={30} /></div>
+            <div>
+              <h2>{snapshot.deviceName}</h2>
+              <p>{snapshot.profileName} · {snapshot.platform}</p>
+            </div>
+            <strong class:good={snapshot.agentReady}>{snapshot.agentReady ? '已就绪' : '未就绪'}</strong>
           </div>
-          <div class="detail-metrics"><div><span>Runtime</span><strong>{snapshot.runtimeVersion}</strong></div><div><span>Generation</span><strong>{snapshot.runtimeGeneration}</strong></div><div><span>Sessions</span><strong>{snapshot.activeSessions}</strong></div><div><span>Tasks</span><strong>{snapshot.runningTasks}</strong></div></div>
+          <div class="detail-grid">
+            <div><span>运行版本</span><strong>{snapshot.runtimeVersion}</strong></div>
+            <div><span>Generation</span><strong>{snapshot.runtimeGeneration}</strong></div>
+            <div><span>活动会话</span><strong>{snapshot.activeSessions}</strong></div>
+            <div><span>运行任务</span><strong>{snapshot.runningTasks}</strong></div>
+          </div>
         </section>
+
       {:else if selected === 'sessions'}
-        <section class="page-heading"><div><span>Live work</span><h1>Sessions</h1><p>Sessions remain authoritative on the local Agent and are safely projected to Cloud.</p></div></section>
-        <section class="list-panel panel">
+        <section class="page-heading">
+          <h1>会话</h1>
+          <p>查看由本地 Agent 持有的实时工作会话。</p>
+        </section>
+        <section class="panel simple-list">
           {#if snapshot.activeSessions > 0}
-            {#each ['Operations planning', 'PIM product strategy', 'Supplier analysis'].slice(0, snapshot.activeSessions) as name, index}
-              <button class="session-row"><div class="session-dot"></div><div class="session-main"><strong>{name}</strong><span>Live · generation {snapshot.runtimeGeneration}</span></div><div class="session-meta">{index === 0 ? 'Controlling' : 'Observing'}</div><ChevronRight size={16} /></button>
+            {#each Array(snapshot.activeSessions) as _, index}
+              <div class="simple-row"><Activity size={18} /><strong>活动会话 {index + 1}</strong><span>运行中</span></div>
             {/each}
           {:else}
-            <button class="session-row" disabled><div class="session-dot" style:background="var(--muted-2)"></div><div class="session-main"><strong>No live sessions</strong><span>Connect a verified local Agent before sessions can be projected.</span></div><div class="session-meta">Offline</div><ChevronRight size={16} /></button>
+            <div class="empty large">当前没有活动会话。</div>
           {/if}
         </section>
+
       {:else if selected === 'providers'}
-        <section class="page-heading"><div><span>Local credentials</span><h1>Model services</h1><p>Configure providers without moving API keys off this execution host.</p></div><button class="button secondary"><KeyRound size={16} /> Add provider</button></section>
-        <section class="provider-grid">
+        <section class="page-heading">
+          <h1>模型服务</h1>
+          <p>管理本机使用的模型提供商。密钥不会同步到 Cloud。</p>
+        </section>
+        <section class="panel provider-list large-list">
           {#each snapshot.providers as provider}
-            <div class="provider-card panel"><div class="provider-card-top"><div class="provider-monogram large">{provider.name.slice(0, 1)}</div><span class:muted={provider.state !== 'connected'} class="connected-text"><span></span>{stateLabel(provider.state)}</span></div><h2>{provider.name}</h2><p>{provider.model}</p><div class="provider-card-foot"><KeyRound size={14} /><span>{provider.note}</span><button><Settings2 size={15} /></button></div></div>
+            <div class="provider-row">
+              <div class="provider-logo">{provider.name.slice(0, 1)}</div>
+              <div><strong>{provider.name}</strong><span>{provider.model}</span></div>
+              <div class="provider-note"><KeyRound size={15} /> 本机安全存储</div>
+              <div class="provider-state" class:good={provider.state === 'connected'}>{stateText(provider.state)}</div>
+            </div>
           {/each}
         </section>
+
       {:else if selected === 'updates'}
-        <section class="page-heading"><div><span>Release control</span><h1>Updates</h1><p>Desktop and Managed Runtime releases are verified separately and activated atomically.</p></div></section>
-        <div class="update-layout"><section class="release-card panel"><div class="release-status"><div class="release-orb"><RefreshCw size={24} /></div><div><span>Candidate release</span><h2>{snapshot.updateVersion ?? snapshot.runtimeVersion}</h2></div><div class="verified-mark"><ShieldCheck size={16} /> Signed</div></div><div class="release-flow"><div><span>Current</span><strong>{snapshot.runtimeVersion}</strong></div><ChevronRight size={18} /><div><span>Candidate</span><strong>{snapshot.updateVersion ?? 'None'}</strong></div><ChevronRight size={18} /><div><span>Rollback</span><strong>Automatic</strong></div></div><button class="button primary full" disabled={!snapshot.updateAvailable}>Stage update</button></section><section class="panel guardrail-panel"><ShieldCheck size={22} /><h2>Health-gated activation</h2><p>Hermes will not promote a candidate until Host, Plugin, Connector, Cloud transport and runtime authority all pass verification.</p><ul><li><Check size={14} /> Immutable release digest</li><li><Check size={14} /> Private toolchain validation</li><li><Check size={14} /> Previous release retained</li></ul></section></div>
+        <section class="page-heading">
+          <h1>版本更新</h1>
+          <p>Hermes 使用签名、分阶段安装、健康检查和自动回滚保护更新过程。</p>
+        </section>
+        <section class="panel update-detail">
+          <Download size={30} />
+          <div>
+            <h2>{snapshot.updateAvailable ? `新版本 ${snapshot.updateVersion} 可用` : '当前已经是最新版本'}</h2>
+            <p>当前版本：{snapshot.runtimeVersion}</p>
+          </div>
+          <button disabled={!snapshot.updateAvailable}>{snapshot.updateAvailable ? '安装更新' : '无需更新'}</button>
+        </section>
+
       {:else if selected === 'diagnostics'}
-        <section class="page-heading"><div><span>Local verification</span><h1>Diagnostics</h1><p>Evidence-first checks for the complete local execution and Cloud path.</p></div><button class="button secondary" on:click={refreshSnapshot}><RefreshCw size={16} /> Run checks</button></section>
-        <section class="diagnostic-panel panel">
-          {#each [
-            ['Runtime authority', 'Hermes Core process identity matches the active release.'],
-            ['Plugin local gateway', 'Observer and control endpoints share the active generation.'],
-            ['Connector transport', 'Device-bound WSS is authenticated and sequence-safe.'],
-            ['Credential boundary', 'Provider credentials remain in the platform secret store.'],
-            ['Release integrity', 'Manifest, toolchain and executable paths are inside Hermes roots.'],
-          ] as check}
-            <div class="diagnostic-row">
-              <div class="diagnostic-check">{#if runtimeReady()}<Check size={14} />{:else}<CircleDot size={13} />{/if}</div>
-              <div><strong>{check[0]}</strong><p>{check[1]}</p></div>
-              <span>{runtimeReady() ? 'Passed' : 'Pending'}</span>
+        <section class="page-heading">
+          <h1>诊断</h1>
+          <p>快速查看 Hermes 的关键组件是否正常。</p>
+        </section>
+        <section class="panel diagnostics-list">
+          {#each snapshot.components as component}
+            <div>
+              <span class:good={component.state === 'healthy'}></span>
+              <div><strong>{componentName(component.id, component.name)}</strong><p>{component.detail}</p></div>
+              <b>{stateText(component.state)}</b>
             </div>
           {/each}
         </section>
@@ -384,3 +363,190 @@
     </div>
   </main>
 </div>
+
+<style>
+  .cockpit-shell {
+    width: 100%;
+    height: 100%;
+    min-height: 720px;
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    color: #e7f0ed;
+    background: #07110f;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 26px 18px 20px;
+    border-right: 1px solid rgba(212,238,231,.09);
+    background: #081512;
+  }
+
+  .brand-row { display: flex; align-items: center; gap: 11px; padding: 5px 7px 24px; }
+  .brand-row strong { display: block; font-size: 19px; font-weight: 720; }
+  .brand-row span { display: block; margin-top: 4px; color: #6c877e; font-size: 12px; }
+  .brand-mark { position: relative; width: 30px; height: 30px; border: 1px solid rgba(111,227,189,.22); border-radius: 50%; }
+  .brand-mark span { position: absolute; left: 9px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: #6fe3bd; box-shadow: 0 0 18px rgba(111,227,189,.28); }
+
+  nav { display: grid; gap: 6px; }
+  nav button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #708a82;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  nav button:hover { background: rgba(111,227,189,.045); color: #b9cec7; }
+  nav button.active { background: rgba(111,227,189,.085); color: #d4e8e1; box-shadow: inset 0 0 0 1px rgba(111,227,189,.12); }
+  nav button i { position: absolute; right: 13px; width: 7px; height: 7px; border-radius: 50%; background: #e4ad55; }
+
+  .sidebar-spacer { flex: 1; }
+  .device-card { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 13px; border: 1px solid rgba(212,238,231,.09); border-radius: 12px; color: #7e9990; }
+  .device-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .device-card span { display: block; margin-top: 4px; color: #5f776f; font-size: 12px; }
+  .sidebar-status { display: flex; align-items: center; gap: 7px; margin-top: 14px; padding: 0 5px; color: #647b73; font-size: 12px; }
+  .sidebar-status > span { width: 8px; height: 8px; border-radius: 50%; background: #d0a158; }
+  .sidebar-status > span.good { background: #6fe3bd; }
+
+  .main-area { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .topbar { height: 72px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 0 34px; border-bottom: 1px solid rgba(212,238,231,.09); }
+  .topbar strong { display: block; font-size: 18px; }
+  .topbar > div > span { display: block; margin-top: 4px; color: #6b837b; font-size: 12px; }
+  .refresh-button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 13px; border: 1px solid rgba(212,238,231,.12); border-radius: 9px; background: #0a1a16; color: #9bb0a9; font: inherit; font-size: 14px; cursor: pointer; }
+
+  .content-frame { flex: 1; min-height: 0; overflow: auto; padding: 36px 38px 46px; }
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 30px; padding: 6px 0 28px; }
+  .hero-status { display: flex; align-items: center; gap: 8px; color: #8aa198; font-size: 13px; font-weight: 650; }
+  .hero-status span { width: 8px; height: 8px; border-radius: 50%; background: #d3a35c; }
+  .hero-status span.good { background: #6fe3bd; }
+  .hero h1, .page-heading h1 { margin: 14px 0 0; color: #eff6f3; font-size: 38px; line-height: 1.2; letter-spacing: -.03em; font-weight: 680; }
+  .hero p, .page-heading p { max-width: 760px; margin: 13px 0 0; color: #7c948b; font-size: 16px; line-height: 1.75; }
+  .primary-action { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 17px; border: 0; border-radius: 10px; background: #6fe3bd; color: #07110f; font: inherit; font-size: 15px; font-weight: 700; }
+  .primary-action:disabled { opacity: .42; }
+
+  .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid rgba(212,238,231,.09); border-bottom: 1px solid rgba(212,238,231,.09); }
+  .metrics > div { padding: 20px 18px; border-right: 1px solid rgba(212,238,231,.07); }
+  .metrics > div:last-child { border-right: 0; }
+  .metrics span { display: block; color: #60776f; font-size: 12px; }
+  .metrics strong { display: block; margin-top: 8px; color: #d3a75f; font-size: 20px; font-weight: 680; }
+  .metrics strong.good { color: #72c6aa; }
+
+  .overview-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, .8fr); gap: 18px; margin-top: 22px; }
+  .panel { border: 1px solid rgba(212,238,231,.10); border-radius: 14px; background: rgba(8,23,19,.72); }
+  .runtime-panel, .activity-panel, .provider-panel, .detail-panel, .simple-list, .large-list, .update-detail, .diagnostics-list { padding: 22px; }
+  .panel-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  .panel-title h2 { margin: 0; font-size: 19px; font-weight: 680; }
+  .panel-title p { margin: 7px 0 0; color: #718981; font-size: 13.5px; line-height: 1.55; }
+  .verified { display: flex; align-items: center; gap: 7px; color: #7aa898; font-size: 13px; }
+
+  .runtime-chain { margin-top: 20px; }
+  .runtime-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 13px; align-items: center; min-height: 70px; padding: 10px 0; border-top: 1px solid rgba(212,238,231,.07); }
+  .runtime-row:first-child { border-top: 0; }
+  .runtime-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: rgba(111,227,189,.06); color: #79bca7; }
+  .runtime-copy strong { display: block; font-size: 15px; }
+  .runtime-copy span { display: block; margin-top: 5px; color: #667e76; font-size: 13px; line-height: 1.45; }
+  .runtime-state { color: #d0a35b; font-size: 13px; font-weight: 700; }
+  .runtime-state.good { color: #72c6aa; }
+
+  .authority-bar { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 13px 14px; border-radius: 10px; background: rgba(5,17,14,.46); color: #6e867e; font-size: 13px; }
+  .authority-bar strong { color: #c9d7d2; }
+  .generation { margin-left: auto; color: #5e766e; }
+
+  .events { margin-top: 16px; }
+  .event-row { display: grid; grid-template-columns: 9px minmax(0,1fr) auto; gap: 10px; align-items: start; padding: 14px 0; border-top: 1px solid rgba(212,238,231,.07); }
+  .event-row:first-child { border-top: 0; }
+  .event-row > span { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: #758780; }
+  .event-row > span.good { background: #6fe3bd; }
+  .event-row > span.warn { background: #d7a257; }
+  .event-row strong { font-size: 14px; }
+  .event-row p { margin: 5px 0 0; color: #667d75; font-size: 12.5px; line-height: 1.5; }
+  .event-row time { color: #546b63; font-size: 11.5px; }
+
+  .provider-panel { margin-top: 18px; }
+  .text-action { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #8fb2a7; font: inherit; font-size: 13.5px; cursor: pointer; }
+  .provider-list { margin-top: 14px; }
+  .provider-row { display: grid; grid-template-columns: 42px minmax(160px,1fr) minmax(180px,1fr) auto; gap: 12px; align-items: center; min-height: 64px; padding: 9px 0; border-top: 1px solid rgba(212,238,231,.07); }
+  .provider-row:first-child { border-top: 0; }
+  .provider-logo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: #0d211b; color: #8bc8b5; font-weight: 750; }
+  .provider-row strong { display: block; font-size: 14.5px; }
+  .provider-row span { display: block; margin-top: 4px; color: #657c74; font-size: 12.5px; }
+  .provider-note { display: flex; align-items: center; gap: 6px; color: #667d75; font-size: 12.5px; }
+  .provider-state { color: #d2a45d; font-size: 13px; font-weight: 700; }
+  .provider-state.good { color: #72c6aa; }
+
+  .update-strip { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 13px; align-items: center; margin-top: 18px; padding: 18px 20px; border: 1px solid rgba(212,238,231,.09); border-radius: 13px; color: #749087; background: #091915; }
+  .update-strip strong { display: block; color: #d9e5e1; font-size: 15px; }
+  .update-strip span { display: block; margin-top: 5px; color: #657c74; font-size: 12.5px; }
+  .update-strip button, .update-detail button { height: 38px; padding: 0 13px; border: 1px solid rgba(212,238,231,.12); border-radius: 8px; background: #10251f; color: #a8c1b9; font: inherit; font-size: 13.5px; }
+
+  .page-heading { padding: 8px 0 28px; }
+  .detail-panel { min-height: 260px; }
+  .agent-identity { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+  .agent-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 14px; background: rgba(111,227,189,.07); color: #79c5ad; }
+  .agent-identity h2 { margin: 0; font-size: 20px; }
+  .agent-identity p { margin: 5px 0 0; color: #687f77; font-size: 13px; }
+  .agent-identity > strong { color: #d1a45b; font-size: 14px; }
+  .agent-identity > strong.good { color: #72c6aa; }
+  .detail-grid { display: grid; grid-template-columns: repeat(4,1fr); margin-top: 26px; border-top: 1px solid rgba(212,238,231,.08); }
+  .detail-grid > div { padding: 18px 12px 0 0; }
+  .detail-grid span { display: block; color: #627970; font-size: 12px; }
+  .detail-grid strong { display: block; margin-top: 7px; font-size: 17px; }
+
+  .simple-row { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 0 4px; border-top: 1px solid rgba(212,238,231,.07); }
+  .simple-row:first-child { border-top: 0; }
+  .simple-row strong { font-size: 14.5px; }
+  .simple-row span { margin-left: auto; color: #72c6aa; font-size: 13px; }
+  .empty { color: #667e76; font-size: 14px; line-height: 1.6; }
+  .empty.large { padding: 38px 4px; font-size: 16px; }
+
+  .update-detail { display: flex; align-items: center; gap: 16px; }
+  .update-detail h2 { margin: 0; font-size: 19px; }
+  .update-detail p { margin: 6px 0 0; color: #697f77; font-size: 13px; }
+  .update-detail button { margin-left: auto; }
+
+  .diagnostics-list > div { display: grid; grid-template-columns: 9px minmax(0,1fr) auto; gap: 11px; align-items: center; min-height: 64px; border-top: 1px solid rgba(212,238,231,.07); }
+  .diagnostics-list > div:first-child { border-top: 0; }
+  .diagnostics-list > div > span { width: 8px; height: 8px; border-radius: 50%; background: #d1a45b; }
+  .diagnostics-list > div > span.good { background: #6fe3bd; }
+  .diagnostics-list strong { font-size: 14.5px; }
+  .diagnostics-list p { margin: 4px 0 0; color: #657c74; font-size: 12.5px; }
+  .diagnostics-list b { color: #8fa69e; font-size: 13px; }
+
+  .spin { display: inline-flex; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1050px) {
+    .cockpit-shell { grid-template-columns: 220px minmax(0,1fr); }
+    .overview-layout { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(2,1fr); }
+    .provider-row { grid-template-columns: 42px 1fr auto; }
+    .provider-note { display: none; }
+  }
+
+  @media (max-width: 820px) {
+    .cockpit-shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .content-frame { padding: 26px 22px 36px; }
+    .hero { align-items: flex-start; flex-direction: column; }
+    .topbar { padding: 0 22px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spin { animation: none; }
+  }
+</style>
