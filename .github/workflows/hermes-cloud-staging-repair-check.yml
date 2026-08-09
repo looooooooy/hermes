@@ -8,6 +8,7 @@ on:
       - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
       - "deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh"
       - "deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh"
+      - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - "deploy/staging/scripts/diagnose_hermes_cloud_sqlite_seed.sh"
       - "deploy/staging/scripts/diagnose_hermes_cloud_workspace_seed_fields.sh"
       - "deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh"
+      - "deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh"
       - ".github/workflows/hermes-cloud-staging-repair-check.yml"
 
 permissions:
@@ -41,3 +43,7 @@ jobs:
         run: bash -n deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh
       - name: Lint workspace creator reconcile shell
         run: shellcheck deploy/staging/scripts/reconcile_hermes_cloud_workspace_creator_and_resume.sh
+      - name: Parse destructive SQLite reset shell
+        run: bash -n deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh
+      - name: Lint destructive SQLite reset shell
+        run: shellcheck deploy/staging/scripts/reset_hermes_cloud_sqlite_and_resume.sh
