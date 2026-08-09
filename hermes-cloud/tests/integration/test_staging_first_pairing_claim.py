@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib.util
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from deploy.test_server.scripts.migrate_sqlite import main as migrate_sqlite
-from deploy.test_server.scripts.seed_test_data import main as seed_test_data
 from hermes_cloud.adapters.business_api_runtime import (
     build_production_business_api_application,
 )
@@ -22,6 +23,17 @@ CHALLENGE = base64.urlsafe_b64encode(
 ).rstrip(b"=").decode("ascii")
 STATE = "staging-first-claim-state-0123456789"
 REDIRECT = "http://127.0.0.1:55407/oauth/callback"
+CLOUD_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_script(name: str, relative_path: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, CLOUD_ROOT / relative_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load staging script: {relative_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_private(path: Path, content: str) -> Path:
@@ -114,8 +126,16 @@ def _access_token(client: TestClient) -> str:
 
 def test_first_pairing_claim_after_real_staging_migration_and_seed(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
-    migrate_sqlite(["--apply"], environment=environment)
-    seed_test_data(["--apply"], environment=environment)
+    migrate_module = _load_script(
+        "hermes_staging_migrate_sqlite_test",
+        "deploy/test_server/scripts/migrate_sqlite.py",
+    )
+    seed_module = _load_script(
+        "hermes_staging_seed_test_data_test",
+        "deploy/test_server/scripts/seed_test_data.py",
+    )
+    migrate_module.main(["--apply"], environment=environment)
+    seed_module.main(["--apply"], environment=environment)
 
     application = build_production_business_api_application(environment=environment)
     with TestClient(application, base_url="https://api.example.test") as client:
