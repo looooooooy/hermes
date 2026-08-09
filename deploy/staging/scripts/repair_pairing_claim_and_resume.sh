@@ -87,6 +87,13 @@ protected_tables = (
     "password_credentials",
     "refresh_sessions",
 )
+pairing_ledger_tables = (
+    "pairing_enrollment_proofs",
+    "pairing_idempotency_records",
+    "pairing_sessions",
+    "pairing_claim_limits",
+    "pairing_offers",
+)
 
 connection = sqlite3.connect(path, timeout=10.0)
 connection.row_factory = sqlite3.Row
@@ -115,6 +122,7 @@ try:
     ).fetchall()
     if len(seed_rows) != 1:
         raise RuntimeError("canonical staging seed device is missing or ambiguous")
+    seed_device_id = seed_rows[0]["device_id"]
 
     non_seed = connection.execute(
         "SELECT tenant_id, device_id, device_key, status "
@@ -155,21 +163,18 @@ try:
             device_ids,
         )
 
-    # These tables are pairing-only scratch/ledger state in this staging profile.
-    # Clear them in FK-safe child-to-parent order. No account/workspace/session-auth
-    # table is touched.
-    for table in (
-        "pairing_enrollment_proofs",
-        "pairing_idempotency_records",
-        "device_lifecycles",
-        "pairing_sessions",
-        "pairing_claim_limits",
-        "pairing_offers",
-    ):
+    # Pairing offers/sessions/idempotency/rate-limit rows are staging scratch.
+    # Clear those ledgers in FK-safe order, but preserve any lifecycle row owned
+    # by the canonical seeded owner-control device.
+    for table in pairing_ledger_tables:
         connection.execute(f'DELETE FROM "{table}"')
 
     if device_ids:
         placeholders = ",".join("?" for _ in device_ids)
+        connection.execute(
+            f"DELETE FROM device_lifecycles WHERE device_id IN ({placeholders})",
+            device_ids,
+        )
         connection.execute(
             f"DELETE FROM devices WHERE device_id IN ({placeholders})",
             device_ids,
@@ -182,6 +187,17 @@ try:
     if after != before:
         raise RuntimeError("protected identity/workspace/auth table counts changed")
 
+    seed_after = connection.execute(
+        "SELECT device_id, status FROM devices WHERE device_key = ?",
+        (seed_device_key,),
+    ).fetchall()
+    if (
+        len(seed_after) != 1
+        or seed_after[0]["device_id"] != seed_device_id
+        or seed_after[0]["status"] != seed_rows[0]["status"]
+    ):
+        raise RuntimeError("canonical staging seed device changed during repair")
+
     remaining_non_seed = connection.execute(
         "SELECT COUNT(*) FROM devices WHERE device_key <> ?",
         (seed_device_key,),
@@ -189,14 +205,17 @@ try:
     if remaining_non_seed != 0:
         raise RuntimeError("non-seed pairing devices remain after repair")
 
-    for table in (
-        "pairing_enrollment_proofs",
-        "pairing_idempotency_records",
-        "device_lifecycles",
-        "pairing_sessions",
-        "pairing_claim_limits",
-        "pairing_offers",
-    ):
+    if device_ids:
+        placeholders = ",".join("?" for _ in device_ids)
+        remaining_lifecycles = connection.execute(
+            f"SELECT COUNT(*) FROM device_lifecycles "
+            f"WHERE device_id IN ({placeholders})",
+            device_ids,
+        ).fetchone()[0]
+        if remaining_lifecycles != 0:
+            raise RuntimeError("failed pairing lifecycle rows remain after repair")
+
+    for table in pairing_ledger_tables:
         if connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] != 0:
             raise RuntimeError(f"pairing scratch table was not cleared: {table}")
 
@@ -207,6 +226,7 @@ try:
     connection.commit()
     print(f"pairing_scratch_devices_removed={len(device_ids)}")
     print("pairing_scratch_reset=PASS")
+    print("canonical_seed_device_preserved=PASS")
     print("identity_workspace_auth_preserved=PASS")
 except BaseException:
     connection.rollback()
