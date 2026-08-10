@@ -12,6 +12,7 @@ from hermes_cloud.domain.persistence import PairingSessionState
 from hermes_cloud.modules.device.domain import DeviceLifecycleState, PairingOffer
 from hermes_cloud.modules.device.ports import (
     ClaimPairingCommand,
+    ConfirmPairingCommand,
     PairingMutation,
     PairingStateConflict,
 )
@@ -41,6 +42,7 @@ FIRST_DEVICE_ID = UUID("88888888-8888-4888-8888-888888888888")
 SECOND_OFFER_ID = UUID("12121212-1212-4212-8212-121212121212")
 SECOND_SESSION_ID = UUID("13131313-1313-4313-8313-131313131313")
 SECOND_DEVICE_ID = UUID("14141414-1414-4414-8414-141414141414")
+CHALLENGE_ID = UUID("15151515-1515-4515-8515-151515151515")
 PUBLIC_KEY = bytes(range(32))
 FINGERPRINT = "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd"
 DEVICE_KEY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -166,6 +168,7 @@ def _mutation(
     key_digit: str,
     request_digit: str,
     created_at: datetime,
+    expected_revision: int = 0,
 ) -> PairingMutation:
     return PairingMutation(
         pairing_mutation_id=mutation_id,
@@ -173,7 +176,7 @@ def _mutation(
         idempotency_key_digest=key_digit * 64,
         principal_digest="e" * 64,
         request_digest=request_digit * 64,
-        expected_revision=0,
+        expected_revision=expected_revision,
         created_at=created_at,
         expires_at=created_at + timedelta(days=1),
     )
@@ -236,6 +239,91 @@ def _first_claim(repository: SQLiteOperationScopedPairingRepository) -> None:
     assert claimed.lifecycle.state is DeviceLifecycleState.PENDING
 
 
+def _confirm_first_claim(repository: SQLiteOperationScopedPairingRepository) -> None:
+    confirmed = repository.confirm_owner(
+        ConfirmPairingCommand(
+            tenant_id=TENANT_ID,
+            owner_user_id=USER_ID,
+            pairing_session_id=FIRST_SESSION_ID,
+            credential_fingerprint=FINGERPRINT,
+            expected_revision=1,
+            challenge_id=CHALLENGE_ID,
+            challenge_digest="d" * 64,
+            challenge_expires_at=NOW + timedelta(seconds=50),
+            now=NOW + timedelta(seconds=10),
+        ),
+        mutation=_mutation(
+            "confirm",
+            mutation_id=UUID("24242424-2424-4424-8424-242424242424"),
+            key_digit="5",
+            request_digit="6",
+            created_at=NOW + timedelta(seconds=10),
+            expected_revision=1,
+        ),
+    )
+    assert confirmed.session is not None
+    assert confirmed.session.state is PairingSessionState.CONFIRMED
+    assert confirmed.lifecycle is not None
+    assert confirmed.lifecycle.state is DeviceLifecycleState.PENDING
+    assert confirmed.credential is None
+
+
+def _second_claim(
+    repository: SQLiteOperationScopedPairingRepository,
+) -> object:
+    second = _offer(
+        offer_id=SECOND_OFFER_ID,
+        code_digest="7" * 64,
+        secret_digest="8" * 64,
+    )
+    repository.create_offer(
+        second,
+        mutation=_mutation(
+            "create",
+            mutation_id=UUID("29292929-2929-4929-8929-292929292929"),
+            key_digit="9",
+            request_digit="a",
+            created_at=NOW + timedelta(seconds=15),
+        ),
+    )
+    return repository.claim_offer(
+        _claim(
+            pairing_session_id=SECOND_SESSION_ID,
+            device_id=SECOND_DEVICE_ID,
+            code_digest=second.pairing_code_digest,
+            now=NOW + timedelta(seconds=20),
+        ),
+        mutation=_mutation(
+            "claim",
+            mutation_id=UUID("2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b"),
+            key_digit="b",
+            request_digit="c",
+            created_at=NOW + timedelta(seconds=20),
+        ),
+    )
+
+
+def _assert_recovered(factory: sessionmaker[Session], recovered: object) -> None:
+    assert getattr(recovered, "session") is not None
+    assert recovered.session.state is PairingSessionState.CLAIMED
+    assert getattr(recovered, "lifecycle") is not None
+    assert recovered.lifecycle.device_id == SECOND_DEVICE_ID
+    assert recovered.lifecycle.state is DeviceLifecycleState.PENDING
+    with factory.begin() as session:
+        old = session.get(DeviceModel, (TENANT_ID, FIRST_DEVICE_ID))
+        old_lifecycle = session.get(
+            DeviceLifecycleModel,
+            (TENANT_ID, FIRST_DEVICE_ID),
+        )
+        current = session.get(DeviceModel, (TENANT_ID, SECOND_DEVICE_ID))
+    assert old is not None
+    assert old.device_key == f"retired:{FIRST_DEVICE_ID}"
+    assert old_lifecycle is not None
+    assert old_lifecycle.state == DeviceLifecycleState.REVOKED.value
+    assert current is not None
+    assert current.device_key == DEVICE_KEY
+
+
 def test_same_device_can_replace_abandoned_never_activated_pending_claim(
     tmp_path: Path,
 ) -> None:
@@ -244,55 +332,23 @@ def test_same_device_can_replace_abandoned_never_activated_pending_claim(
     repository = SQLiteOperationScopedPairingRepository(factory)
     try:
         _first_claim(repository)
-        second = _offer(
-            offer_id=SECOND_OFFER_ID,
-            code_digest="7" * 64,
-            secret_digest="8" * 64,
-        )
-        repository.create_offer(
-            second,
-            mutation=_mutation(
-                "create",
-                mutation_id=UUID("29292929-2929-4929-8929-292929292929"),
-                key_digit="9",
-                request_digit="a",
-                created_at=NOW + timedelta(seconds=10),
-            ),
-        )
-        recovered = repository.claim_offer(
-            _claim(
-                pairing_session_id=SECOND_SESSION_ID,
-                device_id=SECOND_DEVICE_ID,
-                code_digest=second.pairing_code_digest,
-                now=NOW + timedelta(seconds=15),
-            ),
-            mutation=_mutation(
-                "claim",
-                mutation_id=UUID("2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b"),
-                key_digit="b",
-                request_digit="c",
-                created_at=NOW + timedelta(seconds=15),
-            ),
-        )
-        assert recovered.session is not None
-        assert recovered.session.state is PairingSessionState.CLAIMED
-        assert recovered.lifecycle is not None
-        assert recovered.lifecycle.device_id == SECOND_DEVICE_ID
-        assert recovered.lifecycle.state is DeviceLifecycleState.PENDING
+        recovered = _second_claim(repository)
+        _assert_recovered(factory, recovered)
+    finally:
+        engine.dispose()
 
-        with factory.begin() as session:
-            old = session.get(DeviceModel, (TENANT_ID, FIRST_DEVICE_ID))
-            old_lifecycle = session.get(
-                DeviceLifecycleModel,
-                (TENANT_ID, FIRST_DEVICE_ID),
-            )
-            current = session.get(DeviceModel, (TENANT_ID, SECOND_DEVICE_ID))
-        assert old is not None
-        assert old.device_key == f"retired:{FIRST_DEVICE_ID}"
-        assert old_lifecycle is not None
-        assert old_lifecycle.state == DeviceLifecycleState.REVOKED.value
-        assert current is not None
-        assert current.device_key == DEVICE_KEY
+
+def test_same_device_can_replace_confirmed_pending_binding_after_helper_failure(
+    tmp_path: Path,
+) -> None:
+    engine, factory = _factory(tmp_path)
+    _seed_owner_scope(factory)
+    repository = SQLiteOperationScopedPairingRepository(factory)
+    try:
+        _first_claim(repository)
+        _confirm_first_claim(repository)
+        recovered = _second_claim(repository)
+        _assert_recovered(factory, recovered)
     finally:
         engine.dispose()
 
