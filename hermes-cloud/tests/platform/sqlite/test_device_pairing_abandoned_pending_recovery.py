@@ -26,6 +26,7 @@ from hermes_cloud.platform.postgres.models import (
     WorkspaceMembershipModel,
     WorkspaceModel,
 )
+from hermes_cloud.platform.sqlalchemy.repositories.device import PairingOutcome
 from hermes_cloud.platform.sqlite.engine import build_sqlite_engine
 from hermes_cloud.platform.sqlite.runtime import SQLiteOperationScopedPairingRepository
 from hermes_cloud.platform.sqlite.schema import build_sqlite_metadata
@@ -270,7 +271,7 @@ def _confirm_first_claim(repository: SQLiteOperationScopedPairingRepository) -> 
 
 def _second_claim(
     repository: SQLiteOperationScopedPairingRepository,
-) -> object:
+) -> PairingOutcome:
     second = _offer(
         offer_id=SECOND_OFFER_ID,
         code_digest="7" * 64,
@@ -303,10 +304,13 @@ def _second_claim(
     )
 
 
-def _assert_recovered(factory: sessionmaker[Session], recovered: object) -> None:
-    assert getattr(recovered, "session") is not None
+def _assert_recovered(
+    factory: sessionmaker[Session],
+    recovered: PairingOutcome,
+) -> None:
+    assert recovered.session is not None
     assert recovered.session.state is PairingSessionState.CLAIMED
-    assert getattr(recovered, "lifecycle") is not None
+    assert recovered.lifecycle is not None
     assert recovered.lifecycle.device_id == SECOND_DEVICE_ID
     assert recovered.lifecycle.state is DeviceLifecycleState.PENDING
     with factory.begin() as session:
