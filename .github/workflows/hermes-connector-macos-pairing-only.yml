@@ -1,0 +1,50 @@
+name: Hermes Connector macOS pre-runtime pairing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/macos_pairing.py"
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/src/hermes_connector/application/pairing_coordinator.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py"
+      - "hermes-connector/tests/unit/bootstrap/test_macos_pairing_only_runtime.py"
+      - ".github/workflows/hermes-connector-macos-pairing-only.yml"
+  pull_request:
+    paths:
+      - "hermes-connector/src/hermes_connector/bootstrap/macos_pairing.py"
+      - "hermes-connector/src/hermes_connector/cli.py"
+      - "hermes-connector/src/hermes_connector/application/pairing_coordinator.py"
+      - "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py"
+      - "hermes-connector/tests/unit/bootstrap/test_macos_pairing_only_runtime.py"
+      - ".github/workflows/hermes-connector-macos-pairing-only.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pairing-only:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked Connector environment
+        run: |
+          python -m pip install uv==0.12.0
+          cd hermes-connector
+          uv sync --locked
+      - name: Lint pairing-only boundary
+        run: |
+          cd hermes-connector
+          uv run --locked ruff check \
+            src/hermes_connector/bootstrap/macos_pairing.py \
+            src/hermes_connector/cli.py \
+            tests/unit/bootstrap/test_macos_pairing_only_runtime.py
+      - name: Test pre-runtime pairing boundary
+        run: |
+          cd hermes-connector
+          uv run --locked pytest -q \
+            tests/unit/bootstrap/test_macos_pairing_only_runtime.py \
+            tests/unit/bootstrap/test_cli.py
