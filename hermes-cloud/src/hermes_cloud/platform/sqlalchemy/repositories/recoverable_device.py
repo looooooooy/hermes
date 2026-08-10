@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from hermes_cloud.domain.persistence import PairingSessionState
 from hermes_cloud.modules.device.domain import DeviceLifecycleState
 from hermes_cloud.modules.device.ports import (
@@ -11,7 +9,7 @@ from hermes_cloud.modules.device.ports import (
     PairingMutation,
     PairingStateConflict,
 )
-from hermes_cloud.platform.postgres.models import DeviceModel
+from hermes_cloud.platform.postgres.models import DeviceModel, PairingSessionModel
 from hermes_cloud.platform.sqlalchemy.repositories.device import (
     PairingOutcome,
     SqlAlchemyPairingRepositoryBase,
@@ -128,7 +126,7 @@ class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
         # that enrollment as abandoned inside the new claim transaction, then
         # release only its live uniqueness key. Historical rows remain queryable.
         session_model = self._session.get(
-            type(self)._pairing_session_model_type(),
+            PairingSessionModel,
             (command.tenant_id, snapshot.session.pairing_session_id),
             populate_existing=True,
         )
@@ -144,14 +142,6 @@ class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
         )
         self._tombstone_device_key(existing)
         self._session.flush()
-
-    @staticmethod
-    def _pairing_session_model_type():
-        # Local import keeps the recovery module's public import surface narrow
-        # while still using the authoritative SQLAlchemy mapping.
-        from hermes_cloud.platform.postgres.models import PairingSessionModel
-
-        return PairingSessionModel
 
     def _tombstone_device_key(self, existing: DeviceModel) -> None:
         existing.device_key = f"retired:{existing.device_id}"
