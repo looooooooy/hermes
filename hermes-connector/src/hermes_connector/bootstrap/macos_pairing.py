@@ -13,6 +13,7 @@ import os
 import stat
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -36,22 +37,98 @@ from hermes_connector.adapters.platform.macos.pairing_projection import (
     MacOSPairedProjectionStore,
     MacOSPairingOfferProjectionStore,
 )
-from hermes_connector.application.pairing_coordinator import PairingCoordinator
+from hermes_connector.application.pairing_coordinator import (
+    PairingConflict,
+    PairingCoordinator,
+)
 from hermes_connector.bootstrap.settings import ConnectorRuntimeSettings
+from hermes_connector.ports.pairing import DevicePairingCloudError
 
 if TYPE_CHECKING:
     from hermes_connector.adapters.platform.macos.security_framework import (
         SecurityFrameworkAPIPort,
     )
+    from hermes_connector.domain.pairing import (
+        PairingCancelDisplay,
+        PairingStartDisplay,
+        PairingStatusDisplay,
+    )
 
 _DEVICE_KEY_SERVICE = "wiki.seaotter.hermes.connector.device-key.v1"
 _CLOUD_TOKEN_SERVICE = "wiki.seaotter.hermes.connector.cloud-token.v1"
 _PAIRING_OFFER_SERVICE = "wiki.seaotter.hermes.connector.pairing-offer.v1"
+_ORPHANED_OFFER_ERRORS = frozenset(
+    {
+        (404, "PAIRING_NOT_FOUND"),
+        (410, "PAIRING_EXPIRED"),
+    }
+)
+
+
+class RecoveringPairingCoordinator:
+    """Recover only Cloud-proven orphan offers; preserve all live pairings."""
+
+    def __init__(
+        self,
+        *,
+        delegate: PairingCoordinator,
+        cloud: DevicePairingHttpClient,
+        offer_secret_store: MacOSKeychainSecretStore,
+        offer_projection_store: MacOSPairingOfferProjectionStore,
+    ) -> None:
+        self._delegate = delegate
+        self._cloud = cloud
+        self._offer_secret_store = offer_secret_store
+        self._offer_projection_store = offer_projection_store
+
+    async def start(self) -> PairingStartDisplay:
+        try:
+            return await self._delegate.start()
+        except PairingConflict:
+            if not await self._recover_cloud_proven_orphan_offer():
+                raise
+        return await self._delegate.start()
+
+    async def status(self) -> PairingStatusDisplay:
+        return await self._delegate.status()
+
+    async def cancel(self) -> PairingCancelDisplay:
+        return await self._delegate.cancel()
+
+    async def _recover_cloud_proven_orphan_offer(self) -> bool:
+        projection = await self._offer_projection_store.load()
+        if projection is None:
+            return False
+        raw_secret = await self._offer_secret_store.read_secret()
+        if raw_secret is None:
+            return False
+        try:
+            pairing_offer_secret = raw_secret.decode("ascii")
+        except UnicodeDecodeError:
+            return False
+        try:
+            status = await self._cloud.get_pairing_offer(
+                projection.pairing_offer_id,
+                pairing_offer_secret=pairing_offer_secret,
+            )
+        except DevicePairingCloudError as error:
+            if (error.status_code, error.code) not in _ORPHANED_OFFER_ERRORS:
+                raise
+        else:
+            if status.state not in {"cancelled", "expired"}:
+                return False
+        await self._offer_secret_store.delete_secret_if_matches(
+            sha256(raw_secret).digest()
+        )
+        await self._offer_projection_store.delete_if_matches(
+            projection.pairing_offer_id
+        )
+        return True
 
 
 @dataclass(frozen=True, slots=True)
 class MacOSPairingRuntime:
-    coordinator: PairingCoordinator
+    coordinator: RecoveringPairingCoordinator
     pairing_http: DevicePairingHttpClient
     keychain_broker: MacOSKeychainBroker
 
@@ -113,16 +190,17 @@ def build_macos_pairing_runtime(
         )
     )
     pairing_http = DevicePairingHttpClient(settings.cloud_api_endpoint)
-    coordinator = PairingCoordinator(
+    offer_projection_store = MacOSPairingOfferProjectionStore(
+        settings.pairing_offer_projection_file
+    )
+    delegate = PairingCoordinator(
         connector_instance_id=identities.connector_instance_id,
         display_name=settings.display_name,
         connector_version=settings.connector_version,
         identity=device_identity,
         cloud=pairing_http,
         offer_secret_store=offer_secret_store,
-        offer_projection_store=MacOSPairingOfferProjectionStore(
-            settings.pairing_offer_projection_file
-        ),
+        offer_projection_store=offer_projection_store,
         paired_projection_store=MacOSPairedProjectionStore(
             settings.paired_projection_file
         ),
@@ -130,6 +208,12 @@ def build_macos_pairing_runtime(
         now=lambda: datetime.now(UTC),
         new_idempotency_key=uuid4,
         command_lock=MacOSPairingCommandLock(settings.pairing_command_lock_file),
+    )
+    coordinator = RecoveringPairingCoordinator(
+        delegate=delegate,
+        cloud=pairing_http,
+        offer_secret_store=offer_secret_store,
+        offer_projection_store=offer_projection_store,
     )
     return MacOSPairingRuntime(
         coordinator=coordinator,
@@ -190,6 +274,7 @@ def _has_symlink_component(path: Path) -> bool:
 
 __all__ = [
     "MacOSPairingRuntime",
+    "RecoveringPairingCoordinator",
     "build_macos_pairing_runtime",
     "check_macos_pairing_runtime",
 ]
