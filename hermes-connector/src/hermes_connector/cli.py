@@ -123,7 +123,7 @@ def read_macos_status(
 def build_macos_pairing_runtime(
     settings: ConnectorRuntimeSettings,
 ) -> PairingRuntime:
-    from hermes_connector.bootstrap.macos import (
+    from hermes_connector.bootstrap.macos_pairing import (
         build_macos_pairing_runtime as build,
     )
 
