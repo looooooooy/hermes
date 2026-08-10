@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
 
@@ -305,7 +306,7 @@ def test_pending_binding_with_different_device_key_material_remains_conflict(
     try:
         _first_claim(repository)
         different_key = bytes(reversed(range(32)))
-        different_fingerprint = "f" * 64
+        different_fingerprint = sha256(different_key).hexdigest()
         second = _offer(
             offer_id=SECOND_OFFER_ID,
             code_digest="7" * 64,
