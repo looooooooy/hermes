@@ -45,7 +45,9 @@ SECOND_SESSION_ID = UUID("13131313-1313-4313-8313-131313131313")
 SECOND_DEVICE_ID = UUID("14141414-1414-4414-8414-141414141414")
 CHALLENGE_ID = UUID("15151515-1515-4515-8515-151515151515")
 PUBLIC_KEY = bytes(range(32))
-FINGERPRINT = "630dcd2966c4336691125448bbb25b4ff412a49c732db2c8abc1b8581bd710dd"
+FINGERPRINT = sha256(PUBLIC_KEY).hexdigest()
+ROTATED_PUBLIC_KEY = bytes(reversed(range(32)))
+ROTATED_FINGERPRINT = sha256(ROTATED_PUBLIC_KEY).hexdigest()
 DEVICE_KEY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
@@ -271,11 +273,16 @@ def _confirm_first_claim(repository: SQLiteOperationScopedPairingRepository) -> 
 
 def _second_claim(
     repository: SQLiteOperationScopedPairingRepository,
+    *,
+    public_key: bytes = PUBLIC_KEY,
+    fingerprint: str = FINGERPRINT,
 ) -> PairingOutcome:
     second = _offer(
         offer_id=SECOND_OFFER_ID,
         code_digest="7" * 64,
         secret_digest="8" * 64,
+        public_key=public_key,
+        fingerprint=fingerprint,
     )
     repository.create_offer(
         second,
@@ -336,8 +343,7 @@ def test_same_device_can_replace_abandoned_never_activated_pending_claim(
     repository = SQLiteOperationScopedPairingRepository(factory)
     try:
         _first_claim(repository)
-        recovered = _second_claim(repository)
-        _assert_recovered(factory, recovered)
+        _assert_recovered(factory, _second_claim(repository))
     finally:
         engine.dispose()
 
@@ -351,13 +357,12 @@ def test_same_device_can_replace_confirmed_pending_binding_after_helper_failure(
     try:
         _first_claim(repository)
         _confirm_first_claim(repository)
-        recovered = _second_claim(repository)
-        _assert_recovered(factory, recovered)
+        _assert_recovered(factory, _second_claim(repository))
     finally:
         engine.dispose()
 
 
-def test_pending_binding_with_different_device_key_material_remains_conflict(
+def test_pending_binding_can_recover_after_native_keychain_identity_rotates(
     tmp_path: Path,
 ) -> None:
     engine, factory = _factory(tmp_path)
@@ -365,14 +370,40 @@ def test_pending_binding_with_different_device_key_material_remains_conflict(
     repository = SQLiteOperationScopedPairingRepository(factory)
     try:
         _first_claim(repository)
-        different_key = bytes(reversed(range(32)))
-        different_fingerprint = sha256(different_key).hexdigest()
+        _confirm_first_claim(repository)
+        recovered = _second_claim(
+            repository,
+            public_key=ROTATED_PUBLIC_KEY,
+            fingerprint=ROTATED_FINGERPRINT,
+        )
+        _assert_recovered(factory, recovered)
+        assert recovered.offer.credential_fingerprint == ROTATED_FINGERPRINT
+        assert recovered.offer.public_key == ROTATED_PUBLIC_KEY
+    finally:
+        engine.dispose()
+
+
+def test_active_device_identity_remains_a_hard_conflict(tmp_path: Path) -> None:
+    engine, factory = _factory(tmp_path)
+    _seed_owner_scope(factory)
+    repository = SQLiteOperationScopedPairingRepository(factory)
+    try:
+        _first_claim(repository)
+        with factory.begin() as session:
+            lifecycle = session.get(DeviceLifecycleModel, (TENANT_ID, FIRST_DEVICE_ID))
+            device = session.get(DeviceModel, (TENANT_ID, FIRST_DEVICE_ID))
+            assert lifecycle is not None
+            assert device is not None
+            lifecycle.state = DeviceLifecycleState.ACTIVE.value
+            lifecycle.revision = 1
+            device.status = "active"
+
         second = _offer(
             offer_id=SECOND_OFFER_ID,
             code_digest="7" * 64,
             secret_digest="8" * 64,
-            public_key=different_key,
-            fingerprint=different_fingerprint,
+            public_key=ROTATED_PUBLIC_KEY,
+            fingerprint=ROTATED_FINGERPRINT,
         )
         repository.create_offer(
             second,
@@ -381,7 +412,7 @@ def test_pending_binding_with_different_device_key_material_remains_conflict(
                 mutation_id=UUID("29292929-2929-4929-8929-292929292929"),
                 key_digit="9",
                 request_digit="a",
-                created_at=NOW + timedelta(seconds=10),
+                created_at=NOW + timedelta(seconds=15),
             ),
         )
         with pytest.raises(PairingStateConflict, match="already bound"):
@@ -390,14 +421,14 @@ def test_pending_binding_with_different_device_key_material_remains_conflict(
                     pairing_session_id=SECOND_SESSION_ID,
                     device_id=SECOND_DEVICE_ID,
                     code_digest=second.pairing_code_digest,
-                    now=NOW + timedelta(seconds=15),
+                    now=NOW + timedelta(seconds=20),
                 ),
                 mutation=_mutation(
                     "claim",
                     mutation_id=UUID("2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b"),
                     key_digit="b",
                     request_digit="c",
-                    created_at=NOW + timedelta(seconds=15),
+                    created_at=NOW + timedelta(seconds=20),
                 ),
             )
     finally:
