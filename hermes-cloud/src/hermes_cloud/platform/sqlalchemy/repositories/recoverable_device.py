@@ -17,19 +17,21 @@ from hermes_cloud.platform.sqlalchemy.repositories.device import (
 
 
 class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
-    """Allow one device identity to safely recover from incomplete enrollment.
+    """Allow one Connector instance to safely recover incomplete enrollment.
 
-    ``devices.device_key`` is a live uniqueness key derived from the Connector
-    instance identity. Historical device rows are intentionally retained for
-    audit, so a retry must release that live key before inserting the replacement
-    row. Two recovery cases are allowed:
+    ``devices.device_key`` is the live uniqueness key derived from the stable
+    Connector instance identity. Historical rows are retained for audit, so a
+    retry must release that live key before inserting the replacement row.
 
-    * revoked/retired historical bindings; and
-    * an abandoned, never-activated pending binding for the exact same owner,
-      workspace, Agent and Ed25519 device identity.
+    Recovery is allowed for revoked/retired historical bindings and for an
+    abandoned, never-activated pending binding owned by the same user in the
+    same workspace/Agent scope. The new pairing offer may carry fresh Ed25519
+    key material: a failed pre-activation attempt can legitimately recreate its
+    native Keychain identity, and the new owner-authenticated pairing code is
+    the authority for that replacement.
 
-    Active/suspended devices, bindings with any issued credential, scope changes,
-    owner changes, or key/fingerprint changes remain hard conflicts.
+    Active/suspended devices, bindings with any issued credential, owner/scope
+    changes, or ambiguous device identities remain hard conflicts.
     """
 
     def claim_offer(
@@ -54,8 +56,6 @@ class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
             self._release_recoverable_device_key(
                 command=command,
                 device_key=offer.device_key,
-                credential_fingerprint=offer.credential_fingerprint,
-                public_key=offer.public_key,
             )
         return super().claim_offer(command, mutation=mutation)
 
@@ -64,8 +64,6 @@ class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
         *,
         command: ClaimPairingCommand,
         device_key: str,
-        credential_fingerprint: str,
-        public_key: bytes,
     ) -> None:
         rows = (
             self._session.query(DeviceModel)
@@ -117,14 +115,13 @@ class RecoverablePairingRepositoryBase(SqlAlchemyPairingRepositoryBase):
                 PairingSessionState.CONFIRMED,
             }
             or snapshot.offer.device_key != device_key
-            or snapshot.offer.credential_fingerprint != credential_fingerprint
-            or snapshot.offer.public_key != public_key
         ):
             raise PairingStateConflict("device identity is already bound")
 
-        # The previous attempt never activated or issued a device credential. Mark
-        # that enrollment as abandoned inside the new claim transaction, then
-        # release only its live uniqueness key. Historical rows remain queryable.
+        # The previous attempt never activated or issued a device credential.
+        # Mark that enrollment abandoned inside the new claim transaction and
+        # release only the live Connector-instance uniqueness key. Historical
+        # rows and old key material remain auditable through the old offer.
         session_model = self._session.get(
             PairingSessionModel,
             (command.tenant_id, snapshot.session.pairing_session_id),
