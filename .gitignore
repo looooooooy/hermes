@@ -20,6 +20,8 @@ captures/
 
 # Local deployment credentials and generated private connection material
 .hermes/secrets/
+hermes-release-publisher/.env
+hermes-release-publisher/.env.local
 
 # Local scratch space, editor state, and local-only evidence (never commit)
 .tmp/

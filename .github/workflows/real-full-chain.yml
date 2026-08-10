@@ -21,7 +21,7 @@ on:
         default: "Full-chain staging acceptance: reply with a short acknowledgement."
         type: string
       require_evidence:
-        description: Optional comma-separated evidence names: todo,tool,pending_input,approval
+        description: "Optional comma-separated evidence names: todo,tool,pending_input,approval"
         required: false
         default: ""
         type: string
