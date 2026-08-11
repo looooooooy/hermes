@@ -67,10 +67,10 @@ console_path = pathlib.Path(sys.executable).parent / console_name
 if not console_path.is_file() or console_path.is_symlink():
     raise SystemExit(f"console script missing or symlinked: {console_path}")
 site_roots = [pathlib.Path(value).resolve() for value in sys.path if "site-packages" in value]
-project_key = expected_project.lower().replace("-", "_")
+project_key = expected_project.lower().replace("-", "_").replace(".", "_")
 unexpected_direct_urls = []
 for direct_url in (item for root in site_roots for item in root.glob("*.dist-info/direct_url.json")):
-    if not direct_url.parent.name.lower().replace("-", "_").startswith(project_key + "-"):
+    if not direct_url.parent.name.lower().startswith(project_key + "-"):
         unexpected_direct_urls.append(str(direct_url))
 pth_escapes = []
 for pth in (item for root in site_roots for item in root.glob("*.pth")):

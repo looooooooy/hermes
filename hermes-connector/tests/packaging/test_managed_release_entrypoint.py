@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import runpy
+import subprocess
 import sys
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
@@ -9,10 +12,12 @@ from types import MappingProxyType, SimpleNamespace
 import pytest
 
 CONNECTOR_ROOT = Path(__file__).parents[2]
+REPOSITORY_ROOT = CONNECTOR_ROOT.parent
 COMMON_PACKAGING = CONNECTOR_ROOT / "packaging" / "common"
 sys.path.insert(0, str(COMMON_PACKAGING))
 
 import hermes_managed_release
+import hermes_local_release
 from hermes_local_release import BuildCommand, ReleaseBuilder
 from hermes_managed_release import ManagedReleaseAssembler, ManagedReleaseBuilder
 from hermes_offline_wheelhouse import WheelhouseError, load_verified_wheelhouse
@@ -281,10 +286,176 @@ def test_managed_release_sync_commands_exclude_default_dependency_groups(
     )
 
     hardened = ManagedReleaseBuilder._commands(SimpleNamespace(), tmp_path)
-    sync = [command for command in hardened if command.argv[:2] == ("uv", "sync")]
-    assert len(sync) == 2
-    assert all(command.argv.count("--no-default-groups") == 1 for command in sync)
-    assert "--no-default-groups" not in hardened[1].argv
+    assert not any(command.argv[:2] == ("uv", "sync") for command in hardened)
+    exports = [command for command in hardened if command.argv[:2] == ("uv", "export")]
+    installs = [
+        command for command in hardened if command.argv[:3] == ("uv", "pip", "install")
+    ]
+    venvs = [command for command in hardened if command.argv[:2] == ("uv", "venv")]
+    assert len(exports) == len(installs) == len(venvs) == 2
+    assert all("--frozen" in command.argv for command in exports)
+    assert all("--no-emit-project" in command.argv for command in exports)
+    assert all(command.argv.count("--no-default-groups") == 1 for command in exports)
+    assert all("--require-hashes" in command.argv for command in installs)
+    assert all("--requirements" in command.argv for command in installs)
+    assert "--no-default-groups" not in hardened[3].argv
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    ("assemble_managed_release_payload.py", "validate_managed_release_payload.py"),
+)
+def test_payload_scripts_require_the_hashed_wheelhouse_install_receipts(
+    script_name: str,
+) -> None:
+    namespace = runpy.run_path(
+        str(REPOSITORY_ROOT / "hermes-desktop" / "managed-release" / script_name)
+    )
+
+    assert namespace["REQUIRED_PURPOSES"] == {
+        "export-host-locked-requirements",
+        "create-host-venv",
+        "install-host-locked-dependencies",
+        "install-final-core-wheel",
+        "verify-host-runtime",
+        "export-connector-locked-requirements",
+        "create-connector-venv",
+        "install-connector-locked-dependencies",
+        "install-final-connector-wheel",
+        "verify-connector-runtime",
+    }
+
+
+@pytest.mark.parametrize(
+    "verification_code",
+    (
+        hermes_local_release._VERIFY_RUNTIME,
+        hermes_managed_release._VERIFY_RUNTIME_CROSS_PLATFORM,
+    ),
+)
+def test_runtime_verifier_allows_only_the_expected_local_wheel_direct_url(
+    tmp_path: Path, verification_code: str
+) -> None:
+    venv = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    scripts = venv / ("Scripts" if os.name == "nt" else "bin")
+    python = scripts / ("python.exe" if os.name == "nt" else "python")
+    site_packages = Path(
+        subprocess.run(
+            [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    package = site_packages / "demo_runtime"
+    package.mkdir()
+    (package / "__init__.py").write_text("def main(): pass\n", encoding="utf-8")
+    metadata = site_packages / "demo_runtime-1.0.dist-info"
+    metadata.mkdir()
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: demo-runtime\nVersion: 1.0\n",
+        encoding="utf-8",
+    )
+    (metadata / "entry_points.txt").write_text(
+        "[console_scripts]\ndemo-runtime = demo_runtime:main\n",
+        encoding="utf-8",
+    )
+    (metadata / "direct_url.json").write_text(
+        json.dumps({"url": "file:///private/demo_runtime-1.0.whl"}),
+        encoding="utf-8",
+    )
+    console = scripts / ("demo-runtime.exe" if os.name == "nt" else "demo-runtime")
+    console.write_text("launcher\n", encoding="utf-8")
+    console.chmod(0o700)
+
+    completed = subprocess.run(
+        [
+            str(python),
+            "-I",
+            "-c",
+            verification_code,
+            "demo_runtime",
+            "demo-runtime",
+            "demo_runtime:main",
+            "demo-runtime",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout)["unexpected_direct_urls"] == []
+
+
+def test_payload_validator_checks_wheel_artifact_filenames() -> None:
+    namespace = runpy.run_path(
+        str(
+            REPOSITORY_ROOT
+            / "hermes-desktop"
+            / "managed-release"
+            / "validate_managed_release_payload.py"
+        )
+    )
+    only_wheels = namespace["wheelhouse_contains_only_wheels"]
+
+    assert only_wheels(
+        SimpleNamespace(
+            artifacts=(SimpleNamespace(filename="dependency-1.0-py3-none-any.whl"),)
+        )
+    )
+    assert not only_wheels(
+        SimpleNamespace(artifacts=(SimpleNamespace(filename="dependency.tar.gz"),))
+    )
+
+
+def test_wheelhouse_builder_refuses_to_mislabel_an_incompatible_python() -> None:
+    namespace = runpy.run_path(
+        str(
+            REPOSITORY_ROOT
+            / "hermes-desktop"
+            / "managed-release"
+            / "build_runtime_wheelhouse.py"
+        )
+    )
+    managed_python_tag = namespace["managed_python_tag"]
+
+    assert managed_python_tag((3, 13)) == "cp313"
+    with pytest.raises(namespace["WheelhouseBuildError"], match="Python 3.13"):
+        managed_python_tag((3, 12))
+
+
+def test_payload_assembler_rejects_unhashed_dependency_receipts() -> None:
+    namespace = runpy.run_path(
+        str(
+            REPOSITORY_ROOT
+            / "hermes-desktop"
+            / "managed-release"
+            / "assemble_managed_release_payload.py"
+        )
+    )
+    verify_dependency_commands = namespace["verify_dependency_commands"]
+    export = SimpleNamespace(
+        purpose="export-host-locked-requirements",
+        argv=(
+            "uv",
+            "export",
+            "--offline",
+            "--frozen",
+            "--no-emit-project",
+            "--no-default-groups",
+        ),
+    )
+    install = SimpleNamespace(
+        purpose="install-host-locked-dependencies",
+        argv=("uv", "pip", "install", "--offline", "--require-hashes"),
+    )
+
+    verify_dependency_commands((export, install))
+    with pytest.raises(namespace["ManagedPayloadError"], match="hashed requirements"):
+        verify_dependency_commands(
+            (export, SimpleNamespace(purpose=install.purpose, argv=install.argv[:-1]))
+        )
 
 
 def test_production_code_cannot_bypass_managed_release_composition() -> None:

@@ -25,12 +25,15 @@ TARGETS = {
     "windows-x86_64": ("windows", "x86_64"),
 }
 REQUIRED_PURPOSES = {
-    "sync-host-dependencies",
-    "install-host-runtime",
-    "install-agent-plugin",
+    "export-host-locked-requirements",
+    "create-host-venv",
+    "install-host-locked-dependencies",
+    "install-final-core-wheel",
     "verify-host-runtime",
-    "sync-connector-dependencies",
-    "install-connector-runtime",
+    "export-connector-locked-requirements",
+    "create-connector-venv",
+    "install-connector-locked-dependencies",
+    "install-final-connector-wheel",
     "verify-connector-runtime",
 }
 
@@ -130,7 +133,7 @@ def main() -> int:
         manifest.get("wheelhouse_manifest_sha256"),
         "wheelhouse manifest SHA",
     )
-    if any(not artifact.path.name.endswith(".whl") for artifact in wheelhouse.artifacts):
+    if not wheelhouse_contains_only_wheels(wheelhouse):
         raise ValidationError("wheelhouse contains a non-wheel artifact")
 
     portable_manifest = root / "plugin/portable-plugin-manifest.json"
@@ -203,6 +206,10 @@ def run_plugin_verifier(runtime_manager: Path, manifest: Path, trust: Path, whee
 def safe_relative(value: str) -> bool:
     path = Path(value)
     return bool(value) and not path.is_absolute() and ".." not in path.parts and "." not in path.parts
+
+
+def wheelhouse_contains_only_wheels(wheelhouse: Any) -> bool:
+    return all(artifact.filename.endswith(".whl") for artifact in wheelhouse.artifacts)
 
 
 def load_json(path: Path) -> dict[str, Any]:

@@ -143,9 +143,48 @@ def test_verified_wheelhouse_disables_registry_and_binds_find_links(tmp_path: Pa
     argv, _, environment = executor.calls[0]
     assert argv[1] == "sync"
     assert "--no-index" in argv
+    assert argv[argv.index("--find-links") + 1] == str(
+        (tmp_path / "wheelhouse").resolve()
+    )
     assert environment["UV_FIND_LINKS"] == str((tmp_path / "wheelhouse").resolve())
     assert environment["UV_NO_CONFIG"] == "1"
     assert environment["UV_NO_PYTHON_DOWNLOADS"] == "1"
+
+
+def test_locked_export_and_venv_use_only_the_pinned_toolchain(tmp_path: Path) -> None:
+    runner, executor, toolchain = _runner(tmp_path, with_wheelhouse=True)
+    requirements = (tmp_path / "requirements.txt").resolve()
+    venv = (tmp_path / "venv").resolve()
+
+    runner.run(
+        _command(
+            tmp_path,
+            (
+                "uv",
+                "export",
+                "--offline",
+                "--frozen",
+                "--project",
+                str(tmp_path),
+                "--output-file",
+                str(requirements),
+            ),
+        )
+    )
+    runner.run(_command(tmp_path, ("uv", "venv", "--offline", str(venv))))
+
+    export_argv, _, _ = executor.calls[0]
+    venv_argv, _, _ = executor.calls[1]
+    assert export_argv[0] == str(toolchain.uv.path)
+    assert export_argv[1] == "export"
+    assert "--no-index" not in export_argv
+    assert venv_argv[:4] == (
+        str(toolchain.uv.path),
+        "venv",
+        "--python",
+        str(toolchain.python.path),
+    )
+    assert "--no-index" not in venv_argv
 
 
 def test_uv_pip_requires_explicit_absolute_target_python(tmp_path: Path) -> None:

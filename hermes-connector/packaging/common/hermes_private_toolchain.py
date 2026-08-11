@@ -110,7 +110,7 @@ class PinnedToolchainRunner:
             argv[0] = str(self._toolchain.uv.path)
             _bind_uv_python(argv, self._toolchain.python.path)
             if self._wheelhouse is not None:
-                _bind_wheelhouse(argv)
+                _bind_wheelhouse(argv, self._wheelhouse.root)
         else:
             executable = Path(argv[0])
             if not executable.is_absolute():
@@ -151,15 +151,27 @@ def _bind_uv_python(argv: list[str], python: Path) -> None:
         raise PrivateToolchainError("uv command has no subcommand")
 
     subcommand = argv[1]
-    if subcommand == "sync":
+    if subcommand in {"sync", "venv"}:
         if "--python" in argv:
             index = argv.index("--python")
             if index + 1 >= len(argv) or Path(argv[index + 1]) != python:
                 raise PrivateToolchainError(
-                    "uv sync attempted to override the pinned private Python"
+                    f"uv {subcommand} attempted to override the pinned private Python"
                 )
         else:
             argv[2:2] = ["--python", str(python)]
+        if subcommand == "venv" and not Path(argv[-1]).is_absolute():
+            raise PrivateToolchainError("uv venv target must be an absolute path")
+        return
+
+    if subcommand == "export":
+        if "--frozen" not in argv:
+            raise PrivateToolchainError("uv export must consume the frozen lock")
+        if "--output-file" not in argv:
+            raise PrivateToolchainError("uv export must target an explicit output file")
+        output_index = argv.index("--output-file") + 1
+        if output_index >= len(argv) or not Path(argv[output_index]).is_absolute():
+            raise PrivateToolchainError("uv export output must be an absolute path")
         return
 
     if subcommand == "pip":
@@ -175,12 +187,20 @@ def _bind_uv_python(argv: list[str], python: Path) -> None:
     raise PrivateToolchainError(f"unapproved uv subcommand: {subcommand}")
 
 
-def _bind_wheelhouse(argv: list[str]) -> None:
+def _bind_wheelhouse(argv: list[str], root: Path) -> None:
+    if argv[1] not in {"sync", "pip"}:
+        return
+    if "--find-links" in argv:
+        index = argv.index("--find-links") + 1
+        if index >= len(argv) or Path(argv[index]) != root:
+            raise PrivateToolchainError("uv command attempted to override the wheelhouse")
+    insertion = 3 if argv[1] == "pip" else 2
+    options: list[str] = []
     if "--no-index" not in argv:
-        if argv[1] == "pip":
-            argv[3:3] = ["--no-index"]
-        else:
-            argv[2:2] = ["--no-index"]
+        options.append("--no-index")
+    if "--find-links" not in argv:
+        options.extend(("--find-links", str(root)))
+    argv[insertion:insertion] = options
 
 
 def _sanitized_environment(declared: Mapping[str, str]) -> dict[str, str]:

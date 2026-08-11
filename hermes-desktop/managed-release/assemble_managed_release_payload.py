@@ -44,12 +44,15 @@ TARGETS = {
     "windows-x86_64": ("windows", "x86_64"),
 }
 REQUIRED_PURPOSES = {
-    "sync-host-dependencies",
-    "install-host-runtime",
-    "install-agent-plugin",
+    "export-host-locked-requirements",
+    "create-host-venv",
+    "install-host-locked-dependencies",
+    "install-final-core-wheel",
     "verify-host-runtime",
-    "sync-connector-dependencies",
-    "install-connector-runtime",
+    "export-connector-locked-requirements",
+    "create-connector-venv",
+    "install-connector-locked-dependencies",
+    "install-final-connector-wheel",
     "verify-connector-runtime",
 }
 
@@ -170,9 +173,7 @@ def main() -> int:
         purposes = [command.purpose for command in published.commands]
         if set(purposes) != REQUIRED_PURPOSES or len(purposes) != len(REQUIRED_PURPOSES):
             raise ManagedPayloadError(f"unexpected Managed Release command set: {purposes}")
-        for command in published.commands:
-            if command.purpose.startswith("sync-") and "--no-default-groups" not in command.argv:
-                raise ManagedPayloadError("Managed Release sync command included default dependency groups")
+        verify_dependency_commands(published.commands)
 
         stage = proof_root / "payload"
         stage.mkdir(mode=0o700)
@@ -275,6 +276,17 @@ def load_private_toolchain(root: Path, platform_name: str, architecture: str) ->
             version=str(manifest.get("uv_version", "")),
         ),
     )
+
+
+def verify_dependency_commands(commands: tuple[Any, ...]) -> None:
+    for command in commands:
+        if command.purpose.endswith("-locked-requirements"):
+            required = {"--offline", "--frozen", "--no-emit-project", "--no-default-groups"}
+            if not required.issubset(command.argv):
+                raise ManagedPayloadError("Managed Release did not export a frozen runtime lock")
+        if command.purpose.endswith("-locked-dependencies"):
+            if "--offline" not in command.argv or "--require-hashes" not in command.argv:
+                raise ManagedPayloadError("Managed Release did not install hashed requirements offline")
 
 
 def run_plugin_verifier(runtime_manager: Path, manifest: Path, trust: Path, wheel: Path) -> dict[str, Any]:

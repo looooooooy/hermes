@@ -44,6 +44,7 @@ def main() -> int:
     parser.add_argument("--connector-project", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    python_tag = managed_python_tag(sys.version_info[:2])
 
     platform_name, architecture = TARGETS[args.target]
     uv = require_executable(args.uv.resolve(), "Private uv")
@@ -122,7 +123,7 @@ def main() -> int:
             "schema_version": 1,
             "platform": platform_name,
             "architecture": architecture,
-            "python_tag": "cp313",
+            "python_tag": python_tag,
             "locks": {"core": core_lock, "connector": connector_lock},
             "artifacts": artifacts,
         }
@@ -157,6 +158,12 @@ def main() -> int:
         )
     )
     return 0
+
+
+def managed_python_tag(version: tuple[int, int]) -> str:
+    if version != (3, 13):
+        raise WheelhouseBuildError("runtime wheelhouse must be built with Python 3.13")
+    return "cp313"
 
 
 def require_executable(path: Path, label: str) -> Path:

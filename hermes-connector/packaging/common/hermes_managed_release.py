@@ -67,10 +67,10 @@ if len(existing_console) != 1:
     raise SystemExit(f"console script missing or ambiguous: {console_candidates}")
 console_path = existing_console[0]
 site_roots = [pathlib.Path(value).resolve() for value in sys.path if "site-packages" in value]
-project_key = expected_project.lower().replace("-", "_")
+project_key = expected_project.lower().replace("-", "_").replace(".", "_")
 unexpected_direct_urls = []
 for direct_url in (item for root in site_roots for item in root.glob("*.dist-info/direct_url.json")):
-    if not direct_url.parent.name.lower().replace("-", "_").startswith(project_key + "-"):
+    if not direct_url.parent.name.lower().startswith(project_key + "-"):
         unexpected_direct_urls.append(str(direct_url))
 pth_escapes = []
 for pth in (item for root in site_roots for item in root.glob("*.pth")):
@@ -93,7 +93,8 @@ print(json.dumps({
 class ManagedReleaseBuilder(ReleaseBuilder):
     """ReleaseBuilder specialization for customer runtime assembly.
 
-    - `uv sync` installs runtime dependencies only (`--no-default-groups`).
+    - frozen locks are exported to hashed requirements and installed only from the
+      verified wheelhouse into a new private-Python virtual environment.
     - venv interpreter/console verification is platform-correct on macOS/Linux/Windows.
     - portable Plugin manifest v2 is accepted only as an artifact identity; customer
       absolute wheel/store paths are derived locally and are never part of the vendor
@@ -107,9 +108,64 @@ class ManagedReleaseBuilder(ReleaseBuilder):
         for command in commands:
             argv = tuple(_managed_venv_python(value) for value in command.argv)
             if len(argv) >= 2 and argv[:2] == ("uv", "sync"):
-                if "--no-default-groups" in argv:
-                    raise RuntimeError("duplicate --no-default-groups in managed release command")
-                argv = (*argv, "--no-default-groups")
+                component = command.purpose.removeprefix("sync-").removesuffix(
+                    "-dependencies"
+                )
+                if component not in {"host", "connector"}:
+                    raise RuntimeError("unexpected managed dependency sync command")
+                component_root = release_dir / component
+                project = component_root / "project"
+                venv = component_root / "venv"
+                requirements = component_root / "locked-requirements.txt"
+                hardened.extend(
+                    (
+                        BuildCommand(
+                            purpose=f"export-{component}-locked-requirements",
+                            argv=(
+                                "uv",
+                                "export",
+                                "--offline",
+                                "--frozen",
+                                "--project",
+                                str(project),
+                                "--format",
+                                "requirements-txt",
+                                "--no-emit-project",
+                                "--no-default-groups",
+                                "--output-file",
+                                str(requirements),
+                            ),
+                            cwd=project,
+                            environment=command.environment,
+                            release_dir=command.release_dir,
+                        ),
+                        BuildCommand(
+                            purpose=f"create-{component}-venv",
+                            argv=("uv", "venv", "--offline", str(venv)),
+                            cwd=component_root,
+                            environment=command.environment,
+                            release_dir=command.release_dir,
+                        ),
+                        BuildCommand(
+                            purpose=f"install-{component}-locked-dependencies",
+                            argv=(
+                                "uv",
+                                "pip",
+                                "install",
+                                "--offline",
+                                "--python",
+                                _managed_venv_python(str(venv / "bin" / "python")),
+                                "--require-hashes",
+                                "--requirements",
+                                str(requirements),
+                            ),
+                            cwd=component_root,
+                            environment=command.environment,
+                            release_dir=command.release_dir,
+                        ),
+                    )
+                )
+                continue
             if command.purpose.startswith("verify-"):
                 values = list(argv)
                 try:
