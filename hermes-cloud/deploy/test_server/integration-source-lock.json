@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/__init__.py",
-      "sha256": "f5178b06117dd11478a394dd3e32c0dfb410809818137a8f9ca45c5fca414799"
+      "sha256": "e8eca7e2155ebb683c310a2569d8d23cb4def8107aea767f9f2d013a3e066a78"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/__init__.py",
@@ -21,6 +21,10 @@
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/lifecycle.py",
       "sha256": "433de717b43680d69b6eeb1a902c7b194330e97a3b93c3bf1c330975fb0d7a80"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/managed_extension.py",
+      "sha256": "3f7ff7a490d7151a79cec71d0d5a38f505dd5af9134d87bb97f5a0321f5a33cb"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/host/observer_v2.py",
@@ -139,20 +143,52 @@
       "sha256": "6be0358df51dc627ce0a5b50c444998deae86c508bd3a04e965c0ba8c2715b57"
     },
     {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/macos/update_safety_relay.py",
+      "sha256": "d514923b3f0ad80d63e3d050e72e78a6804c52ab9a827e366324b1cc8279cdd6"
+    },
+    {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/__init__.py",
       "sha256": "a360eb3298ddda13d189bbff59167b5471983cc7df6fc39f2b0f641f78155313"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/availability.py",
-      "sha256": "b48914a97f2307132f022309c2f3ac4d22259abe95ea636a9ebd7cc9c6ee5e50"
+      "sha256": "37bfe7945cc4de14932e9ea295e3162ee9a48d4f75634568ef74b54403b05ea2"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/control_relay.py",
+      "sha256": "f072dfa7e5e83ef7e8216ab449793cbd589aabed59f51603e8079f2a5d9d2846"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/framed_pipe.py",
+      "sha256": "f25f1065938ad83b09d83924a0a2ccb3b59f25f7217b318ab0a4bd0bd576a0af"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/host_endpoint_opener.py",
+      "sha256": "2c64ac31f4bb9533f18b5c406b0888332cbe08eab99b7bab037d2c76af87ac29"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_gateway_transport.py",
-      "sha256": "bfbc886c6ffef32338ed374f50d3118ffdfb4e719999641ed180ee0205e2e3d5"
+      "sha256": "9414ad0e44850da9dfd32eb92f674d2363faf85937e0060f28fcb822e22e2e0b"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/local_relay.py",
-      "sha256": "17b06e8bc11d6c42949887a7d83b1c706c634fbe6aa59f302d0af5fc1f8bb5f9"
+      "sha256": "d516bedbcc981c5f51196fe93a3d55492a6f227d45d63d6fbf24dad8aa5bac62"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/named_pipe_security.py",
+      "sha256": "afeb850e9d1b29bdf1f5ed2fd87e66ff1fc3b39843dca32c318ec6a970887f17"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/observer_relay.py",
+      "sha256": "4dfccadb06ea6e44f591adbeae84750d4a5a93685291d81366ee8890faf7bb6b"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/runtime_authority.py",
+      "sha256": "cabee211b96be6da772b3d1620ec8070266b436375cb7c59abba683232c3e648"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/adapters/platform/windows/update_safety_relay.py",
+      "sha256": "ad3d2c53fd279e82a84a5cb25d2e7869afd3072e736802004446eb213429a5cc"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/__init__.py",
@@ -171,16 +207,20 @@
       "sha256": "89630863300fcf07541f66237109c6e814aad5e517dd6bf774b04a8338f22c49"
     },
     {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/application/update_safety.py",
+      "sha256": "ca1f9e235811e57b20fd233bf77134e0d9175756dcb495d3b9505b4ed2ee44d0"
+    },
+    {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/__init__.py",
       "sha256": "abb46a102f3a13612e550c07d3180248489c47601e17bdd3e29107ffe5cf57b1"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/platform_adapters.py",
-      "sha256": "ee9733c025bc54ed89fc8d199a3d01607f96a70f56bb404fa4db11c48e0ac36e"
+      "sha256": "cfc83169368a24f7670fb2f16e97dd8a1941680da9e9f395ea60a8525645bf55"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/registration.py",
-      "sha256": "fbf7be9a442081baea5be6987766744a8ed5d484b55f5008513f4a0a725f1885"
+      "sha256": "ac9d13f26188c77b93c15bad444e212d0b428c879b88b7b2b9d77bdeeab00f74"
     },
     {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/bootstrap/runtime.py",
@@ -239,6 +279,18 @@
       "sha256": "76b25cc211f8a220485b9ee2a26ed314f039e467ef6ae0c6723cd3cd5f9df106"
     },
     {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/extension_health_bridge.py",
+      "sha256": "4e2551a6ee79d8f646502d103fdeb453a3c343c36fef6c9143c7490309e76ca3"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/extension_lifecycle.py",
+      "sha256": "a06f06658f3eaf8603585192f8d162558f8e10d976fd4e2ef5cc6e48b1db3a5e"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/extension_runtime_bridge.py",
+      "sha256": "01127f917d4872e07dcd0fc92ced1cf006270d92f35692ebf16f8f978b260405"
+    },
+    {
       "path": "hermes-agent-plugin/src/hermes_agent_plugin/host_compatibility.py",
       "sha256": "fab0dac7b7259f7e0e87ebecdbda88411989c36e2d4926d078e63a33c1cf32ce"
     },
@@ -255,8 +307,16 @@
       "sha256": "0490b00cb5bc3be8b003e6a72be0f8e84ca404f0d9424617488d8e248f27a745"
     },
     {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/runtime_binding.py",
+      "sha256": "9d7abcae65f4d5bdb791350854dd7b50c9cfced972d9c0d64847c44414585159"
+    },
+    {
+      "path": "hermes-agent-plugin/src/hermes_agent_plugin/runtime_health.py",
+      "sha256": "b584f28a2859ef865bf96a179933f6daea1753fe4ccbb4538ed5724fe4f306ed"
+    },
+    {
       "path": "hermes-connector/src/hermes_connector/__init__.py",
-      "sha256": "ad2e5d0b1f7e93d250c32c7e4035881a260d7cc99b31234669b9f936b237454c"
+      "sha256": "e7b9436b19755296e23656a47a2cd703909ff5f5f5f5ad5ba833a58bef7cb380"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/__init__.py",
@@ -281,6 +341,30 @@
     {
       "path": "hermes-connector/src/hermes_connector/adapters/contract_codec.py",
       "sha256": "1478fe6cd669621746ad8d0f38b0b3a2455d7dfd2bc8ec89db5fa294b425affe"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/control_response.py",
+      "sha256": "279f0b0e87b3481d9840a19404907da7f789f1df95fe99f409c9a8ab5ba7aa55"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/foundation_projection.py",
+      "sha256": "e04361d3329559f5eddc50caf999d2c47739a1f1f1a8345d4bdd243e8c504a4f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/instance_identity_state.py",
+      "sha256": "6824a2f38333fbea2ebd5d373ca790938ea0db705ac68b3e62547ae6e2f47a68"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/local_runtime_preflight.py",
+      "sha256": "f41dbdd5ee118437baf02af523af074d28ce93ef737372ce616d75bc7cbccefd"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/observer_protocol.py",
+      "sha256": "48217df43e35e6d3f16e4f0549b51ba29c1eff47320a0a92f4e96f4d739a7a7e"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/pairing_projection_codec.py",
+      "sha256": "1fdb2d18af4030842764e859e172b27901617f20c97c0e61b77b869bd59f0a29"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/persistence/__init__.py",
@@ -404,7 +488,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/__init__.py",
-      "sha256": "cad96ae830c42c87df797dc4b6b9efeafdb44d627ff84ad7eaeeaf1728e35c01"
+      "sha256": "d0d6ee4a383d075457c9c37bced64b5e5ebab0a6f0252de8cb360749a62523cd"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/agent_discovery.py",
@@ -416,19 +500,19 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/credentials.py",
-      "sha256": "ae3102ee393236ed89275883d2b29a93ee65c934e6913df34bdc818c4387bb98"
+      "sha256": "8de3190037799c9b6f3513ea56687051f899b7f76f569ec44ce93dff12541d76"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/device_identity.py",
-      "sha256": "c62eb5c2b1a4138dcd8bc3930bdb92e0b9cb24c10e237efef3b371c863fbf669"
+      "sha256": "f4c72722c2d2351d5bc1651175b5d6989fa26027e06076d7454d299b45edeca2"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/foundation_projection.py",
-      "sha256": "6d4ba177bfc5b292f511d0c9b0471dcff0aafdc027f7dc2e8958a9ec10be415d"
+      "sha256": "e9346c6744b9a7eebb496bea8f529daa1d6174c6d8d5d269e345d417f929deae"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_identity.py",
-      "sha256": "513cc6f8eb8daba582fa03ab63e9bc996e7264ff4263c0b2dbd9fd63eaadcc15"
+      "sha256": "009c043586bbceda221e363121455d16086b3ae2e67d5807068ac8b74a6abaf3"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/instance_lock.py",
@@ -460,7 +544,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/local_runtime_preflight.py",
-      "sha256": "1f51f200c088b67de7a2b2573d5f2d3550e776cc5d980ab57ea4d5c63254a4a1"
+      "sha256": "08225df3c13b10e623bb36ec5c838b9ae63ecf1e04912ca6e60a5a3806736e82"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/observer_client.py",
@@ -476,7 +560,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/pairing_projection.py",
-      "sha256": "0b4dd9ad28885b37a9ede89bcae0d6fb1f360587d76d043b7370c15aad082dc5"
+      "sha256": "ab19aa026555cb18d7a3ec24611ee201289bc71b6055e2e51f4fb1cb5cd03742"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/plugin_control_relay.py",
@@ -496,15 +580,87 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/macos/status_receipt.py",
-      "sha256": "4f3370a7ccc33c818e40d15597d0971638d902035aff93aae796d3f6ea6f98c1"
+      "sha256": "b1c3511a41a5324a4f8fae2e442dfad0b74c0882dced5d45d36a04627ee9b283"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/__init__.py",
-      "sha256": "b5bc7baf46ddecd9c0dcdf8c4ee68f2c4787364e336263e34463a1fb2345fd54"
+      "sha256": "2805f24b3eb1b0ddf652f4f7919dbff777c9f6fe93a7fa1ff4f09245fd6c65b1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/agent_discovery.py",
+      "sha256": "f29184a300b9042f26b6085d59254c5ce7cd4198ce4b5677befe4682fce79cce"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/availability.py",
-      "sha256": "288ef6cda5ad20b5fa5063ac0136bd773381e876a32454194cec984dfde666c2"
+      "sha256": "a158cfc1bff80af9e36c5ac4e64fdd2a616af20f01e5bd75c6cdd935bf5ace61"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/control_client.py",
+      "sha256": "66f993db6f5d0fbb47dbfb61c25a7d21ce87fadaf6d7eb466f7ac0dbd1cfa126"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/dpapi_secret_store.py",
+      "sha256": "57b4d0afa9f8e6829f7b80e72021e97050e0dccc53b18fe9bb5321f0106da9c8"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/duplex_pipe.py",
+      "sha256": "e3fc97d03a489bc12ba21a31f6321b6240a98ea13e3818c9e7cac58d85c2fcc1"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/instance_identity.py",
+      "sha256": "b2cff3ba13312514f9b2f59e473c5b2d374e789e5e7b6874f84b283f9c491b35"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/instance_lock.py",
+      "sha256": "3743718ae9113f135fd8893fc1eb8a27a0fa8e97bb3ac491d1bc41f28bf42966"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/local_gateway_transport.py",
+      "sha256": "ca10361ff9b8347276dbd6113059fc58fc81932f87e0bd967a19cbebf4d0698a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/named_pipe.py",
+      "sha256": "d2689b9ba375fe089c979653a6c2ef607fd9e597fcf8dcc09cc8a7b08469c0d9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/observer_client.py",
+      "sha256": "1294222283624e4097c38ef024f5ab53ced9a2571ffcd2ada51998a73d9a2bee"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/pairing_command_lock.py",
+      "sha256": "0a300bad7e09b328416afd374ed70dadec49cce0550b1848b6585e62eecdf074"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/pairing_projection.py",
+      "sha256": "4926bba49f73a5e875bd2e31f463864f16ed8998249206ca7d3af0b7a425fe98"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/plugin_control_relay.py",
+      "sha256": "a97fe355a3cf7aeb625917113d500a92875b99a1365d12b6cbb484f2773bc9ea"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/private_file.py",
+      "sha256": "65c00d5f5cddbe472d84fb22060607a434473da48ac606fc3f4a51709beec2a4"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/private_state.py",
+      "sha256": "8f4de518894570d831dba9e865ae9256e71f9caeed40996552d4aac5f7daed90"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/process_identity.py",
+      "sha256": "840916dc1707c57e2d60e41cd0fe9f5770ced316d087457b002e0de29b6ca013"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/session_catalog_client.py",
+      "sha256": "61248d5f3fbc927eb09e1bd51041c00bfbd8876316ecf45cec0875cccf716499"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/sqlite_storage.py",
+      "sha256": "3ced86732ba03622e26cf4b0f3c7a75516b17490dbb0f529d65c3f962120181a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/platform/windows/status_receipt.py",
+      "sha256": "330186194e61f045104658eaf8d8b8ab1fb9d3f28b7b8a9797ae25b6b2109da3"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/posix_agent_discovery.py",
@@ -517,6 +673,18 @@
     {
       "path": "hermes-connector/src/hermes_connector/adapters/posix_lock.py",
       "sha256": "08dea32bba628ef61ac42cdd36a25439ba59ed5ad3d9758d9c4a3a109d39ae4a"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/secure_store_cloud_token.py",
+      "sha256": "d4657f72edfce3410a25027effee265bebb8f89b2cd2cb906eb7843e1c023893"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/secure_store_device_identity.py",
+      "sha256": "a35b639fa76f39d9765115f256da9d69e9370cd9d582ba46eb1b9f2f500d21a9"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/adapters/session_catalog_protocol.py",
+      "sha256": "973ff88a608eb815b3eef807044ef008d9530a44360f91579b6df547d258e314"
     },
     {
       "path": "hermes-connector/src/hermes_connector/adapters/sqlite_migrations.py",
@@ -535,8 +703,12 @@
       "sha256": "634caf596c48dba6306ba842ed59d364f1c5bdb67a83122665a68689e7680e05"
     },
     {
+      "path": "hermes-connector/src/hermes_connector/adapters/status_receipt_codec.py",
+      "sha256": "d719768975d100dcbdcdf43b0e601dfa652f51820bd18477b8def1872e0cf385"
+    },
+    {
       "path": "hermes-connector/src/hermes_connector/application/__init__.py",
-      "sha256": "c4a09293321b811b30ced82b214100797277fd22e9ab2262fa37a0c7f06c95b9"
+      "sha256": "50c791dc7208808e5ee74ab99f5d0a18cfc85d100d6e2bb484cfd54d4ca707f2"
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/capability_negotiation.py",
@@ -564,7 +736,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/observer_intent_lane.py",
-      "sha256": "0c639b56b782f582bcbe88a2a0172473c1de81ad2d8a3e49c4f58679f6e681c5"
+      "sha256": "c0d4b29ff49ec898b110279346d534fb9219e8e16aec3d9b8347ea3ed1af17c2"
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/observer_outbound_lane.py",
@@ -588,7 +760,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/readiness_status.py",
-      "sha256": "23ccb1741d5871778329a8c21242b2f004a6e72a496e01f3979b38d2b1ff0545"
+      "sha256": "059e7cac551d24d812dc091bbc1de6633770c59b1b14db6d12dcbdce00841efb"
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/service_runner.py",
@@ -600,7 +772,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/session_catalog_sync.py",
-      "sha256": "4260209234cf96f9637a3345053f7edfc3e4cfd85e7ac8b63b1a68158332cc22"
+      "sha256": "df494a61d4635c2dcbb93f53ae7a5f216e8aa60cb711299f9ce69874647f59bd"
     },
     {
       "path": "hermes-connector/src/hermes_connector/application/supervisor.py",
@@ -608,7 +780,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/bootstrap/__init__.py",
-      "sha256": "5ced639dd093d4b9335b79964104c8d0bde32db40ff8c1a29c96045424cbc852"
+      "sha256": "082d96b231747cc85214791a08cec7ae023d165cb1248d4638d1da09fc04e813"
     },
     {
       "path": "hermes-connector/src/hermes_connector/bootstrap/cloud.py",
@@ -623,12 +795,16 @@
       "sha256": "e5b0530f11a0aac1c6273e3b9c6d4ccd497b537df27e6d692ee514453c3abfd8"
     },
     {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/macos_pairing.py",
+      "sha256": "70a3fd68a17ad6fb30cf09270294b2ccf7e56a1e6aeeecc0a8ce38b7faec21c9"
+    },
+    {
       "path": "hermes-connector/src/hermes_connector/bootstrap/platform.py",
-      "sha256": "6c1928c5dd1d09f986b722a49ff71166bf0ad61647b058251f69094477691047"
+      "sha256": "81a8dcf40523f141774915f927889d369f836c70b65ec50afb8f0a78fe3e0f0b"
     },
     {
       "path": "hermes-connector/src/hermes_connector/bootstrap/runtime.py",
-      "sha256": "a63f3932fb467d45b1bf72cbc136bcaef995133c8b9a62cc0b99964d9b1e364d"
+      "sha256": "2d9104efc487a81b048602b656cd34d36d2d951f623ce3849b4cbdb709b715a2"
     },
     {
       "path": "hermes-connector/src/hermes_connector/bootstrap/safe_logging.py",
@@ -636,11 +812,31 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/bootstrap/settings.py",
-      "sha256": "1c8e4fea5cc13305ef053a2c96849de32140078989d6b9f9539345d533135ed7"
+      "sha256": "1491ea0e7f477c186ebd74debac5705a52ec2e0d724836926bf0682aff4188ce"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/windows.py",
+      "sha256": "74229da54cc5c896ef63217fdc05fdce95d1dbb63326bba58612926d5f8c36e6"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/windows_formal_runtime.py",
+      "sha256": "8d4f4966cf9c4442755ee52b270bab4016a41b4f9c8f6ae884fcf9107ff4b9da"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/windows_live_session.py",
+      "sha256": "42d1fbd65670c9cd189479cc902fa1f49d652994fc40276f3063ca2d5422b029"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/windows_provision.py",
+      "sha256": "c57dca595ac79ff682052b582389bd46fca265524cc6f15a13f40522f1b78d80"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/bootstrap/windows_service.py",
+      "sha256": "0b43e90133d8420cd8eb0a751322589867e41e22f8e9770ec70f2ab25ab685ee"
     },
     {
       "path": "hermes-connector/src/hermes_connector/cli.py",
-      "sha256": "8e21666acf1c093bfdb03b14169cbc77ed631a38f6903be1c187a8baf1088597"
+      "sha256": "785992143954b9c6e64e880e1680105b445e13d03fad9c26b56cacf35548b8ca"
     },
     {
       "path": "hermes-connector/src/hermes_connector/contracts/__init__.py",
@@ -775,6 +971,30 @@
       "sha256": "98d7097c593a7dadbc6393a804b0736cdbf6f3cc5cd0119fdc7584bdfdd777bf"
     },
     {
+      "path": "hermes-connector/src/hermes_connector/control_plane/__init__.py",
+      "sha256": "077fe3c664e01a0741b99d552ba4abe1f7057ae6e08b5b25339d86485ca0a448"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/control_plane/dispatcher.py",
+      "sha256": "18f0660f931ccdd408d8e8afb0cb207a0b1596ba5373a5e4a447aaf9737237e6"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/control_plane/ledger.py",
+      "sha256": "62531b8019e6970f6be041d10c7912fa0683eed3076949a41f9a3df96bceab21"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/control_plane/models.py",
+      "sha256": "6def9e729fdcc37878a2cb0633568a7bf65f9bb20241db6f6e38791942de8a78"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/control_plane/receipt_transport.py",
+      "sha256": "929ef0720df803fd1356e2ae60e5aca66a2af953b23fd558e973732cd18e2e6b"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/control_plane/runtime_event_bridge.py",
+      "sha256": "3e5159447b23f48a7888eb49ac93399ed5d9455814e94ea53dbb4cb983fa7c3a"
+    },
+    {
       "path": "hermes-connector/src/hermes_connector/domain/__init__.py",
       "sha256": "b4f7636e2da5a60bd69b23e9411d66338011966968b0687ba5564c23c2dc7c50"
     },
@@ -843,6 +1063,10 @@
       "sha256": "250ef54fd2ac099dac06ad948ac7483184a9754333a6d1ec2655c5547f031428"
     },
     {
+      "path": "hermes-connector/src/hermes_connector/live_session_cli.py",
+      "sha256": "4d34e406f65ab6600fea359f2ad1ed7c469f51032b082469d5c700a16879911e"
+    },
+    {
       "path": "hermes-connector/src/hermes_connector/ports/__init__.py",
       "sha256": "7060abc4fb5fcc81fdb01e22a25ba2e270bfd2755e03292f88122f8cca5e8c2e"
     },
@@ -880,7 +1104,7 @@
     },
     {
       "path": "hermes-connector/src/hermes_connector/ports/observer.py",
-      "sha256": "3b28f993c0411e885629501a74d0d131a8346dc8a83ba6f376ae077cab12a627"
+      "sha256": "10f0049d62711267937467104c3bceac75c2f3077d166dc093311eb2c1bf4afc"
     },
     {
       "path": "hermes-connector/src/hermes_connector/ports/operation_lock.py",
@@ -909,6 +1133,46 @@
     {
       "path": "hermes-connector/src/hermes_connector/ports/supervisor.py",
       "sha256": "0aad751e839982db8d084303df8cb3fd400b065641ab2b03e860543b6358c227"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/__init__.py",
+      "sha256": "1fc38eba34d30a0076a0674a043a0b82b386563ccd639891b8fc58cfd974396f"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/binding.py",
+      "sha256": "c4d1bc635e3d9919772682ae87291ed7be08d61231b3b599cea519bb042fdffa"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/control_plane.py",
+      "sha256": "4272f08c6ed4424698d299c1fac3ad615c4f67a437cb6bf233f4b70ae35cf500"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/descriptor.py",
+      "sha256": "67c92a70240a044ad66ac08f2e3bcf001c8a56896fcd9da3ef24406fbb313b91"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/discovery.py",
+      "sha256": "12f7b292d996653eb5307e4c3b5944f3d6e87a31031c72a68386385b809020d4"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/e2e_binding.py",
+      "sha256": "41af95a8c9fa0c917b61b87b7653828f471152d0b3cbe308aa2100be353a9743"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/handshake.py",
+      "sha256": "030131e71907dc871ba03034993561650529e0a6006338904489afe40e108a29"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/readiness.py",
+      "sha256": "0b2c9c484c243cce74eef1e195b539266b08dd29c7afac17f4bce0834137ecfe"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/startup.py",
+      "sha256": "f40e26dc6c93517fa4a98b15442dcc0f8d2fa812e8a9d80d79e5139975176c15"
+    },
+    {
+      "path": "hermes-connector/src/hermes_connector/runtime/verification.py",
+      "sha256": "a4705fc98fd55b5340b0a29b19cac5399691122b8596bdceef1119f2b9a957ce"
     },
     {
       "path": "tests/__init__.py",
@@ -940,7 +1204,7 @@
     },
     {
       "path": "upstream/hermes-core-host-spi-v1/upstream.lock.json",
-      "sha256": "1613475b2c24c1726664da108ecbc18b2d6f9d78cd751a028ed0ef45e4d3bee3"
+      "sha256": "99158f00ee262120b87fe143df9610080e89ed34480436c9564022fecb9f2d63"
     }
   ]
 }
