@@ -363,6 +363,31 @@ def test_payload_proof_cleanup_removes_frozen_release(tmp_path: Path) -> None:
     assert not proof_root.exists()
 
 
+def test_windows_runtime_receipt_accepts_scripts_console_launcher(
+    tmp_path: Path,
+) -> None:
+    staging_venv = (tmp_path / "staging" / "venv").resolve()
+    final_venv = (tmp_path / "final" / "venv").resolve()
+    receipt = json.dumps(
+        {
+            "module_origin": str(staging_venv / "Lib" / "site-packages" / "hermes.py"),
+            "console_entrypoint": str(staging_venv / "Scripts" / "hermes.exe"),
+            "unexpected_direct_urls": [],
+            "pth_escapes": [],
+        }
+    )
+
+    verified = hermes_local_release._validate_verification(
+        receipt,
+        staging_venv,
+        final_venv,
+        "hermes",
+        platform_name="nt",
+    )
+
+    assert verified["console_entrypoint"] == str(final_venv / "Scripts" / "hermes.exe")
+
+
 @pytest.mark.parametrize(
     "verification_code",
     (

@@ -905,6 +905,8 @@ def _validate_verification(
     staging_venv: Path,
     final_venv: Path,
     console_script: str,
+    *,
+    platform_name: str | None = None,
 ) -> Mapping[str, Any]:
     try:
         value = json.loads(stdout)
@@ -918,8 +920,17 @@ def _validate_verification(
         raise ReleaseBuildError("editable or direct_url installation detected")
     module_origin = _path_inside(value.get("module_origin"), staging_venv)
     console = _path_inside(value.get("console_entrypoint"), staging_venv)
-    expected_console = (staging_venv / "bin" / console_script).resolve(strict=False)
-    if console != expected_console:
+    if (platform_name or os.name) == "nt":
+        console_root = staging_venv / "Scripts"
+        expected_consoles = {
+            (console_root / console_script).resolve(strict=False),
+            (console_root / f"{console_script}.exe").resolve(strict=False),
+        }
+    else:
+        expected_consoles = {
+            (staging_venv / "bin" / console_script).resolve(strict=False)
+        }
+    if console not in expected_consoles:
         raise ReleaseBuildError(
             "console entrypoint is not the exact isolated venv executable"
         )
