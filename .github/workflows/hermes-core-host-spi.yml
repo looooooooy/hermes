@@ -93,9 +93,18 @@ jobs:
             --source "$RUNNER_TEMP/hermes-agent-upstream"
       - name: Rebuild locked Core artifacts
         run: |
-          cd "$BUNDLE_ROOT"
+          bundle_root="$GITHUB_WORKSPACE/$BUNDLE_ROOT"
+          verification_bundle="$RUNNER_TEMP/hermes-core-host-spi-v1"
+          mkdir "$verification_bundle"
+          cp "$bundle_root/upstream.lock.json" "$verification_bundle/"
+          cp -R "$bundle_root/patches" "$bundle_root/tools" "$verification_bundle/"
+          cd "$verification_bundle"
           PYTHONPATH=. python -m tools.rebuild_locked_artifacts_verbose \
             --source "$RUNNER_TEMP/hermes-agent-upstream"
+          cmp "dist/hermes_agent-0.19.0-py3-none-any.whl" \
+            "$bundle_root/dist/hermes_agent-0.19.0-py3-none-any.whl"
+          cmp "dist/hermes_agent-0.19.0.tar.gz" \
+            "$bundle_root/dist/hermes_agent-0.19.0.tar.gz"
       - name: Verify bundle tooling and retained artifact contracts
         run: |
           cd "$BUNDLE_ROOT"

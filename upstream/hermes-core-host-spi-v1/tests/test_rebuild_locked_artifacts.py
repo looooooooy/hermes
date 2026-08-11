@@ -261,16 +261,25 @@ def test_refuses_to_replace_nonempty_artifact_directory(
     assert (output / "operator-file.txt").read_text(encoding="utf-8") == "preserve"
 
 
-def test_managed_release_workflow_rebuilds_away_from_tracked_artifacts() -> None:
+@pytest.mark.parametrize(
+    "workflow_name",
+    ("hermes-core-host-spi.yml", "hermes-desktop-managed-release-payload.yml"),
+)
+def test_ci_workflows_rebuild_away_from_tracked_artifacts(
+    workflow_name: str,
+) -> None:
     workflow = (
         Path(__file__).parents[3]
         / ".github"
         / "workflows"
-        / "hermes-desktop-managed-release-payload.yml"
+        / workflow_name
     ).read_text(encoding="utf-8")
-    step = workflow.split(
-        "- name: Verify and rebuild locked patched Core artifacts", 1
-    )[1].split("- name:", 1)[0]
+    marker = (
+        "Verify and rebuild locked patched Core artifacts"
+        if workflow_name.startswith("hermes-desktop")
+        else "Rebuild locked Core artifacts"
+    )
+    step = workflow.split(marker, 1)[1].split("- name:", 1)[0]
 
     assert 'verification_bundle="$RUNNER_TEMP/hermes-core-host-spi-v1"' in step
     assert 'cp -R "$bundle_root/patches" "$bundle_root/tools"' in step
