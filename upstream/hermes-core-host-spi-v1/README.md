@@ -126,7 +126,9 @@ Stage 3（`0003`）在 Stage 2 之上增加：
   v1 manifest 以 Ed25519 验证 canonical JSON，锁定 key、有效期、绝对规范路径、wheel SHA-256、
   唯一 `hermes_agent.plugins` entrypoint 与回滚下限；portable v2 manifest 保持同一厂商签名，且只
   接受 `HERMES_HOME/releases/<release-id>/plugin/` 下的固定 metadata/artifact 布局，并把唯一可变
-  Store 限定为 `HERMES_HOME/state/default/plugin-store`。未知 key、篡改、过期、symlink/path escape、
+  Store 限定为 `HERMES_HOME/state/default/plugin-store`。<release-id> 采用受限 ASCII 标识
+  `[A-Za-z0-9][A-Za-z0-9._+-]{0,127}`，允许由发布流水线追加不可变的 `+run.<id>.<attempt>`
+  build metadata。未知 key、篡改、过期、symlink/path escape、
   editable/direct-url、重复或额外 entrypoint 和低版本全部 fail closed；
 - wheel 只原子展开到 content-addressed immutable slot，并通过 `importlib` 从 slot 受控加载；不向
   Agent venv 执行 pip，不写 `.pth`，不依赖 `PYTHONPATH`。显式 Store candidate 在同 key 时优先于

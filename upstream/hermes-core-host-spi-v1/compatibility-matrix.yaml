@@ -36,6 +36,7 @@ upstream_targets:
     signed_plugin_store: ed25519_canonical_manifest_v1_and_portable_v2_fail_closed
     plugin_store_trust: explicit_read_only_trust_store_required
     portable_plugin_store_v2: immutable_release_bound_artifact_and_private_default_state_store
+    managed_release_identity: constrained_ascii_plus_build_metadata_allowed
     plugin_store_installation: immutable_content_addressed_slot_no_agent_venv_install
     plugin_store_precedence: explicit_store_wins_same_key_pip_entrypoint
     plugin_store_activation: after_register_and_all_endpoint_installs_only

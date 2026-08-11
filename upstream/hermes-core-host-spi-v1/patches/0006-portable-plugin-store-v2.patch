@@ -11,7 +11,7 @@ index 8d4426371e05de74533d7cf724d3322cd1d3016e..e9183ef6ab5fb9c5e4a6c864cd6fa63e
      "schema_version",
      "plugin_id",
      "version",
-@@ -46,6 +46,19 @@ _MANIFEST_FIELDS = {
+@@ -46,6 +46,20 @@ _MANIFEST_FIELDS = {
      "expires_at",
      "signature",
  }
@@ -28,6 +28,7 @@ index 8d4426371e05de74533d7cf724d3322cd1d3016e..e9183ef6ab5fb9c5e4a6c864cd6fa63e
 +    "expires_at",
 +    "signature",
 +}
++_SAFE_MANAGED_RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}\Z")
  _ENTRYPOINT_FIELDS = {"group", "name", "value"}
  _TRUST_STORE_FIELDS = {"schema_version", "keys"}
  _TRUST_KEY_FIELDS = {
@@ -59,7 +60,7 @@ index 8d4426371e05de74533d7cf724d3322cd1d3016e..e9183ef6ab5fb9c5e4a6c864cd6fa63e
 +        manifest_file != expected_manifest
 +        or trust_file != expected_trust_store
 +        or release_dir.parent != application_root / "releases"
-+        or _SAFE_ID.fullmatch(release_dir.name) is None
++        or _SAFE_MANAGED_RELEASE_ID.fullmatch(release_dir.name) is None
 +    ):
 +        raise PluginStoreError(
 +            "portable Plugin manifest is outside the managed release"
@@ -220,7 +221,7 @@ index 05a9b75e4b8a60736bd4d12750b3b7e6d4f97adf..d981a418316239bdadff49a3f0c6921f
  def _prepare(manifest: Path, trust_store: Path):
      from hermes_cli.plugin_store_v1 import prepare_plugin_bundle
  
-@@ -200,6 +266,40 @@ def test_signed_bundle_is_verified_extracted_and_loaded_without_sys_path_mutatio
+@@ -200,6 +266,61 @@ def test_signed_bundle_is_verified_extracted_and_loaded_without_sys_path_mutatio
      assert not (store_root / "active.json").exists()
  
  
@@ -239,6 +240,27 @@ index 05a9b75e4b8a60736bd4d12750b3b7e6d4f97adf..d981a418316239bdadff49a3f0c6921f
 +    assert candidate.slot_path.is_relative_to(store_root)
 +    candidate.activate()
 +    assert (store_root / "active.json").is_file()
++
++
++def test_portable_v2_bundle_accepts_release_build_metadata(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    manifest, trust_store, store_root, application_root = _signed_portable_v2_bundle(
++        tmp_path
++    )
++    release = manifest.parents[2]
++    release_with_build_metadata = release.with_name(
++        f"{release.name}+run.31512192653.1"
++    )
++    release.rename(release_with_build_metadata)
++    manifest = release_with_build_metadata / "plugin" / "metadata" / manifest.name
++    trust_store = release_with_build_metadata / "plugin" / "metadata" / trust_store.name
++    monkeypatch.setenv("HERMES_HOME", str(application_root))
++
++    candidate = _prepare(manifest, trust_store)
++
++    assert candidate.store_root == store_root
 +
 +
 +def test_portable_v2_bundle_rejects_manifest_outside_managed_release(
