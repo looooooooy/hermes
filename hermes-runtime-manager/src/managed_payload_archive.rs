@@ -85,11 +85,7 @@ pub fn pack_managed_payload(
         header.set_uid(0);
         header.set_gid(0);
         header.set_mtime(0);
-        header.set_path(relative).map_err(|_| {
-            ManagedPayloadArchiveError::UnsafeEntry(relative.display().to_string())
-        })?;
-        header.set_cksum();
-        builder.append(&header, &mut input)?;
+        builder.append_data(&mut header, relative, &mut input)?;
     }
     let encoder = builder.into_inner()?;
     let output_file = encoder.finish()?;
@@ -343,6 +339,28 @@ mod tests {
         let receipt = unpack_managed_payload(&first, &unpacked).unwrap();
         assert_eq!(receipt.files, 2);
         assert_eq!(fs::read(unpacked.join("nested/data.bin")).unwrap(), b"hello");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pack_round_trips_long_linux_wheel_filename() {
+        let root = temp_root();
+        let payload = root.join("payload");
+        let wheelhouse = payload.join("wheelhouse");
+        fs::create_dir_all(&wheelhouse).unwrap();
+        fs::write(payload.join(REQUIRED_MANIFEST), b"{}\n").unwrap();
+        let wheel = "charset_normalizer-3.4.4-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl";
+        fs::write(wheelhouse.join(wheel), b"wheel").unwrap();
+
+        let archive = root.join("payload.tar.zst");
+        pack_managed_payload(&payload, &archive).unwrap();
+        let unpacked = root.join("unpacked");
+        unpack_managed_payload(&archive, &unpacked).unwrap();
+
+        assert_eq!(
+            fs::read(unpacked.join("wheelhouse").join(wheel)).unwrap(),
+            b"wheel"
+        );
         let _ = fs::remove_dir_all(root);
     }
 
