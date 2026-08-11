@@ -340,6 +340,12 @@ def test_managed_release_workflow_watches_local_release_builder() -> None:
     assert workflow.count(
         '- "hermes-connector/tests/packaging/test_local_release_builder.py"'
     ) == 2
+    assert workflow.count(
+        '- "hermes-cloud/deploy/test_server/integration-source-lock.json"'
+    ) == 2
+    assert workflow.count(
+        '- "hermes-cloud/tests/fixtures/hermes_core_host_spi_v1/PROVENANCE.json"'
+    ) == 2
 
 
 def test_payload_proof_cleanup_removes_frozen_release(tmp_path: Path) -> None:
