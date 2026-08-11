@@ -326,6 +326,22 @@ def test_payload_scripts_require_the_hashed_wheelhouse_install_receipts(
     }
 
 
+def test_managed_release_workflow_watches_local_release_builder() -> None:
+    workflow = (
+        REPOSITORY_ROOT
+        / ".github"
+        / "workflows"
+        / "hermes-desktop-managed-release-payload.yml"
+    ).read_text(encoding="utf-8")
+
+    assert workflow.count(
+        '- "hermes-connector/packaging/common/hermes_local_release.py"'
+    ) == 2
+    assert workflow.count(
+        '- "hermes-connector/tests/packaging/test_local_release_builder.py"'
+    ) == 2
+
+
 @pytest.mark.parametrize(
     "verification_code",
     (
