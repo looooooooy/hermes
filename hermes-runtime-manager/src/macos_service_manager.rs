@@ -104,6 +104,7 @@ impl MacOSLaunchAgentServiceManager {
 
     fn ensure_private_directories(&self) -> Result<(), PortError> {
         ensure_private_directory(&self.state_root)?;
+        ensure_private_directory(&self.state_root.join("default/plugin-store"))?;
         ensure_private_directory(&self.logs_root)?;
         fs::create_dir_all(&self.launch_agents_dir)?;
         let metadata = fs::symlink_metadata(&self.launch_agents_dir)?;
@@ -789,5 +790,24 @@ mod tests {
                 && !upper.ends_with("_KEY")
                 && !upper.contains("OAUTH")
         }));
+    }
+
+    #[test]
+    fn private_directories_include_default_plugin_store() {
+        let root = temp_root("plugin-store");
+        let manager = MacOSLaunchAgentServiceManager::new(
+            root.join("application"),
+            root.join("logs"),
+            None,
+        )
+        .unwrap();
+
+        manager.ensure_private_directories().unwrap();
+
+        let store = manager.state_root.join("default/plugin-store");
+        let metadata = fs::symlink_metadata(&store).unwrap();
+        assert!(metadata.is_dir());
+        assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+        assert_eq!(metadata.permissions().mode() & 0o077, 0);
     }
 }

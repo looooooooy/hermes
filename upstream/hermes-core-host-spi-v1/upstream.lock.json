@@ -27,21 +27,25 @@
     {
       "path": "patches/0005-managed-provider-keychain.patch",
       "sha256": "bb4e99413014c994a87d9a1296dfadcadaa996fd8660d59a0e1fe08025bb4bcb"
+    },
+    {
+      "path": "patches/0006-portable-plugin-store-v2.patch",
+      "sha256": "79261d7165d47d80906d566de2d4ca8987d358892c8a8d178b38f386e167642c"
     }
   ],
   "artifacts": [
     {
       "path": "dist/hermes_agent-0.19.0-py3-none-any.whl",
-      "sha256": "b3a93466142985c55033fb86baac4035e227086e0eed883bdc89dbb354a1aa66"
+      "sha256": "3cfbb7c6b57f93daab63c3e5bdfa7bf81e266e616580ab2e3cd7f78de26f4656"
     },
     {
       "path": "dist/hermes_agent-0.19.0.tar.gz",
-      "sha256": "0bda03fca66a47d721ec5a4dfddb88b0c291b115d15d4702f6df58aab8978500"
+      "sha256": "371b58dd99b387ce55da88b14a922f289d7b291ae73d9c10380d8c1e800aa541"
     }
   ],
   "artifact_provenance": {
     "schema_version": 1,
-    "stage3_patch_sha256": "bb4e99413014c994a87d9a1296dfadcadaa996fd8660d59a0e1fe08025bb4bcb",
+    "stage3_patch_sha256": "79261d7165d47d80906d566de2d4ca8987d358892c8a8d178b38f386e167642c",
     "source_files": [
       {
         "path": "agent/credential_pool.py",
@@ -73,7 +77,7 @@
       },
       {
         "path": "hermes_cli/plugin_store_v1.py",
-        "sha256": "88475b548775237c3422268fdd8d16dd4863f42bc7e87157616a5753fc2aec7c"
+        "sha256": "419d6fd1f4ea57616363a4d07f9edcc0f79a58cbbcd83a6c250a11324e87ecce"
       },
       {
         "path": "hermes_cli/plugins.py",

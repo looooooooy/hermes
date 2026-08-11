@@ -337,7 +337,7 @@ class PatchBundle:
         allowed_patch_counts = {
             1: frozenset({1}),
             2: frozenset({2}),
-            3: frozenset({3, 4, 5}),
+            3: frozenset({3, 4, 5, 6}),
         }
         if (
             not isinstance(patches, list)
