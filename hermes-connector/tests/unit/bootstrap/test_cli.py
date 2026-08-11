@@ -313,6 +313,18 @@ def test_run_requires_one_safe_explicit_release_id(tmp_path: Path) -> None:
         assert lines == ["hermes-connector: invalid_arguments"]
 
 
+def test_run_accepts_immutable_release_build_metadata() -> None:
+    release_id = "desktop-0.1.0-macos-aarch64+run.31514625981.1"
+    lines: list[str] = []
+
+    command = cli._parse_mode(("run", "--release-id", release_id), lines.append)
+
+    assert command is not None
+    assert command.action == "run"
+    assert command.release_id == release_id
+    assert lines == []
+
+
 def test_signal_handlers_request_stop_and_are_removed() -> None:
     class Loop:
         def __init__(self) -> None:

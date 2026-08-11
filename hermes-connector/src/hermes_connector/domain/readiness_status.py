@@ -34,7 +34,7 @@ ACTIVATION_LOCAL_CAPABILITIES: Final = frozenset(
 )
 STATUS_RECEIPT_TTL_SECONDS: Final = 30.0
 STATUS_RECEIPT_FUTURE_SKEW_SECONDS: Final = 5.0
-_RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+_RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}")
 
 
 def validate_release_id(value: object) -> str:
