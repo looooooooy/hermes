@@ -3,6 +3,8 @@ use hermes_runtime_manager::platform::DefaultInstallLayout;
 use hermes_runtime_manager::platform::FailClosedServiceManager;
 #[cfg(unix)]
 use hermes_runtime_manager::ports::InstallLayout;
+#[cfg(windows)]
+use hermes_runtime_manager::WindowsTaskServiceManager;
 use hermes_runtime_manager::{
     pack_managed_payload, run_blank_machine_toolchain_gate, verify_portable_plugin_signature,
     verify_release_control_files, PrivatePythonManagedReleaseStager, PrivateToolchainInstaller,
@@ -11,11 +13,8 @@ use hermes_runtime_manager::{
 #[cfg(target_os = "macos")]
 use hermes_runtime_manager::{
     ports::{ConnectorLaunchConfigV1, PortError, ServiceManager},
-    InitialReleaseActivator, MacOSLaunchAgentServiceManager,
-    ServiceManagerInitialReadinessProbe,
+    InitialReleaseActivator, MacOSLaunchAgentServiceManager, ServiceManagerInitialReadinessProbe,
 };
-#[cfg(windows)]
-use hermes_runtime_manager::WindowsTaskServiceManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -139,18 +138,17 @@ fn main() {
             #[cfg(target_os = "macos")]
             println!("Platform adapter status: macOS LaunchAgent service projection selected.");
             #[cfg(windows)]
-            println!("Platform adapter status: Windows Task Scheduler service projection selected.");
+            println!(
+                "Platform adapter status: Windows Task Scheduler service projection selected."
+            );
             #[cfg(target_os = "linux")]
             println!("Platform adapter status: fail-closed until a verified adapter is selected.");
         }
         "serve-read-only" => serve_read_only(manager, layout),
         #[cfg(target_os = "macos")]
-        "activate-initial-release" => activate_initial_release_command(
-            &args,
-            manager,
-            macos_service_manager,
-            layout,
-        ),
+        "activate-initial-release" => {
+            activate_initial_release_command(&args, manager, macos_service_manager, layout)
+        }
         "--version" | "version" => println!("{}", env!("CARGO_PKG_VERSION")),
         other => {
             eprintln!("unsupported command: {other}");
@@ -173,12 +171,12 @@ fn connector_config_from_activation_args(
                 .to_owned(),
         ));
     }
-    let state_directory = application_root.join("connector/profiles/work/state");
+    let state_directory = application_root.join("connector/profiles/default/state");
     let config = ConnectorLaunchConfigV1 {
         cloud_api_endpoint: args[4].clone(),
         cloud_endpoint: args[5].clone(),
         display_name: args[6].clone(),
-        profile: "work".to_owned(),
+        profile: "default".to_owned(),
         connector_version: env!("CARGO_PKG_VERSION").to_owned(),
         application_root: application_root.to_path_buf(),
         database_file: state_directory.join("connector.sqlite3"),
@@ -250,17 +248,20 @@ mod tests {
 
         let config = connector_config_from_activation_args(&args, &root).unwrap();
 
-        assert_eq!(config.profile, "work");
+        assert_eq!(config.profile, "default");
         assert_eq!(config.application_root, root);
         assert_eq!(
             config.state_directory,
-            PathBuf::from("/Applications/Hermes/managed/connector/profiles/work/state")
+            PathBuf::from("/Applications/Hermes/managed/connector/profiles/default/state")
         );
         assert_eq!(
             config.database_file,
             config.state_directory.join("connector.sqlite3")
         );
-        assert_eq!(config.lock_file, config.state_directory.join("connector.lock"));
+        assert_eq!(
+            config.lock_file,
+            config.state_directory.join("connector.lock")
+        );
     }
 
     #[test]
@@ -280,7 +281,9 @@ mod tests {
 
 fn install_toolchain_command(args: &[String]) {
     if args.len() != 4 {
-        eprintln!("usage: hermes-runtime-manager install-toolchain <bundle-root> <toolchains-root>");
+        eprintln!(
+            "usage: hermes-runtime-manager install-toolchain <bundle-root> <toolchains-root>"
+        );
         std::process::exit(64);
     }
     let source = PathBuf::from(&args[2]);
@@ -471,7 +474,10 @@ fn serve_read_only(manager: Arc<RuntimeManager>, layout: Arc<DefaultInstallLayou
             std::process::exit(5);
         }
     };
-    eprintln!("runtime_manager_read_only_ipc_ready: {}", endpoint.display());
+    eprintln!(
+        "runtime_manager_read_only_ipc_ready: {}",
+        endpoint.display()
+    );
     loop {
         if let Err(error) = server.serve_once() {
             eprintln!("runtime_manager_ipc_request_error: {error}");
@@ -481,9 +487,7 @@ fn serve_read_only(manager: Arc<RuntimeManager>, layout: Arc<DefaultInstallLayou
 
 #[cfg(windows)]
 fn serve_read_only(manager: Arc<RuntimeManager>, _layout: Arc<DefaultInstallLayout>) {
-    use hermes_runtime_manager::windows_pipe::{
-        current_user_pipe_name, ReadOnlyWindowsPipeServer,
-    };
+    use hermes_runtime_manager::windows_pipe::{current_user_pipe_name, ReadOnlyWindowsPipeServer};
 
     let pipe_name = match current_user_pipe_name() {
         Ok(name) => name,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -272,6 +273,48 @@ def test_build_publishes_complete_immutable_layout_and_manifest(tmp_path: Path) 
     )
 
 
+def test_build_relocates_posix_console_launchers_before_atomic_publish(
+    tmp_path: Path,
+) -> None:
+    if os.name == "nt":
+        pytest.skip("POSIX console launcher relocation")
+
+    class LauncherWritingRunner(RecordingRunner):
+        def run(self, command: BuildCommand) -> CommandResult:
+            launchers = {
+                "install-final-core-wheel": ("host", "hermes"),
+                "install-final-connector-wheel": ("connector", "hermes-connector"),
+            }
+            launcher = launchers.get(command.purpose)
+            if launcher is not None:
+                runtime, console_script = launcher
+                python = command.release_dir / runtime / "venv" / "bin" / "python"
+                script = command.release_dir / runtime / "venv" / "bin" / console_script
+                script.parent.mkdir(parents=True, exist_ok=True)
+                script.write_text(
+                    f"#!/bin/sh\n'''exec' '{python}' \"$0\" \"$@\"\n' '''\n",
+                    encoding="utf-8",
+                )
+            return super().run(command)
+
+    result = ReleaseBuilder(
+        releases_root=tmp_path / "releases",
+        runner=LauncherWritingRunner(),
+    ).build(_inputs(tmp_path))
+
+    for runtime, console_script in (
+        ("host", "hermes"),
+        ("connector", "hermes-connector"),
+    ):
+        launcher = result.release_dir / runtime / "venv" / "bin" / console_script
+        launcher_text = launcher.read_text(encoding="utf-8")
+        assert (
+            str(result.release_dir / runtime / "venv" / "bin" / "python")
+            in launcher_text
+        )
+        assert ".staging." not in launcher_text
+
+
 def test_macos_service_templates_are_part_of_atomic_release_and_digest(
     tmp_path: Path,
 ) -> None:
@@ -364,9 +407,9 @@ def test_frozen_staging_cleanup_preserves_the_original_failure(tmp_path: Path) -
             raise ReleaseBuildError("original assembly failure")
 
     with pytest.raises(ReleaseBuildError, match="original assembly failure"):
-        FrozenFailureBuilder(
-            releases_root=releases, runner=RecordingRunner()
-        ).build(_inputs(tmp_path))
+        FrozenFailureBuilder(releases_root=releases, runner=RecordingRunner()).build(
+            _inputs(tmp_path)
+        )
 
     assert not list(releases.glob(".*.staging.*"))
 

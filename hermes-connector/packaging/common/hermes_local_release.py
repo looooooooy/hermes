@@ -224,6 +224,7 @@ class ReleaseBuilder:
             self._prepare_staging(staging, inputs, services)
             commands = self._commands(inputs, staging)
             verification = self._execute(commands, staging, release_dir)
+            _relocate_posix_console_launchers(staging, release_dir, inputs)
             logical_commands = _logical_commands(commands, staging, release_dir)
             receipt = _command_receipt(logical_commands)
             receipt_path = staging / "receipts" / "build-commands.json"
@@ -661,6 +662,30 @@ def _logical_commands(
         )
         for command in commands
     )
+
+
+def _relocate_posix_console_launchers(
+    staging: Path,
+    release_dir: Path,
+    inputs: ReleaseInputs,
+) -> None:
+    if os.name == "nt":
+        return
+    for runtime, runtime_input in (
+        ("host", inputs.core),
+        ("connector", inputs.connector),
+    ):
+        launcher = staging / runtime / "venv" / "bin" / runtime_input.console_script
+        if not launcher.exists():
+            continue
+        if launcher.is_symlink() or not launcher.is_file():
+            raise ReleaseBuildError("staged POSIX console launcher is unavailable")
+        staged_python = str(staging / runtime / "venv" / "bin" / "python").encode()
+        final_python = str(release_dir / runtime / "venv" / "bin" / "python").encode()
+        content = launcher.read_bytes()
+        if content.count(staged_python) != 1:
+            raise ReleaseBuildError("staged POSIX console launcher is not relocatable")
+        launcher.write_bytes(content.replace(staged_python, final_python))
 
 
 def _command_receipt(commands: tuple[BuildCommand, ...]) -> Mapping[str, Any]:
