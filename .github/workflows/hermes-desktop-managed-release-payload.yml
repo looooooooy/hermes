@@ -76,11 +76,20 @@ jobs:
           uv sync --extra all --extra dev --locked --no-install-project
       - name: Verify and rebuild locked patched Core artifacts
         run: |
-          cd "$BUNDLE_ROOT"
+          bundle_root="$GITHUB_WORKSPACE/$BUNDLE_ROOT"
+          verification_bundle="$RUNNER_TEMP/hermes-core-host-spi-v1"
+          mkdir "$verification_bundle"
+          cp "$bundle_root/upstream.lock.json" "$verification_bundle/"
+          cp -R "$bundle_root/patches" "$bundle_root/tools" "$verification_bundle/"
+          cd "$verification_bundle"
           PYTHONPATH=. python -m tools.check_stage3_stabilization \
             --source "$RUNNER_TEMP/hermes-agent-upstream"
           PYTHONPATH=. python -m tools.rebuild_locked_artifacts_verbose \
             --source "$RUNNER_TEMP/hermes-agent-upstream"
+          cmp "dist/hermes_agent-0.19.0-py3-none-any.whl" \
+            "$bundle_root/dist/hermes_agent-0.19.0-py3-none-any.whl"
+          cmp "dist/hermes_agent-0.19.0.tar.gz" \
+            "$bundle_root/dist/hermes_agent-0.19.0.tar.gz"
       - name: Materialize the exact patched Core project metadata
         run: |
           workspace="$RUNNER_TEMP/core-replay"

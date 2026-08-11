@@ -261,6 +261,24 @@ def test_refuses_to_replace_nonempty_artifact_directory(
     assert (output / "operator-file.txt").read_text(encoding="utf-8") == "preserve"
 
 
+def test_managed_release_workflow_rebuilds_away_from_tracked_artifacts() -> None:
+    workflow = (
+        Path(__file__).parents[3]
+        / ".github"
+        / "workflows"
+        / "hermes-desktop-managed-release-payload.yml"
+    ).read_text(encoding="utf-8")
+    step = workflow.split(
+        "- name: Verify and rebuild locked patched Core artifacts", 1
+    )[1].split("- name:", 1)[0]
+
+    assert 'verification_bundle="$RUNNER_TEMP/hermes-core-host-spi-v1"' in step
+    assert 'cp -R "$bundle_root/patches" "$bundle_root/tools"' in step
+    assert 'cmp "dist/hermes_agent-0.19.0-py3-none-any.whl"' in step
+    assert 'cmp "dist/hermes_agent-0.19.0.tar.gz"' in step
+    assert 'cd "$BUNDLE_ROOT"' not in step
+
+
 def test_canonicalizes_tar_and_gzip_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
