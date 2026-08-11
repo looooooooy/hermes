@@ -9,7 +9,11 @@ use hermes_runtime_manager::{
     RuntimeManager,
 };
 #[cfg(target_os = "macos")]
-use hermes_runtime_manager::MacOSLaunchAgentServiceManager;
+use hermes_runtime_manager::{
+    ports::{ConnectorLaunchConfigV1, PortError, ServiceManager},
+    InitialReleaseActivator, MacOSLaunchAgentServiceManager,
+    ServiceManagerInitialReadinessProbe,
+};
 #[cfg(windows)]
 use hermes_runtime_manager::WindowsTaskServiceManager;
 use std::path::PathBuf;
@@ -58,7 +62,7 @@ fn main() {
     }
 
     #[cfg(target_os = "macos")]
-    let manager = {
+    let (manager, macos_service_manager) = {
         let application_root = match layout.application_root() {
             Ok(path) => path,
             Err(error) => {
@@ -73,15 +77,31 @@ fn main() {
                 std::process::exit(2);
             }
         };
-        let service_manager = match MacOSLaunchAgentServiceManager::new(application_root, logs_root) {
+        let connector_config = if command == "activate-initial-release" {
+            match connector_config_from_activation_args(&args, &application_root) {
+                Ok(config) => Some(config),
+                Err(error) => {
+                    eprintln!("runtime_manager_activation_configuration_error: {error}");
+                    std::process::exit(64);
+                }
+            }
+        } else {
+            None
+        };
+        let service_manager = match MacOSLaunchAgentServiceManager::new(
+            application_root,
+            logs_root,
+            connector_config,
+        ) {
             Ok(manager) => manager,
             Err(error) => {
                 eprintln!("runtime_manager_macos_service_error: {error}");
                 std::process::exit(2);
             }
         };
-        match RuntimeManager::new_persistent(Arc::new(service_manager), layout.clone()) {
-            Ok(manager) => manager,
+        let service_manager = Arc::new(service_manager);
+        match RuntimeManager::new_persistent(service_manager.clone(), layout.clone()) {
+            Ok(manager) => (manager, service_manager),
             Err(error) => {
                 eprintln!("runtime_manager_persistent_state_error: {error}");
                 std::process::exit(2);
@@ -124,6 +144,13 @@ fn main() {
             println!("Platform adapter status: fail-closed until a verified adapter is selected.");
         }
         "serve-read-only" => serve_read_only(manager, layout),
+        #[cfg(target_os = "macos")]
+        "activate-initial-release" => activate_initial_release_command(
+            &args,
+            manager,
+            macos_service_manager,
+            layout,
+        ),
         "--version" | "version" => println!("{}", env!("CARGO_PKG_VERSION")),
         other => {
             eprintln!("unsupported command: {other}");
@@ -132,6 +159,122 @@ fn main() {
             );
             std::process::exit(64);
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn connector_config_from_activation_args(
+    args: &[String],
+    application_root: &std::path::Path,
+) -> Result<ConnectorLaunchConfigV1, PortError> {
+    if args.len() != 7 {
+        return Err(PortError::Operation(
+            "usage: hermes-runtime-manager activate-initial-release RELEASE_ID GENERATION API_ENDPOINT WSS_ENDPOINT DISPLAY_NAME"
+                .to_owned(),
+        ));
+    }
+    let state_directory = application_root.join("connector/profiles/work/state");
+    let config = ConnectorLaunchConfigV1 {
+        cloud_api_endpoint: args[4].clone(),
+        cloud_endpoint: args[5].clone(),
+        display_name: args[6].clone(),
+        profile: "work".to_owned(),
+        connector_version: env!("CARGO_PKG_VERSION").to_owned(),
+        application_root: application_root.to_path_buf(),
+        database_file: state_directory.join("connector.sqlite3"),
+        lock_file: state_directory.join("connector.lock"),
+        state_directory,
+    };
+    config.validate()?;
+    Ok(config)
+}
+
+#[cfg(target_os = "macos")]
+fn activate_initial_release_command(
+    args: &[String],
+    manager: Arc<RuntimeManager>,
+    service_manager: Arc<MacOSLaunchAgentServiceManager>,
+    layout: Arc<DefaultInstallLayout>,
+) {
+    let releases_root = match layout.releases_root() {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("runtime_manager_activation_error: {error}");
+            std::process::exit(9);
+        }
+    };
+    let services: Arc<dyn ServiceManager> = service_manager;
+    let readiness = Arc::new(ServiceManagerInitialReadinessProbe::new(services.clone()));
+    let activator = match InitialReleaseActivator::new(
+        manager,
+        services,
+        readiness,
+        releases_root,
+        layout.platform(),
+    ) {
+        Ok(activator) => activator,
+        Err(error) => {
+            eprintln!("runtime_manager_activation_error: {error}");
+            std::process::exit(9);
+        }
+    };
+    match activator.activate(&args[2], &args[3]) {
+        Ok(snapshot) => println!(
+            "{}",
+            serde_json::to_string_pretty(&snapshot).expect("snapshot is serializable")
+        ),
+        Err(error) => {
+            eprintln!("runtime_manager_activation_error: {error}");
+            std::process::exit(9);
+        }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn activation_cli_derives_managed_connector_paths() {
+        let args = vec![
+            "hermes-runtime-manager".to_owned(),
+            "activate-initial-release".to_owned(),
+            "desktop-0.1.0+macos-aarch64".to_owned(),
+            "1".to_owned(),
+            "https://api.example.test/hermes".to_owned(),
+            "wss://api.example.test/hermes/internal/connector/ws".to_owned(),
+            "Hermes workstation".to_owned(),
+        ];
+        let root = PathBuf::from("/Applications/Hermes/managed");
+
+        let config = connector_config_from_activation_args(&args, &root).unwrap();
+
+        assert_eq!(config.profile, "work");
+        assert_eq!(config.application_root, root);
+        assert_eq!(
+            config.state_directory,
+            PathBuf::from("/Applications/Hermes/managed/connector/profiles/work/state")
+        );
+        assert_eq!(
+            config.database_file,
+            config.state_directory.join("connector.sqlite3")
+        );
+        assert_eq!(config.lock_file, config.state_directory.join("connector.lock"));
+    }
+
+    #[test]
+    fn activation_cli_rejects_incomplete_configuration() {
+        let args = vec![
+            "hermes-runtime-manager".to_owned(),
+            "activate-initial-release".to_owned(),
+            "desktop-0.1.0+macos-aarch64".to_owned(),
+        ];
+        assert!(connector_config_from_activation_args(
+            &args,
+            Path::new("/Applications/Hermes/managed")
+        )
+        .is_err());
     }
 }
 

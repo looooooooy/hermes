@@ -1,0 +1,688 @@
+diff --git a/agent/credential_pool.py b/agent/credential_pool.py
+index 08b0c0ea6b973e217c21b27006c34e1f4d43eeb8..c611c6bf58c3cf8294f6c1c6cf0e21a472af7cb1 100644
+--- a/agent/credential_pool.py
++++ b/agent/credential_pool.py
+@@ -140,6 +140,7 @@ NO_AVAILABLE_ENTRIES_LOG_THROTTLE_SECONDS = 60.0
+ # Custom endpoints all share provider='custom' but are keyed by their
+ # custom_providers name: 'custom:<normalized_name>'.
+ CUSTOM_POOL_PREFIX = "custom:"
++MANAGED_KEYCHAIN_SOURCE_PREFIX = "managed_keychain:"
+ 
+ 
+ # Fields that are only round-tripped through JSON — never used for logic as attributes.
+@@ -662,7 +663,11 @@ class CredentialPool:
+     def _persist(self, *, removed_ids: Optional[List[str]] = None) -> None:
+         write_credential_pool(
+             self.provider,
+-            [entry.to_dict() for entry in self._entries],
++            [
++                entry.to_dict()
++                for entry in self._entries
++                if not entry.source.startswith(MANAGED_KEYCHAIN_SOURCE_PREFIX)
++            ],
+             removed_ids=removed_ids,
+         )
+ 
+@@ -2803,4 +2808,12 @@ def load_pool(provider: str) -> CredentialPool:
+             [entry.to_dict() for entry in sorted(entries, key=lambda item: item.priority)],
+             removed_ids=disk_ids - new_ids,
+         )
++    try:
++        from hermes_cli.managed_provider import managed_provider_credential
++
++        managed = managed_provider_credential(provider)
++        if managed is not None:
++            entries.append(PooledCredential.from_dict(provider, managed))
++    except ImportError:
++        pass
+     return CredentialPool(provider, entries)
+diff --git a/cli.py b/cli.py
+index 54376aae266fa8d9169b17a3ffba7b2e89586b1a..652e4c149301fc42e7425ff1f195534c23c6f88f 100644
+--- a/cli.py
++++ b/cli.py
+@@ -4233,6 +4233,12 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
+             resume: Session ID to resume (restores conversation history from SQLite)
+             pass_session_id: Include the session ID in the agent's system prompt
+         """
++        from hermes_cli.managed_provider import apply_managed_cli_defaults
++
++        model, provider, base_url = apply_managed_cli_defaults(
++            model, provider, base_url
++        )
++
+         # Initialize Rich console
+         self.console = Console()
+         self.config = CLI_CONFIG
+diff --git a/hermes_cli/auth.py b/hermes_cli/auth.py
+index 0d08007ef33e525ec0da983e24f6e7c00caf7fe3..39fd67a43ace35dd3169e3fcb98027b79beeca92 100644
+--- a/hermes_cli/auth.py
++++ b/hermes_cli/auth.py
+@@ -588,6 +588,16 @@ def _resolve_api_key_provider_secret(
+     provider_id: str, pconfig: ProviderConfig
+ ) -> tuple[str, str]:
+     """Resolve an API-key provider's token and indicate where it came from."""
++    from hermes_cli.managed_provider import (
++        load_managed_provider,
++        resolve_managed_provider_secret,
++    )
++
++    managed = load_managed_provider()
++    if managed is not None and provider_id == managed.provider:
++        secret = resolve_managed_provider_secret(provider_id, managed.key_env)
++        return secret or "", f"managed_keychain:{managed.key_env}"
++
+     if provider_id == "copilot":
+         # Use the dedicated copilot auth module for proper token validation
+         try:
+@@ -6769,12 +6779,17 @@ def get_api_key_provider_status(provider_id: str) -> Dict[str, Any]:
+     key_source = ""
+     api_key, key_source = _resolve_api_key_provider_secret(provider_id, pconfig)
+ 
++    from hermes_cli.managed_provider import managed_provider_base_url
++
++    is_managed, managed_base_url = managed_provider_base_url(provider_id)
+     env_url = ""
+-    if pconfig.base_url_env_var:
++    if not is_managed and pconfig.base_url_env_var:
+         env_url = os.getenv(pconfig.base_url_env_var, "").strip()
+ 
+     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
+         base_url = _resolve_kimi_base_url(api_key, pconfig.inference_base_url, env_url)
++    elif is_managed and managed_base_url:
++        base_url = managed_base_url
+     elif env_url:
+         base_url = env_url
+     else:
+@@ -6956,8 +6971,11 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
+         api_key = LMSTUDIO_NOAUTH_PLACEHOLDER
+         key_source = key_source or "default"
+ 
++    from hermes_cli.managed_provider import managed_provider_base_url
++
++    is_managed, managed_base_url = managed_provider_base_url(provider_id)
+     env_url = ""
+-    if pconfig.base_url_env_var:
++    if not is_managed and pconfig.base_url_env_var:
+         env_url = os.getenv(pconfig.base_url_env_var, "").strip()
+ 
+     if provider_id in {"kimi-coding", "kimi-coding-cn"}:
+@@ -6984,6 +7002,8 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
+                     base_url = resolved
+         except Exception as exc:
+             logger.debug("Copilot base URL resolution fell back to default: %s", exc)
++    elif is_managed and managed_base_url:
++        base_url = managed_base_url
+     elif env_url:
+         base_url = env_url.rstrip("/")
+     else:
+diff --git a/hermes_cli/config.py b/hermes_cli/config.py
+index 4970c4c7f8012715f0a66812177fb884f2adb54b..59ec8f115298dd79a844242d33d6988d11d9cffb 100644
+--- a/hermes_cli/config.py
++++ b/hermes_cli/config.py
+@@ -3376,6 +3376,9 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
+         if managed_config:
+             managed_expanded = _expand_env_vars(managed_config)
+             expanded = _deep_merge(expanded, managed_expanded)
++        from hermes_cli.managed_provider import overlay_managed_provider_config
++
++        expanded = overlay_managed_provider_config(expanded)
+         _LAST_EXPANDED_CONFIG_BY_PATH[path_key] = copy.deepcopy(expanded)
+         if cache_sig is not None:
+             # Cache stores a separate deepcopy so subsequent ``load_config()``
+diff --git a/hermes_cli/managed_provider.py b/hermes_cli/managed_provider.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f2097acb22e57e7ca13c9ff8618a4cfd9898544c
+--- /dev/null
++++ b/hermes_cli/managed_provider.py
+@@ -0,0 +1,341 @@
++"""Fail-closed managed provider metadata and macOS Keychain access."""
++
++from __future__ import annotations
++
++import copy
++import ctypes
++import json
++import os
++import stat
++import sys
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Mapping
++from urllib.parse import urlsplit
++
++
++MANAGED_PROVIDER_ENV = "HERMES_MANAGED_PROVIDER_CONFIG"
++KEYCHAIN_SERVICE = "com.hermes.runtime.provider.v1"
++KEYCHAIN_ACCOUNT = "work:deepseek"
++KEY_ENV = "DEEPSEEK_API_KEY"
++PROVIDER = "deepseek"
++MODELS = frozenset({"deepseek-chat", "deepseek-reasoner"})
++MAX_METADATA_BYTES = 16 * 1024
++MAX_SECRET_BYTES = 16 * 1024
++_FIELDS = frozenset(
++    {
++        "schema_version",
++        "provider",
++        "model",
++        "base_url",
++        "key_env",
++        "keychain_service",
++        "keychain_account",
++    }
++)
++
++
++class ManagedProviderError(RuntimeError):
++    """A redacted managed-provider configuration or secret-store failure."""
++
++
++@dataclass(frozen=True)
++class ManagedProviderV1:
++    provider: str
++    model: str
++    base_url: str | None
++    key_env: str
++    keychain_service: str
++    keychain_account: str
++
++
++def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
++    result: dict[str, Any] = {}
++    for key, value in pairs:
++        if key in result:
++            raise ManagedProviderError("managed provider configuration is invalid")
++        result[key] = value
++    return result
++
++
++def _metadata_path() -> Path | None:
++    raw = os.environ.get(MANAGED_PROVIDER_ENV)
++    if raw is None:
++        return None
++    if not raw or "\x00" in raw:
++        raise ManagedProviderError("managed provider configuration is invalid")
++    path = Path(raw)
++    if not path.is_absolute() or ".." in path.parts:
++        raise ManagedProviderError("managed provider configuration is invalid")
++    return path
++
++
++def _read_metadata(path: Path) -> bytes:
++    try:
++        metadata = path.lstat()
++        parent = path.parent.lstat()
++        if (
++            stat.S_ISLNK(metadata.st_mode)
++            or not stat.S_ISREG(metadata.st_mode)
++            or metadata.st_uid != os.geteuid()
++            or stat.S_IMODE(metadata.st_mode) != 0o600
++            or metadata.st_size <= 0
++            or metadata.st_size > MAX_METADATA_BYTES
++            or stat.S_ISLNK(parent.st_mode)
++            or not stat.S_ISDIR(parent.st_mode)
++            or parent.st_uid != os.geteuid()
++            or stat.S_IMODE(parent.st_mode) & 0o077
++        ):
++            raise ManagedProviderError("managed provider configuration is unsafe")
++        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
++        try:
++            opened = os.fstat(descriptor)
++            if (
++                opened.st_dev != metadata.st_dev
++                or opened.st_ino != metadata.st_ino
++                or opened.st_size != metadata.st_size
++            ):
++                raise ManagedProviderError("managed provider configuration is unsafe")
++            payload = bytearray()
++            while len(payload) <= MAX_METADATA_BYTES:
++                chunk = os.read(descriptor, min(4096, MAX_METADATA_BYTES + 1 - len(payload)))
++                if not chunk:
++                    break
++                payload.extend(chunk)
++            if not payload or len(payload) > MAX_METADATA_BYTES:
++                raise ManagedProviderError("managed provider configuration is unsafe")
++            return bytes(payload)
++        finally:
++            os.close(descriptor)
++    except ManagedProviderError:
++        raise
++    except OSError as error:
++        raise ManagedProviderError("managed provider configuration is unsafe") from error
++
++
++def _valid_https_url(value: object) -> bool:
++    if value is None:
++        return True
++    if not isinstance(value, str) or not value or len(value) > 2048:
++        return False
++    parsed = urlsplit(value)
++    return (
++        parsed.scheme == "https"
++        and bool(parsed.hostname)
++        and parsed.username is None
++        and parsed.password is None
++        and not parsed.fragment
++    )
++
++
++def load_managed_provider() -> ManagedProviderV1 | None:
++    path = _metadata_path()
++    if path is None:
++        return None
++    try:
++        raw = json.loads(_read_metadata(path), object_pairs_hook=_reject_duplicates)
++    except ManagedProviderError:
++        raise
++    except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
++        raise ManagedProviderError("managed provider configuration is invalid") from error
++    if (
++        not isinstance(raw, dict)
++        or set(raw) != _FIELDS
++        or raw.get("schema_version") != 1
++        or raw.get("provider") != PROVIDER
++        or raw.get("model") not in MODELS
++        or not _valid_https_url(raw.get("base_url"))
++        or raw.get("key_env") != KEY_ENV
++        or raw.get("keychain_service") != KEYCHAIN_SERVICE
++        or raw.get("keychain_account") != KEYCHAIN_ACCOUNT
++    ):
++        raise ManagedProviderError("managed provider configuration is invalid")
++    return ManagedProviderV1(
++        provider=PROVIDER,
++        model=raw["model"],
++        base_url=raw["base_url"].rstrip("/") if raw["base_url"] else None,
++        key_env=KEY_ENV,
++        keychain_service=KEYCHAIN_SERVICE,
++        keychain_account=KEYCHAIN_ACCOUNT,
++    )
++
++
++def overlay_managed_provider_config(config: Mapping[str, Any]) -> dict[str, Any]:
++    metadata = load_managed_provider()
++    if metadata is None:
++        return copy.deepcopy(dict(config))
++    effective = copy.deepcopy(dict(config))
++    model = effective.get("model")
++    model = copy.deepcopy(model) if isinstance(model, dict) else {}
++    model["provider"] = metadata.provider
++    model["default"] = metadata.model
++    if metadata.base_url is not None:
++        model["base_url"] = metadata.base_url
++    else:
++        model.pop("base_url", None)
++    effective["model"] = model
++    return effective
++
++
++def managed_provider_base_url(provider_id: str) -> tuple[bool, str | None]:
++    metadata = load_managed_provider()
++    if metadata is None or provider_id != metadata.provider:
++        return False, None
++    return True, metadata.base_url
++
++
++def resolve_managed_provider_secret(
++    provider_id: str, requested_key_env: str
++) -> str | None:
++    metadata = load_managed_provider()
++    if (
++        metadata is None
++        or provider_id != metadata.provider
++        or requested_key_env != metadata.key_env
++    ):
++        return None
++    try:
++        secret = _read_keychain_secret(
++            metadata.keychain_service, metadata.keychain_account
++        )
++        if not secret:
++            return ""
++        if len(secret) > MAX_SECRET_BYTES:
++            raise ManagedProviderError("managed provider secure storage failed")
++        try:
++            value = secret.decode("utf-8")
++        finally:
++            secret[:] = b"\x00" * len(secret)
++        if (
++            len(value) < 16
++            or len(value.encode("utf-8")) > MAX_SECRET_BYTES
++            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in value)
++        ):
++            raise ManagedProviderError("managed provider secure storage failed")
++        return value
++    except ManagedProviderError:
++        raise
++    except Exception:
++        raise ManagedProviderError("managed provider secure storage failed") from None
++
++
++def managed_provider_credential(provider_id: str) -> dict[str, str] | None:
++    metadata = load_managed_provider()
++    if metadata is None or provider_id != metadata.provider:
++        return None
++    secret = resolve_managed_provider_secret(provider_id, metadata.key_env)
++    if not secret:
++        return None
++    return {
++        "source": f"managed_keychain:{metadata.key_env}",
++        "auth_type": "api_key",
++        "access_token": secret,
++        "base_url": metadata.base_url or "https://api.deepseek.com",
++        "label": metadata.key_env,
++    }
++
++
++def apply_managed_cli_defaults(
++    model: str | None, provider: str | None, base_url: str | None
++) -> tuple[str | None, str | None, str | None]:
++    metadata = load_managed_provider()
++    if metadata is None:
++        return model, provider, base_url
++    return (
++        model or metadata.model,
++        provider or metadata.provider,
++        base_url or metadata.base_url,
++    )
++
++
++def _read_keychain_secret(service: str, account: str) -> bytearray:
++    if sys.platform != "darwin":
++        raise ManagedProviderError("managed provider secure storage failed")
++    if service != KEYCHAIN_SERVICE or account != KEYCHAIN_ACCOUNT:
++        raise ManagedProviderError("managed provider secure storage failed")
++
++    core = ctypes.CDLL(
++        "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
++    )
++    security = ctypes.CDLL(
++        "/System/Library/Frameworks/Security.framework/Security"
++    )
++    pointer = ctypes.c_void_p
++    core.CFStringCreateWithBytes.restype = pointer
++    core.CFStringCreateWithBytes.argtypes = [
++        pointer,
++        ctypes.c_char_p,
++        ctypes.c_long,
++        ctypes.c_uint32,
++        ctypes.c_bool,
++    ]
++    core.CFDictionaryCreate.restype = pointer
++    core.CFDictionaryCreate.argtypes = [
++        pointer,
++        ctypes.POINTER(pointer),
++        ctypes.POINTER(pointer),
++        ctypes.c_long,
++        pointer,
++        pointer,
++    ]
++    core.CFDataGetLength.restype = ctypes.c_long
++    core.CFDataGetLength.argtypes = [pointer]
++    core.CFDataGetBytePtr.restype = ctypes.POINTER(ctypes.c_ubyte)
++    core.CFDataGetBytePtr.argtypes = [pointer]
++    core.CFRelease.argtypes = [pointer]
++    security.SecItemCopyMatching.restype = ctypes.c_int32
++    security.SecItemCopyMatching.argtypes = [pointer, ctypes.POINTER(pointer)]
++
++    def constant(library: ctypes.CDLL, name: str) -> pointer:
++        return pointer.in_dll(library, name)
++
++    def cf_string(value: str) -> pointer:
++        encoded = value.encode("utf-8")
++        result = core.CFStringCreateWithBytes(
++            None, encoded, len(encoded), 0x08000100, False
++        )
++        if not result:
++            raise ManagedProviderError("managed provider secure storage failed")
++        return result
++
++    service_ref = cf_string(service)
++    account_ref = cf_string(account)
++    query = pointer()
++    result = pointer()
++    try:
++        keys = (pointer * 5)(
++            constant(security, "kSecClass"),
++            constant(security, "kSecAttrService"),
++            constant(security, "kSecAttrAccount"),
++            constant(security, "kSecReturnData"),
++            constant(security, "kSecMatchLimit"),
++        )
++        values = (pointer * 5)(
++            constant(security, "kSecClassGenericPassword"),
++            service_ref,
++            account_ref,
++            constant(core, "kCFBooleanTrue"),
++            constant(security, "kSecMatchLimitOne"),
++        )
++        query = core.CFDictionaryCreate(None, keys, values, 5, None, None)
++        if not query:
++            raise ManagedProviderError("managed provider secure storage failed")
++        status = security.SecItemCopyMatching(query, ctypes.byref(result))
++        if status == -25300:
++            return bytearray()
++        if status != 0 or not result:
++            raise ManagedProviderError("managed provider secure storage failed")
++        length = core.CFDataGetLength(result)
++        if length <= 0 or length > MAX_SECRET_BYTES:
++            raise ManagedProviderError("managed provider secure storage failed")
++        data = core.CFDataGetBytePtr(result)
++        if not data:
++            raise ManagedProviderError("managed provider secure storage failed")
++        return bytearray(ctypes.string_at(data, length))
++    finally:
++        if result:
++            core.CFRelease(result)
++        if query:
++            core.CFRelease(query)
++        core.CFRelease(account_ref)
++        core.CFRelease(service_ref)
+diff --git a/tests/hermes_cli/test_managed_provider.py b/tests/hermes_cli/test_managed_provider.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..186d27a1a625c8d2fbc2c0ca00f6d960b7d46bc2
+--- /dev/null
++++ b/tests/hermes_cli/test_managed_provider.py
+@@ -0,0 +1,204 @@
++from __future__ import annotations
++
++import json
++import os
++from pathlib import Path
++
++import pytest
++
++
++def _write_metadata(tmp_path: Path, **overrides: object) -> Path:
++    payload: dict[str, object] = {
++        "schema_version": 1,
++        "provider": "deepseek",
++        "model": "deepseek-chat",
++        "base_url": "https://api.deepseek.com",
++        "key_env": "DEEPSEEK_API_KEY",
++        "keychain_service": "com.hermes.runtime.provider.v1",
++        "keychain_account": "work:deepseek",
++    }
++    payload.update(overrides)
++    root = tmp_path / "managed"
++    root.mkdir(mode=0o700, exist_ok=True)
++    path = root / "provider-v1.json"
++    path.write_text(json.dumps(payload), encoding="utf-8")
++    path.chmod(0o600)
++    return path
++
++
++def test_managed_provider_metadata_is_strict_and_never_mutates_environment(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    from hermes_cli.managed_provider import (
++        ManagedProviderError,
++        load_managed_provider,
++        overlay_managed_provider_config,
++    )
++
++    path = _write_metadata(tmp_path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    before = dict(os.environ)
++
++    metadata = load_managed_provider()
++    effective = overlay_managed_provider_config({"model": {"max_tokens": 4096}})
++
++    assert metadata is not None
++    assert effective["model"] == {
++        "provider": "deepseek",
++        "default": "deepseek-chat",
++        "base_url": "https://api.deepseek.com",
++        "max_tokens": 4096,
++    }
++    assert dict(os.environ) == before
++
++    for overrides in (
++        {"provider": "openai"},
++        {"model": "unknown"},
++        {"base_url": "http://api.deepseek.com"},
++        {"key_env": "OPENAI_API_KEY"},
++        {"unexpected": "field"},
++    ):
++        bad = _write_metadata(tmp_path, **overrides)
++        monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(bad))
++        with pytest.raises(ManagedProviderError, match="managed provider configuration is invalid"):
++            load_managed_provider()
++
++
++def test_managed_provider_rejects_unsafe_metadata_files(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    from hermes_cli.managed_provider import ManagedProviderError, load_managed_provider
++
++    path = _write_metadata(tmp_path)
++    path.chmod(0o644)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    with pytest.raises(ManagedProviderError, match="managed provider configuration is unsafe"):
++        load_managed_provider()
++
++    path.chmod(0o600)
++    link = tmp_path / "provider-link.json"
++    link.symlink_to(path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(link))
++    with pytest.raises(ManagedProviderError, match="managed provider configuration is unsafe"):
++        load_managed_provider()
++
++
++def test_only_declared_deepseek_key_reaches_fixed_keychain_reference(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    import hermes_cli.managed_provider as managed
++
++    path = _write_metadata(tmp_path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    calls: list[tuple[str, str]] = []
++
++    secret_buffer = bytearray(b"sk-managed-secret-value")
++
++    def fake_reader(service: str, account: str) -> bytearray:
++        calls.append((service, account))
++        return secret_buffer
++
++    monkeypatch.setattr(managed, "_read_keychain_secret", fake_reader)
++
++    secret = managed.resolve_managed_provider_secret(
++        "deepseek", "DEEPSEEK_API_KEY"
++    )
++    assert secret == "sk-managed-secret-value"
++    assert secret_buffer == bytearray(len(secret_buffer))
++    assert calls == [("com.hermes.runtime.provider.v1", "work:deepseek")]
++
++    assert managed.resolve_managed_provider_secret("openai", "OPENAI_API_KEY") is None
++    assert calls == [("com.hermes.runtime.provider.v1", "work:deepseek")]
++
++
++def test_auth_and_ephemeral_pool_use_managed_key_without_persisting_it(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    import agent.credential_pool as pool_module
++    import hermes_cli.managed_provider as managed
++    from agent.credential_pool import CredentialPool, PooledCredential
++    from hermes_cli.auth import (
++        PROVIDER_REGISTRY,
++        _resolve_api_key_provider_secret,
++        resolve_api_key_provider_credentials,
++    )
++
++    path = _write_metadata(tmp_path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
++    monkeypatch.setattr(
++        managed,
++        "_read_keychain_secret",
++        lambda _service, _account: bytearray(b"sk-managed-secret-value"),
++    )
++
++    secret, source = _resolve_api_key_provider_secret(
++        "deepseek", PROVIDER_REGISTRY["deepseek"]
++    )
++    assert secret == "sk-managed-secret-value"
++    assert source == "managed_keychain:DEEPSEEK_API_KEY"
++    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://ambient.invalid")
++    monkeypatch.setattr(
++        managed,
++        "_read_keychain_secret",
++        lambda _service, _account: bytearray(b"sk-managed-secret-value"),
++    )
++    credentials = resolve_api_key_provider_credentials("deepseek")
++    assert credentials["base_url"] == "https://api.deepseek.com"
++
++    ephemeral = PooledCredential(
++        provider="deepseek",
++        id="managed",
++        label="DEEPSEEK_API_KEY",
++        auth_type="api_key",
++        priority=0,
++        source="managed_keychain:DEEPSEEK_API_KEY",
++        access_token="sk-managed-secret-value",
++        base_url="https://api.deepseek.com",
++    )
++    persisted: list[dict[str, object]] = []
++    monkeypatch.setattr(
++        pool_module,
++        "write_credential_pool",
++        lambda _provider, entries, **_kwargs: persisted.extend(entries),
++    )
++    CredentialPool("deepseek", [ephemeral])._persist()
++    assert persisted == []
++
++
++def test_managed_errors_are_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    import hermes_cli.managed_provider as managed
++
++    path = _write_metadata(tmp_path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    secret_marker = "sk-must-never-appear"
++
++    def failing_reader(_service: str, _account: str) -> bytearray:
++        raise RuntimeError(secret_marker)
++
++    monkeypatch.setattr(managed, "_read_keychain_secret", failing_reader)
++    with pytest.raises(managed.ManagedProviderError) as captured:
++        managed.resolve_managed_provider_secret("deepseek", "DEEPSEEK_API_KEY")
++    assert secret_marker not in str(captured.value)
++    assert captured.value.__cause__ is None
++
++
++def test_managed_cli_defaults_do_not_override_explicit_arguments(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    from hermes_cli.managed_provider import apply_managed_cli_defaults
++
++    path = _write_metadata(tmp_path)
++    monkeypatch.setenv("HERMES_MANAGED_PROVIDER_CONFIG", str(path))
++    assert apply_managed_cli_defaults(None, None, None) == (
++        "deepseek-chat",
++        "deepseek",
++        "https://api.deepseek.com",
++    )
++    assert apply_managed_cli_defaults(
++        "deepseek-reasoner", "deepseek", "https://explicit.example"
++    ) == (
++        "deepseek-reasoner",
++        "deepseek",
++        "https://explicit.example",
++    )

@@ -25,7 +25,12 @@ sha2 = "0.10"
 tar = "=0.4.44"
 thiserror = "2"
 time = { version = "=0.3.44", features = ["parsing", "formatting"] }
+zeroize = "1"
 zstd = "=0.13.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+security-framework-sys = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=4.1.6", default-features = false, features = ["v1"] }

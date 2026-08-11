@@ -1,8 +1,10 @@
 name: Hermes Desktop managed release payload
 
 on:
+  workflow_dispatch:
   push:
     branches:
+      - "main"
       - "feature/hermes-desktop-foundation-*"
       - "feature/hermes-release-update-plane-*"
     paths:

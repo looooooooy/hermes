@@ -22,6 +22,9 @@
   let workspaceError = '';
   let devicePairing = false;
   let devicePairingError = '';
+  let providerSaving = false;
+  let providerError = '';
+  let providerMessage = '';
 
   onMount(loadNativeSnapshot);
 
@@ -115,6 +118,52 @@
     }
   }
 
+  async function saveProvider(
+    provider: string,
+    model: string,
+    baseUrl: string,
+    apiKey: string,
+  ) {
+    if (providerSaving) return;
+    providerSaving = true;
+    providerError = '';
+    providerMessage = '';
+    try {
+      const result = await invoke<{ state: string }>('provider_save', {
+        request: {
+          provider,
+          model,
+          baseUrl: baseUrl.trim() || null,
+          apiKey,
+        },
+      });
+      providerMessage = result.state === 'connected'
+        ? '模型服务已保存并验证。'
+        : '模型服务已安全保存，正在等待本地运行环境验证。';
+      await refreshEvidence();
+    } catch {
+      providerError = '模型服务没有保存，请检查配置后重新尝试。';
+    } finally {
+      providerSaving = false;
+    }
+  }
+
+  async function deleteProvider() {
+    if (providerSaving) return;
+    providerSaving = true;
+    providerError = '';
+    providerMessage = '';
+    try {
+      await invoke('provider_delete');
+      providerMessage = '模型服务配置已删除。';
+      await refreshEvidence();
+    } catch {
+      providerError = '模型服务配置没有删除，请重新尝试。';
+    } finally {
+      providerSaving = false;
+    }
+  }
+
   function componentHealthy(id: string) {
     return snapshot.components.some((component) => component.id === id && component.state === 'healthy');
   }
@@ -157,9 +206,14 @@
       {workspaceError}
       {devicePairing}
       {devicePairingError}
+      {providerSaving}
+      {providerError}
+      {providerMessage}
       onRefresh={refreshEvidence}
       onConnectWorkspace={connectWorkspace}
       onPairDevice={pairDevice}
+      onSaveProvider={saveProvider}
+      onDeleteProvider={deleteProvider}
     />
   {/key}
 {:else}

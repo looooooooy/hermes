@@ -1,5 +1,8 @@
 use crate::manager_state::{ManagerStateError, ManagerStateFile, RestoredManagerState};
-use crate::model::{LifecycleState, ManagerSnapshotV1, PlatformKind, TransitionError};
+use crate::model::{
+    authoritative_components_ready, LifecycleState, ManagerSnapshotV1, PlatformKind,
+    TransitionError,
+};
 use crate::ports::{InstallLayout, PortError, ServiceManager};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -70,7 +73,12 @@ impl RuntimeManager {
         let persistent_state = ManagerStateFile::new(layout.state_root()?)?;
         let restored = persistent_state.load()?;
         let lifecycle = if restored.active_release.is_some() {
-            LifecycleState::Stopped
+            let components = service_manager.component_health().unwrap_or_default();
+            if authoritative_components_ready(&components) {
+                LifecycleState::Ready
+            } else {
+                LifecycleState::Stopped
+            }
         } else {
             LifecycleState::Absent
         };
@@ -178,7 +186,9 @@ mod tests {
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
-    struct FakeServiceManager;
+    struct FakeServiceManager {
+        components: Vec<ComponentHealth>,
+    }
 
     impl ServiceManager for FakeServiceManager {
         fn install_bootstrap(&self, _runtime_manager: &Path) -> Result<(), PortError> {
@@ -201,7 +211,7 @@ mod tests {
             Ok(())
         }
         fn component_health(&self) -> Result<Vec<ComponentHealth>, PortError> {
-            Ok(Vec::new())
+            Ok(self.components.clone())
         }
     }
 
@@ -243,12 +253,44 @@ mod tests {
 
     fn persistent_manager(root: &Path) -> RuntimeManager {
         RuntimeManager::new_persistent(
-            Arc::new(FakeServiceManager),
+            Arc::new(FakeServiceManager {
+                components: Vec::new(),
+            }),
             Arc::new(FakeLayout {
                 root: root.to_path_buf(),
             }),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn persistent_activation_reloads_as_ready_with_four_authoritative_receipts() {
+        let root = temp_root();
+        let manager = persistent_manager(&root);
+        manager.record_activation("1.0.1+win", "101").unwrap();
+        drop(manager);
+
+        let components = ["core", "agent_plugin", "connector", "cloud"]
+            .into_iter()
+            .map(|name| ComponentHealth {
+                name: name.to_owned(),
+                ready: true,
+                detail: "ready".to_owned(),
+                process: None,
+            })
+            .collect();
+        let restored = RuntimeManager::new_persistent(
+            Arc::new(FakeServiceManager { components }),
+            Arc::new(FakeLayout { root: root.clone() }),
+        )
+        .unwrap();
+
+        assert_eq!(restored.state().unwrap(), LifecycleState::Ready);
+        assert_eq!(
+            restored.snapshot().unwrap().active_release.as_deref(),
+            Some("1.0.1+win")
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

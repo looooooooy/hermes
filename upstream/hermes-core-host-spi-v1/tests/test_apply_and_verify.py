@@ -59,8 +59,13 @@ def test_stage3_artifacts_match_current_patch_source_provenance() -> None:
 
     assert provenance.stage3_patch_sha256 == patches[-1].sha256
     assert {entry.relative_path for entry in provenance.source_files} == {
+        "agent/credential_pool.py",
+        "cli.py",
         "gateway/run.py",
+        "hermes_cli/auth.py",
+        "hermes_cli/config.py",
         "hermes_cli/extension_runtime.py",
+        "hermes_cli/managed_provider.py",
         "hermes_cli/plugin_store_v1.py",
         "hermes_cli/plugins.py",
         "hermes_cli/web_server.py",
@@ -83,6 +88,7 @@ def test_final_wheel_locks_authoritative_hermes_console_and_plugin_store() -> No
         parser = configparser.ConfigParser(interpolation=None)
         parser.read_string(archive.read(entrypoint_paths[0]).decode("utf-8"))
         assert parser["console_scripts"]["hermes"] == "hermes_cli.main:main"
+        assert "hermes_cli/managed_provider.py" in archive.namelist()
         assert "hermes_cli/plugin_store_v1.py" in archive.namelist()
 
 
@@ -91,6 +97,7 @@ def test_stage3_verification_includes_signed_plugin_store_gate() -> None:
     lock = json.loads((bundle_root / "upstream.lock.json").read_text(encoding="utf-8"))
 
     assert "tests/hermes_cli/test_plugin_store_v1.py" in lock["verification"]["command"]
+    assert "tests/hermes_cli/test_managed_provider.py" in lock["verification"]["command"]
 
 
 def test_artifact_digest_mismatch_fails_before_creating_target(tmp_path: Path) -> None:

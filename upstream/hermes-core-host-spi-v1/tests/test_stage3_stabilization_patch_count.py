@@ -20,6 +20,7 @@ def _lock(stage: int, patch_count: int) -> dict[str, object]:
 def test_stage3_accepts_original_and_stabilized_patch_sets() -> None:
     assert PatchBundle._validated_stage(_lock(3, 3)) == 3
     assert PatchBundle._validated_stage(_lock(3, 4)) == 3
+    assert PatchBundle._validated_stage(_lock(3, 5)) == 3
 
 
 @pytest.mark.parametrize(
@@ -28,7 +29,7 @@ def test_stage3_accepts_original_and_stabilized_patch_sets() -> None:
         (1, 2),
         (2, 3),
         (3, 2),
-        (3, 5),
+        (3, 6),
     ),
 )
 def test_stage_patch_counts_remain_fail_closed(

@@ -15,7 +15,7 @@ import tempfile
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 _SUPPORTED_PATCH_STAGES = frozenset({1, 2, 3})
@@ -337,7 +337,7 @@ class PatchBundle:
         allowed_patch_counts = {
             1: frozenset({1}),
             2: frozenset({2}),
-            3: frozenset({3, 4}),
+            3: frozenset({3, 4, 5}),
         }
         if (
             not isinstance(patches, list)
@@ -557,11 +557,13 @@ class PatchBundle:
             with tarfile.open(sdist_paths[0], mode="r:gz") as sdist:
                 members = sdist.getmembers()
                 for source in source_files:
+                    source_parts = PurePosixPath(source.relative_path).parts
                     matches = [
                         member
                         for member in members
-                        if member.name == source.relative_path
-                        or member.name.endswith(f"/{source.relative_path}")
+                        if len(PurePosixPath(member.name).parts)
+                        == len(source_parts) + 1
+                        and PurePosixPath(member.name).parts[1:] == source_parts
                     ]
                     if len(matches) != 1 or not matches[0].isfile():
                         raise PatchBundleError("artifact provenance mismatch")

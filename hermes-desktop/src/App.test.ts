@@ -29,6 +29,20 @@ function buttonWithText(label: string): HTMLButtonElement | undefined {
     .find((button) => button.textContent?.includes(label));
 }
 
+function providerSnapshot(): RuntimeSnapshot {
+  return {
+    ...mockRuntimeSnapshot,
+    providers: [
+      {
+        name: 'DeepSeek',
+        model: 'deepseek-chat',
+        state: 'not-configured',
+        note: 'Provider is not configured',
+      },
+    ],
+  };
+}
+
 describe('workspace reauthentication from device pairing', () => {
   let component: ReturnType<typeof mount> | undefined;
 
@@ -237,5 +251,46 @@ describe('workspace reauthentication from device pairing', () => {
     });
     expect(document.body.textContent).not.toContain('设备绑定组件没有完成初始化');
     expect(buttonWithText('浏览器登录')).toBeUndefined();
+  });
+
+  it('saves a masked DeepSeek credential once and clears the field after the native call', async () => {
+    const snapshot = providerSnapshot();
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'runtime_snapshot') return snapshot;
+      if (command === 'provider_save') {
+        return {
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          state: 'attention',
+          note: 'Provider configuration needs verification',
+        };
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    component = mount(App, {
+      target: document.getElementById('test-root')!,
+    });
+
+    await vi.waitFor(() => expect(buttonWithText('保存并验证')).toBeDefined());
+    const keyInput = document.querySelector<HTMLInputElement>('#provider-api-key')!;
+    expect(keyInput.type).toBe('password');
+    keyInput.value = 'sk-test-provider-secret-value';
+    keyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(() => expect(buttonWithText('保存并验证')?.disabled).toBe(false));
+    buttonWithText('保存并验证')!.click();
+
+    await vi.waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('provider_save', {
+        request: {
+          provider: 'deepseek',
+          model: 'deepseek-chat',
+          baseUrl: null,
+          apiKey: 'sk-test-provider-secret-value',
+        },
+      });
+      expect(keyInput.value).toBe('');
+    });
+    expect(document.body.textContent).not.toContain('sk-test-provider-secret-value');
   });
 });

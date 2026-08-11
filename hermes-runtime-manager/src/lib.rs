@@ -2,6 +2,7 @@ pub mod blank_machine;
 #[cfg(unix)]
 pub mod host_update_safety_ipc;
 pub mod ipc;
+pub mod initial_activation;
 #[cfg(target_os = "linux")]
 pub mod linux_secret_service;
 #[cfg(target_os = "linux")]
@@ -9,6 +10,8 @@ pub mod linux_systemd_user;
 pub mod local_ipc;
 #[cfg(target_os = "macos")]
 pub mod macos_service_manager;
+#[cfg(target_os = "macos")]
+pub mod macos_secret_store;
 pub mod managed_payload_archive;
 pub mod managed_release_stager;
 pub mod manager;
@@ -18,6 +21,7 @@ pub mod platform;
 pub mod portable_plugin_signature;
 pub mod ports;
 pub mod release_control;
+mod release_layout;
 pub mod startup_reconcile;
 pub mod toolchain;
 pub mod update_adapters;
@@ -47,6 +51,10 @@ pub mod windows_update_health;
 pub use blank_machine::{
     run_blank_machine_toolchain_gate, BlankMachineGateError, BlankMachineGateReport,
 };
+pub use initial_activation::{
+    InitialActivationError, InitialReadinessProbe, InitialReleaseActivator,
+    ServiceManagerInitialReadinessProbe,
+};
 #[cfg(unix)]
 pub use host_update_safety_ipc::{
     default_update_safety_endpoint, UnixHostUpdateSafetySource,
@@ -57,6 +65,10 @@ pub use linux_secret_service::LinuxSecretServiceStore;
 pub use linux_systemd_user::{LinuxSystemdUserBootstrap, LinuxSystemdUserStatus};
 #[cfg(target_os = "macos")]
 pub use macos_service_manager::MacOSLaunchAgentServiceManager;
+#[cfg(target_os = "macos")]
+pub use macos_secret_store::{
+    MacOSKeychainSecretStore, PROVIDER_ACCOUNT, PROVIDER_SERVICE,
+};
 pub use managed_payload_archive::{
     pack_managed_payload, unpack_managed_payload, ManagedPayloadArchiveError,
     ManagedPayloadArchiveReceiptV1,

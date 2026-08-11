@@ -23,22 +23,34 @@
     {
       "path": "patches/0004-stage3-stabilization.patch",
       "sha256": "81ec9143e3a553d3140f3ee2b12f2ae16a6b5513118d0f3ac5f7427ebc35214e"
+    },
+    {
+      "path": "patches/0005-managed-provider-keychain.patch",
+      "sha256": "bb4e99413014c994a87d9a1296dfadcadaa996fd8660d59a0e1fe08025bb4bcb"
     }
   ],
   "artifacts": [
     {
       "path": "dist/hermes_agent-0.19.0-py3-none-any.whl",
-      "sha256": "314593d41fd8d7673bea30310119256fee577232fd042ae4b5d005c2bdd9acea"
+      "sha256": "b3a93466142985c55033fb86baac4035e227086e0eed883bdc89dbb354a1aa66"
     },
     {
       "path": "dist/hermes_agent-0.19.0.tar.gz",
-      "sha256": "cd29a0696834c689108fc17b82b51ad925507d7179c852a467bfafca582ad45d"
+      "sha256": "0bda03fca66a47d721ec5a4dfddb88b0c291b115d15d4702f6df58aab8978500"
     }
   ],
   "artifact_provenance": {
     "schema_version": 1,
-    "stage3_patch_sha256": "81ec9143e3a553d3140f3ee2b12f2ae16a6b5513118d0f3ac5f7427ebc35214e",
+    "stage3_patch_sha256": "bb4e99413014c994a87d9a1296dfadcadaa996fd8660d59a0e1fe08025bb4bcb",
     "source_files": [
+      {
+        "path": "agent/credential_pool.py",
+        "sha256": "8c9255339cdea7007adcce0eb678e83c0ee51caeb8a0f1bfb4d82bab80825862"
+      },
+      {
+        "path": "cli.py",
+        "sha256": "1dee54de4871a86c5257663cddbe969969b764dfefc815fa795b51060a63be67"
+      },
       {
         "path": "gateway/run.py",
         "sha256": "80fb638f0a3f7b87d554f78573e154cb17a93022c7874b5aabf37f1f85e0f034"
@@ -46,6 +58,18 @@
       {
         "path": "hermes_cli/extension_runtime.py",
         "sha256": "e89542f90598a6126295c313a1203181c9d4311085be73edbaf61d903ee2fc8a"
+      },
+      {
+        "path": "hermes_cli/auth.py",
+        "sha256": "67e3d7bf70763d039ea2bbf8610145caf7f9a3392e53bb3a1cd4a2d6601fbbae"
+      },
+      {
+        "path": "hermes_cli/config.py",
+        "sha256": "9d1f07df012811ac99461ae1c41a12b1fee2735b5b88612e1b0bb37f5d1db1ce"
+      },
+      {
+        "path": "hermes_cli/managed_provider.py",
+        "sha256": "34f488ddfc85f6246e8ab90af7d23623d5f023518e37491a55bbf7ffe8fbdef5"
       },
       {
         "path": "hermes_cli/plugin_store_v1.py",
@@ -109,6 +133,7 @@
       "tests/hermes_cli/test_extension_runtime_stage3.py",
       "tests/hermes_cli/test_extension_surface_output_parity.py",
       "tests/hermes_cli/test_gateway_extension_registration.py",
+      "tests/hermes_cli/test_managed_provider.py",
       "tests/hermes_cli/test_plugins.py",
       "tests/hermes_cli/test_plugin_store_v1.py",
       "tests/tools/test_process_registry.py",

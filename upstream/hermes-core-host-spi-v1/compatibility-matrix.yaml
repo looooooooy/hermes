@@ -28,6 +28,10 @@ upstream_targets:
     output_parity_v2: available_after_patch_with_real_surface_producers
     composition_root_injection: available_after_patch
     local_endpoint_transport: local_gateway_observer_control_roles_available_after_patch
+    managed_provider_metadata: strict_bounded_owner_only_no_follow_v1
+    managed_provider_keychain: security_framework_in_process_deepseek_only
+    managed_provider_secret_export: forbidden_for_environment_argv_logs_artifacts_and_cloud
+    managed_provider_credential_pool: ephemeral_memory_only_never_persisted
     endpoint_test_seam: explicit_injected_registrar_only
     signed_plugin_store: ed25519_canonical_manifest_fail_closed
     plugin_store_trust: explicit_read_only_trust_store_required

@@ -21,9 +21,19 @@
   export let workspaceError = '';
   export let devicePairing = false;
   export let devicePairingError = '';
+  export let providerSaving = false;
+  export let providerError = '';
+  export let providerMessage = '';
   export let onRefresh: () => void;
   export let onConnectWorkspace: (endpoint: string) => void;
   export let onPairDevice: () => void;
+  export let onSaveProvider: (
+    provider: string,
+    model: string,
+    baseUrl: string,
+    apiKey: string,
+  ) => Promise<void>;
+  export let onDeleteProvider: () => Promise<void>;
 
   type StepKey = 'foundation' | 'enterprise' | 'device' | 'runtime' | 'provider' | 'ready';
   type StepState = 'complete' | 'current' | 'pending';
@@ -38,7 +48,19 @@
   ];
 
   let workspaceEndpoint = snapshot.workspaceEndpoint ?? '';
+  let providerModel = 'deepseek-chat';
+  let providerBaseUrl = '';
+  let providerApiKey = '';
   $: if (!workspaceEndpoint && snapshot.workspaceEndpoint) workspaceEndpoint = snapshot.workspaceEndpoint;
+
+  async function saveProvider() {
+    if (providerSaving || !providerApiKey) return;
+    try {
+      await onSaveProvider('deepseek', providerModel, providerBaseUrl, providerApiKey);
+    } finally {
+      providerApiKey = '';
+    }
+  }
 
   function componentHealthy(id: string) {
     return snapshot.components.some((component) => component.id === id && component.state === 'healthy');
@@ -360,6 +382,75 @@
             </div>
           {/if}
 
+          {#if currentStep() === 'provider'}
+            <div class="workspace-form provider-form">
+              <div class="provider-fields">
+                <label>
+                  <span>模型服务</span>
+                  <select disabled aria-label="模型服务">
+                    <option value="deepseek">DeepSeek</option>
+                  </select>
+                </label>
+                <label>
+                  <span>模型</span>
+                  <select bind:value={providerModel} disabled={providerSaving} aria-label="模型">
+                    <option value="deepseek-chat">deepseek-chat</option>
+                    <option value="deepseek-reasoner">deepseek-reasoner</option>
+                  </select>
+                </label>
+              </div>
+              <label for="provider-base-url">API 地址（可选）</label>
+              <input
+                id="provider-base-url"
+                bind:value={providerBaseUrl}
+                placeholder="https://api.deepseek.com"
+                autocomplete="url"
+                spellcheck="false"
+                disabled={providerSaving}
+              />
+              <label for="provider-api-key">API 密钥</label>
+              <input
+                id="provider-api-key"
+                type="password"
+                bind:value={providerApiKey}
+                placeholder="输入 DeepSeek API 密钥"
+                autocomplete="new-password"
+                spellcheck="false"
+                disabled={providerSaving}
+              />
+              <div class="provider-actions">
+                <button
+                  class="connect"
+                  on:click={saveProvider}
+                  disabled={providerSaving || providerApiKey.length < 16}
+                >
+                  {#if providerSaving}
+                    <span class="spinner"></span> 正在保存并验证…
+                  {:else}
+                    <ShieldCheck size={18} /> 保存并验证
+                  {/if}
+                </button>
+                {#if snapshot.providers.some((provider) => provider.state !== 'not-configured')}
+                  <button
+                    class="connect provider-delete"
+                    on:click={onDeleteProvider}
+                    disabled={providerSaving}
+                  >
+                    删除配置
+                  </button>
+                {/if}
+              </div>
+              {#if providerError}
+                <div class="workspace-error">{providerError}</div>
+              {:else if providerMessage}
+                <div class="provider-message">{providerMessage}</div>
+              {/if}
+              <div class="workspace-note">
+                <KeyRound size={15} /> 密钥仅写入 macOS 钥匙串，保存后不会再次显示
+              </div>
+            </div>
+          {/if}
+
           <div class="status-grid">
             <div>
               <span>Runtime Manager</span>
@@ -665,6 +756,31 @@
   .pairing-relogin { width: max-content; background: transparent; color: #8fb3a8; }
   .pairing-relogin:hover:not(:disabled) { background: rgba(111, 227, 189, .07); }
   .fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; word-break: break-all; }
+  .provider-form { display: grid; gap: 10px; }
+  .provider-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .provider-fields label { margin: 0; }
+  .provider-fields label > span { display: block; margin-bottom: 9px; }
+  .provider-form input,
+  .provider-form select {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding: 0 13px;
+    border: 1px solid rgba(212, 238, 231, .14);
+    border-radius: 10px;
+    outline: none;
+    background: #071511;
+    color: #d8e4e0;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .provider-form input:focus,
+  .provider-form select:focus { border-color: rgba(111, 227, 189, .42); box-shadow: 0 0 0 3px rgba(111, 227, 189, .055); }
+  .provider-actions { display: flex; gap: 10px; margin-top: 4px; }
+  .provider-delete { background: transparent; color: #b28b7d; border-color: rgba(224, 147, 123, .18); }
+  .provider-delete:hover:not(:disabled) { background: rgba(224, 147, 123, .07); }
+  .provider-message { color: #75c6aa; font-size: 14px; line-height: 1.55; }
 
   .status-grid {
     display: grid;
@@ -715,6 +831,8 @@
     .main { grid-template-columns: 1fr; }
     .rail { display: none; }
     .workspace-row { grid-template-columns: 1fr; }
+    .provider-fields { grid-template-columns: 1fr; }
+    .provider-actions { flex-direction: column; }
     .connect { width: 100%; }
   }
 

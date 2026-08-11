@@ -16,6 +16,8 @@ use std::path::Path;
 use tauri::{Manager, RunEvent};
 
 mod device_pairing;
+#[cfg(target_os = "macos")]
+mod provider_config;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod tray;
 mod workspace_auth;
@@ -173,6 +175,60 @@ async fn device_pair_cancel() -> Result<device_pairing::DevicePairingStatus, Str
         .map_err(|_| "Hermes device pairing cancellation did not complete.".to_owned())?
 }
 
+#[cfg(target_os = "macos")]
+fn managed_provider_service() -> Result<provider_config::ProviderConfigService, String> {
+    let layout = DefaultInstallLayout::discover()
+        .map_err(|_| "Provider configuration is unavailable.".to_owned())?;
+    let application_root = layout
+        .application_root()
+        .map_err(|_| "Provider configuration is unavailable.".to_owned())?;
+    provider_config::ProviderConfigService::new(application_root)
+        .map_err(|_| "Provider configuration is unavailable.".to_owned())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn provider_save(
+    request: provider_config::ProviderSaveRequest,
+) -> Result<provider_config::ProviderStatusV1, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let snapshot = fetch_manager_snapshot()
+            .map_err(|_| "Managed runtime is unavailable.".to_owned())?;
+        managed_provider_service()?
+            .save(request, snapshot.active_release.as_deref())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| "Provider configuration task did not complete.".to_owned())?
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn provider_status() -> Result<provider_config::ProviderStatusV1, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let active_release = fetch_manager_snapshot()
+            .ok()
+            .and_then(|snapshot| snapshot.active_release);
+        managed_provider_service()?
+            .status(active_release.as_deref())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| "Provider status task did not complete.".to_owned())?
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn provider_delete() -> Result<provider_config::ProviderStatusV1, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        managed_provider_service()?
+            .delete()
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|_| "Provider deletion task did not complete.".to_owned())?
+}
+
 #[cfg(unix)]
 fn fetch_manager_snapshot() -> Result<ManagerSnapshotV1, String> {
     let layout = DefaultInstallLayout::discover().map_err(|error| error.to_string())?;
@@ -260,7 +316,7 @@ fn from_manager_snapshot(
         update_version: None,
         last_checked: "live local IPC".to_owned(),
         components,
-        providers: provider_slots(),
+        providers: provider_slots(snapshot.active_release.as_deref()),
         events: vec![RuntimeEvent {
             id: "runtime-manager-connected".to_owned(),
             at: "now".to_owned(),
@@ -319,7 +375,7 @@ fn offline_snapshot(
             latency_ms: None,
         })
         .collect(),
-        providers: provider_slots(),
+        providers: provider_slots(None),
         events: vec![RuntimeEvent {
             id: "runtime-manager-offline".to_owned(),
             at: "now".to_owned(),
@@ -330,16 +386,43 @@ fn offline_snapshot(
     }
 }
 
-fn provider_slots() -> Vec<ProviderStatus> {
-    ["DeepSeek", "Kimi"]
-        .into_iter()
-        .map(|name| ProviderStatus {
-            name: name.to_owned(),
-            model: "Provider slot".to_owned(),
+fn provider_slots(active_release: Option<&str>) -> Vec<ProviderStatus> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = managed_provider_service()
+            .and_then(|service| {
+                service
+                    .status(active_release)
+                    .map_err(|_| "Provider status is unavailable.".to_owned())
+            })
+            .unwrap_or(provider_config::ProviderStatusV1 {
+                provider: "deepseek".to_owned(),
+                model: "deepseek-chat".to_owned(),
+                state: provider_config::ProviderStateV1::Attention,
+                note: "Provider status is unavailable".to_owned(),
+            });
+        return vec![ProviderStatus {
+            name: "DeepSeek".to_owned(),
+            model: status.model,
+            state: match status.state {
+                provider_config::ProviderStateV1::Connected => "connected",
+                provider_config::ProviderStateV1::Attention => "attention",
+                provider_config::ProviderStateV1::NotConfigured => "not-configured",
+            }
+            .to_owned(),
+            note: status.note,
+        }];
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = active_release;
+        vec![ProviderStatus {
+            name: "DeepSeek".to_owned(),
+            model: "deepseek-chat".to_owned(),
             state: "not-configured".to_owned(),
-            note: "Local secret store".to_owned(),
-        })
-        .collect()
+            note: "Provider is not configured".to_owned(),
+        }]
+    }
 }
 
 fn component_ready(snapshot: &ManagerSnapshotV1, name: &str) -> bool {
@@ -381,8 +464,19 @@ pub fn run() {
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             tray::create_tray(app.handle())?;
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
+        });
+    #[cfg(target_os = "macos")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        runtime_snapshot,
+        workspace_connect,
+        device_pair,
+        device_pair_cancel,
+        provider_save,
+        provider_status,
+        provider_delete
+    ]);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
             runtime_snapshot,
             workspace_connect,
             device_pair,

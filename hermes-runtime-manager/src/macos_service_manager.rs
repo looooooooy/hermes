@@ -1,7 +1,7 @@
 #![cfg(target_os = "macos")]
 
 use crate::model::ComponentHealth;
-use crate::ports::{PortError, ServiceManager};
+use crate::ports::{ConnectorLaunchConfigV1, PortError, ServiceManager};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -17,32 +17,14 @@ const PROJECTION_STATE_SCHEMA: u8 = 1;
 const MAX_STATE_BYTES: u64 = 64 * 1024;
 const MAX_RELEASE_ID_BYTES: usize = 128;
 
-const CONNECTOR_ENV_ALLOWLIST: &[&str] = &[
-    "HERMES_CONNECTOR_CONFIG_FILE",
-    "HERMES_CONNECTOR_CLOUD_ENDPOINT",
-    "HERMES_CONNECTOR_API_ENDPOINT",
-    "HERMES_CONNECTOR_DISPLAY_NAME",
-    "HERMES_CONNECTOR_PROFILE",
-    "HERMES_CONNECTOR_VERSION",
-    "HERMES_CONNECTOR_LOCAL_GATEWAY_REGISTRY_DIR",
-    "HERMES_CONNECTOR_LOCAL_GATEWAY_SOCKET_DIR",
-    "HERMES_CONNECTOR_CONTROL_REGISTRY_DIR",
-    "HERMES_CONNECTOR_CONTROL_SOCKET_DIR",
-    "HERMES_CONNECTOR_OBSERVER_REGISTRY_DIR",
-    "HERMES_CONNECTOR_OBSERVER_SOCKET_DIR",
-    "HERMES_CONNECTOR_STATE_DIR",
-    "HERMES_CONNECTOR_DATABASE_FILE",
-    "HERMES_CONNECTOR_LOCK_FILE",
-    "HERMES_CONNECTOR_CREDENTIAL_STORE",
-    "HERMES_HOME",
-];
-
 #[derive(Debug, Clone)]
 pub struct MacOSLaunchAgentServiceManager {
     launch_agents_dir: PathBuf,
+    application_root: PathBuf,
     state_root: PathBuf,
     logs_root: PathBuf,
     domain_target: String,
+    connector_config: Option<ConnectorLaunchConfigV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,9 +62,21 @@ struct ConnectorStatusProjection {
 }
 
 impl MacOSLaunchAgentServiceManager {
-    pub fn new(application_root: PathBuf, logs_root: PathBuf) -> Result<Self, PortError> {
+    pub fn new(
+        application_root: PathBuf,
+        logs_root: PathBuf,
+        connector_config: Option<ConnectorLaunchConfigV1>,
+    ) -> Result<Self, PortError> {
         validate_absolute_root(&application_root, "application root")?;
         validate_absolute_root(&logs_root, "logs root")?;
+        if let Some(config) = &connector_config {
+            config.validate()?;
+            if config.application_root != application_root {
+                return Err(PortError::Operation(
+                    "Connector application root does not match Runtime Manager".to_owned(),
+                ));
+            }
+        }
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
             .ok_or_else(|| PortError::Operation("HOME is unavailable".to_owned()))?;
@@ -92,9 +86,11 @@ impl MacOSLaunchAgentServiceManager {
         let uid = unsafe { libc::geteuid() };
         Ok(Self {
             launch_agents_dir: home.join("Library/LaunchAgents"),
+            application_root: application_root.clone(),
             state_root: application_root.join("state"),
             logs_root,
             domain_target: format!("gui/{uid}"),
+            connector_config,
         })
     }
 
@@ -120,16 +116,15 @@ impl MacOSLaunchAgentServiceManager {
         Ok(())
     }
 
-    fn connector_environment(&self) -> BTreeMap<String, String> {
-        CONNECTOR_ENV_ALLOWLIST
-            .iter()
-            .filter_map(|key| {
-                std::env::var(key)
-                    .ok()
-                    .filter(|value| !value.is_empty() && !value.contains('\0'))
-                    .map(|value| ((*key).to_owned(), value))
-            })
-            .collect()
+    fn connector_environment(&self) -> Result<BTreeMap<String, String>, PortError> {
+        self.connector_config
+            .as_ref()
+            .ok_or_else(|| {
+                PortError::Operation(
+                    "typed Connector launch configuration is unavailable".to_owned(),
+                )
+            })?
+            .environment()
     }
 
     fn replace_projection(
@@ -299,20 +294,12 @@ impl ServiceManager for MacOSLaunchAgentServiceManager {
         let trust_store = release_root.join("plugin/metadata/trust-store.json");
         validate_regular_file(&manifest, "Plugin Store manifest")?;
         validate_regular_file(&trust_store, "Plugin Store trust store")?;
-        let environment = BTreeMap::from([
-            (
-                "HERMES_PLUGIN_STORE_MANIFEST".to_owned(),
-                manifest.to_string_lossy().into_owned(),
-            ),
-            (
-                "HERMES_PLUGIN_STORE_TRUST_STORE".to_owned(),
-                trust_store.to_string_lossy().into_owned(),
-            ),
-        ]);
+        let (arguments, environment) =
+            host_launch_configuration(&self.application_root, &manifest, &trust_store);
         self.replace_projection(
             HOST_LABEL,
             executable,
-            &[],
+            &arguments,
             &environment,
             "host.stdout.log",
             "host.stderr.log",
@@ -335,7 +322,7 @@ impl ServiceManager for MacOSLaunchAgentServiceManager {
 
     fn start_connector(&self, executable: &Path, release_id: &str) -> Result<(), PortError> {
         validate_managed_release_executable(executable, release_id, "connector", "hermes-connector")?;
-        let environment = self.connector_environment();
+        let environment = self.connector_environment()?;
         self.replace_projection(
             CONNECTOR_LABEL,
             executable,
@@ -429,6 +416,37 @@ fn health(name: &str, ready: bool, detail: &str) -> ComponentHealth {
         detail: detail.to_owned(),
         process: None,
     }
+}
+
+fn host_launch_configuration(
+    application_root: &Path,
+    manifest: &Path,
+    trust_store: &Path,
+) -> (Vec<String>, BTreeMap<String, String>) {
+    (
+        vec!["serve".to_owned()],
+        BTreeMap::from([
+            (
+                "HERMES_HOME".to_owned(),
+                application_root.to_string_lossy().into_owned(),
+            ),
+            (
+                "HERMES_MANAGED_PROVIDER_CONFIG".to_owned(),
+                application_root
+                    .join("config/provider-profile-v1.json")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            (
+                "HERMES_PLUGIN_STORE_MANIFEST".to_owned(),
+                manifest.to_string_lossy().into_owned(),
+            ),
+            (
+                "HERMES_PLUGIN_STORE_TRUST_STORE".to_owned(),
+                trust_store.to_string_lossy().into_owned(),
+            ),
+        ]),
+    )
 }
 
 fn validate_absolute_root(path: &Path, label: &str) -> Result<(), PortError> {
@@ -662,7 +680,7 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        root
+        root.canonicalize().unwrap()
     }
 
     #[test]
@@ -727,5 +745,49 @@ mod tests {
         assert!(!plist.to_ascii_lowercase().contains("access_token"));
         assert!(!plist.contains("/bin/sh"));
         assert!(!plist.contains("/bin/bash"));
+    }
+
+    #[test]
+    fn connector_launch_requires_typed_configuration() {
+        let root = temp_root("missing-connector-config");
+        let manager = MacOSLaunchAgentServiceManager::new(
+            root.join("application"),
+            root.join("logs"),
+            None,
+        )
+        .unwrap();
+
+        assert!(manager.connector_environment().is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn host_launch_configuration_is_managed_and_contains_no_provider_secret() {
+        let application_root = Path::new("/Applications/Hermes/managed");
+        let release_root = application_root.join("releases/1.0.0");
+        let (arguments, environment) = host_launch_configuration(
+            application_root,
+            &release_root.join("plugin/metadata/signed-plugin-manifest.json"),
+            &release_root.join("plugin/metadata/trust-store.json"),
+        );
+
+        assert_eq!(arguments, vec!["serve".to_owned()]);
+        assert_eq!(
+            environment.get("HERMES_HOME").map(String::as_str),
+            Some("/Applications/Hermes/managed")
+        );
+        assert_eq!(
+            environment
+                .get("HERMES_MANAGED_PROVIDER_CONFIG")
+                .map(String::as_str),
+            Some("/Applications/Hermes/managed/config/provider-profile-v1.json")
+        );
+        assert!(environment.keys().all(|key| {
+            let upper = key.to_ascii_uppercase();
+            !upper.ends_with("_TOKEN")
+                && !upper.ends_with("_SECRET")
+                && !upper.ends_with("_KEY")
+                && !upper.contains("OAUTH")
+        }));
     }
 }

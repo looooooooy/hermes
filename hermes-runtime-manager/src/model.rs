@@ -79,6 +79,25 @@ pub struct ManagerSnapshotV1 {
     pub components: Vec<ComponentHealth>,
 }
 
+pub(crate) fn authoritative_components_ready(components: &[ComponentHealth]) -> bool {
+    const REQUIRED: [&[&str]; 4] = [
+        &["core", "Hermes Core"],
+        &["agent_plugin", "Agent Plugin"],
+        &["connector", "Connector"],
+        &["cloud", "Hermes Cloud"],
+    ];
+    REQUIRED.iter().all(|aliases| {
+        components
+            .iter()
+            .filter(|component| aliases.contains(&component.name.as_str()))
+            .count()
+            == 1
+            && components
+                .iter()
+                .any(|component| aliases.contains(&component.name.as_str()) && component.ready)
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum TransitionError {
     #[error("illegal lifecycle transition: {from:?} -> {to:?}")]
@@ -130,7 +149,7 @@ impl LifecycleState {
 
 #[cfg(test)]
 mod tests {
-    use super::LifecycleState;
+    use super::{authoritative_components_ready, ComponentHealth, LifecycleState};
 
     #[test]
     fn update_must_reach_ready_or_rollback_before_normal_operation() {
@@ -153,5 +172,20 @@ mod tests {
         assert!(LifecycleState::Absent
             .transition(LifecycleState::Ready)
             .is_err());
+    }
+
+    #[test]
+    fn authoritative_receipts_accept_platform_component_names() {
+        let components = ["Hermes Core", "Agent Plugin", "Connector", "Hermes Cloud"]
+            .into_iter()
+            .map(|name| ComponentHealth {
+                name: name.to_owned(),
+                ready: true,
+                detail: "ready".to_owned(),
+                process: None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(authoritative_components_ready(&components));
     }
 }
