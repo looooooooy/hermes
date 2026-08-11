@@ -52,9 +52,6 @@ jobs:
       REQUIRE_EVIDENCE: ${{ inputs.require_evidence }}
       TIMEOUT_MS: ${{ inputs.timeout_ms }}
       HERMES_FULL_CHAIN_ACCESS_TOKEN: ${{ secrets.HERMES_FULL_CHAIN_ACCESS_TOKEN }}
-      RECEIPT_FILE: ${{ runner.temp }}/hermes-real-full-chain-receipt.json
-      TOKEN_FILE: ${{ runner.temp }}/hermes-real-full-chain-token
-      PROMPT_FILE: ${{ runner.temp }}/hermes-real-full-chain-prompt
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,9 +66,17 @@ jobs:
             exit 1
           fi
           umask 077
-          printf '%s' "$HERMES_FULL_CHAIN_ACCESS_TOKEN" > "$TOKEN_FILE"
-          printf '%s' "$GATE_PROMPT" > "$PROMPT_FILE"
-          chmod 600 "$TOKEN_FILE" "$PROMPT_FILE"
+          receipt_file="$RUNNER_TEMP/hermes-real-full-chain-receipt.json"
+          token_file="$RUNNER_TEMP/hermes-real-full-chain-token"
+          prompt_file="$RUNNER_TEMP/hermes-real-full-chain-prompt"
+          {
+            printf 'RECEIPT_FILE=%s\n' "$receipt_file"
+            printf 'TOKEN_FILE=%s\n' "$token_file"
+            printf 'PROMPT_FILE=%s\n' "$prompt_file"
+          } >> "$GITHUB_ENV"
+          printf '%s' "$HERMES_FULL_CHAIN_ACCESS_TOKEN" > "$token_file"
+          printf '%s' "$GATE_PROMPT" > "$prompt_file"
+          chmod 600 "$token_file" "$prompt_file"
       - name: Execute real full-chain gate
         shell: bash
         run: |

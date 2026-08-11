@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +23,18 @@ const cleanup = [];
 
 afterEach(async () => {
   await Promise.allSettled(cleanup.splice(0).map((operation) => operation()));
+});
+
+test("workflow materializes runner-temporary paths only after the runner starts", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/real-full-chain.yml", import.meta.url),
+    "utf8",
+  );
+  const jobEnvironment = workflow.match(/    env:\n([\s\S]*?)    steps:/)?.[1];
+
+  assert.ok(jobEnvironment);
+  assert.doesNotMatch(jobEnvironment, /\$\{\{\s*runner\.temp/);
+  assert.match(workflow, /GITHUB_ENV/);
 });
 
 test("requires explicit authority, target, account token, and prompt without exposing their values", async () => {
