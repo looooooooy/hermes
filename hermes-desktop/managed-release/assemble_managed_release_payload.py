@@ -17,8 +17,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Iterator
 
 ROOT = Path(__file__).resolve().parents[2]
 COMMON = ROOT / "hermes-connector" / "packaging" / "common"
@@ -28,6 +29,7 @@ from hermes_local_release import (  # noqa: E402
     ArtifactInput,
     ReleaseInputs,
     RuntimeReleaseInput,
+    remove_frozen_tree,
 )
 from hermes_managed_release import ManagedReleaseAssembler  # noqa: E402
 from hermes_offline_wheelhouse import load_verified_wheelhouse  # noqa: E402
@@ -151,8 +153,7 @@ def main() -> int:
         raise ManagedPayloadError(f"output already exists: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="hermes-managed-proof-", dir=output.parent) as temporary:
-        proof_root = Path(temporary).resolve()
+    with temporary_proof_root(output.parent) as proof_root:
         releases_root = proof_root / "releases"
 
         def portable_verifier(_inputs: ReleaseInputs) -> None:
@@ -252,6 +253,17 @@ def main() -> int:
         )
     )
     return 0
+
+
+@contextmanager
+def temporary_proof_root(parent: Path) -> Iterator[Path]:
+    proof_root = Path(
+        tempfile.mkdtemp(prefix="hermes-managed-proof-", dir=parent)
+    ).resolve()
+    try:
+        yield proof_root
+    finally:
+        remove_frozen_tree(proof_root)
 
 
 def load_private_toolchain(root: Path, platform_name: str, architecture: str) -> PrivateToolchainV1:

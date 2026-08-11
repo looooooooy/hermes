@@ -251,7 +251,7 @@ class ReleaseBuilder:
             )
         except Exception as exc:
             if staging.exists() and not staging.is_symlink():
-                shutil.rmtree(staging)
+                remove_frozen_tree(staging)
             if isinstance(exc, ReleaseBuildError):
                 raise
             raise ReleaseBuildError(str(exc)) from exc
@@ -998,6 +998,32 @@ def _freeze_tree(root: Path) -> None:
         else:
             raise ReleaseBuildError(f"non-regular immutable artifact rejected: {path}")
     root.chmod(0o500)
+
+
+def remove_frozen_tree(root: Path) -> None:
+    root = Path(root)
+    if root.is_symlink():
+        raise ReleaseBuildError("refusing to clean a symlinked release tree")
+    if not root.exists():
+        return
+
+    root.chmod(0o700)
+    for directory, names, files in os.walk(root, topdown=True, followlinks=False):
+        current = Path(directory)
+        for name in names:
+            path = current / name
+            if not path.is_symlink():
+                path.chmod(0o700)
+        for name in files:
+            path = current / name
+            if not path.is_symlink():
+                path.chmod(0o600)
+
+    def retry_writable(function, path, _exception):
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+
+    shutil.rmtree(root, onexc=retry_writable)
 
 
 def _artifacts(inputs: ReleaseInputs) -> Mapping[str, ArtifactInput]:

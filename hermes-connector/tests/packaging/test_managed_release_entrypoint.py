@@ -342,6 +342,27 @@ def test_managed_release_workflow_watches_local_release_builder() -> None:
     ) == 2
 
 
+def test_payload_proof_cleanup_removes_frozen_release(tmp_path: Path) -> None:
+    namespace = runpy.run_path(
+        str(
+            REPOSITORY_ROOT
+            / "hermes-desktop"
+            / "managed-release"
+            / "assemble_managed_release_payload.py"
+        )
+    )
+
+    with namespace["temporary_proof_root"](tmp_path) as proof_root:
+        frozen = proof_root / "releases" / "release" / "plugin" / "artifacts"
+        frozen.mkdir(parents=True)
+        artifact = frozen / "plugin.whl"
+        artifact.write_bytes(b"plugin")
+        artifact.chmod(0o400)
+        frozen.chmod(0o500)
+
+    assert not proof_root.exists()
+
+
 @pytest.mark.parametrize(
     "verification_code",
     (

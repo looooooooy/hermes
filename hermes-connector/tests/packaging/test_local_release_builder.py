@@ -350,6 +350,27 @@ def test_partial_build_never_publishes_and_cleans_staging(tmp_path: Path) -> Non
     assert not list(releases.glob(".*.staging.*"))
 
 
+def test_frozen_staging_cleanup_preserves_the_original_failure(tmp_path: Path) -> None:
+    releases = tmp_path / "releases"
+
+    class FrozenFailureBuilder(ReleaseBuilder):
+        def _prepare_staging(self, staging, inputs, services):
+            frozen = staging / "plugin" / "artifacts"
+            frozen.mkdir(parents=True)
+            artifact = frozen / "plugin.whl"
+            artifact.write_bytes(b"plugin")
+            artifact.chmod(0o400)
+            frozen.chmod(0o500)
+            raise ReleaseBuildError("original assembly failure")
+
+    with pytest.raises(ReleaseBuildError, match="original assembly failure"):
+        FrozenFailureBuilder(
+            releases_root=releases, runner=RecordingRunner()
+        ).build(_inputs(tmp_path))
+
+    assert not list(releases.glob(".*.staging.*"))
+
+
 def test_windows_staging_path_stays_below_legacy_max_path(tmp_path: Path) -> None:
     captured: list[Path] = []
 
