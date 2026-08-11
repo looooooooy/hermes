@@ -26,6 +26,7 @@ from typing import Any, Protocol
 
 _RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_STAGING_NONCE_HEX_CHARS = 12
 _SIGNED_PLUGIN_FIELDS = {
     "schema_version",
     "plugin_id",
@@ -217,7 +218,8 @@ class ReleaseBuilder:
 
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
         _reject_symlink_components(self._root)
-        staging = self._root / f".{inputs.release_id}.staging.{uuid.uuid4().hex}"
+        staging_nonce = uuid.uuid4().hex[:_STAGING_NONCE_HEX_CHARS]
+        staging = self._root / f".{inputs.release_id}.staging.{staging_nonce}"
         try:
             self._prepare_staging(staging, inputs, services)
             commands = self._commands(inputs, staging)

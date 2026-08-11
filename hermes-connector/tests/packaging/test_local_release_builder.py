@@ -350,6 +350,29 @@ def test_partial_build_never_publishes_and_cleans_staging(tmp_path: Path) -> Non
     assert not list(releases.glob(".*.staging.*"))
 
 
+def test_windows_staging_path_stays_below_legacy_max_path(tmp_path: Path) -> None:
+    captured: list[Path] = []
+
+    class CapturingBuilder(ReleaseBuilder):
+        def _prepare_staging(self, staging, inputs, services):
+            captured.append(staging)
+            raise ReleaseBuildError("captured staging path")
+
+    release_id = "desktop-0.1.0-windows-x86_64"
+    with pytest.raises(ReleaseBuildError, match="captured staging path"):
+        CapturingBuilder(
+            releases_root=tmp_path / "releases", runner=RecordingRunner()
+        ).build(_inputs(tmp_path, release_id=release_id))
+
+    plugin_wheel = _inputs(tmp_path, release_id=release_id).plugin_bundle
+    windows_path = (
+        "C:\\Users\\runneradmin\\AppData\\Local\\Hermes\\releases\\"
+        f"{captured[0].name}\\plugin\\artifacts\\hermes-agent-plugin\\1.0.0\\"
+        f"{plugin_wheel.sha256}\\{plugin_wheel.path.name}"
+    )
+    assert len(windows_path) < 260
+
+
 @pytest.mark.parametrize(
     "release_id", ["../escape", "/absolute", "two/parts", ".", "..", " bad"]
 )
