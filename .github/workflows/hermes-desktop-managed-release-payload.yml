@@ -259,6 +259,8 @@ jobs:
             private_uv: uv/uv.exe
             runtime_manager: hermes-runtime-manager/target/release/hermes-runtime-manager.exe
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_ID: desktop-0.1.0-${{ matrix.target }}+run.${{ github.run_id }}.${{ github.run_attempt }}
     timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
@@ -322,7 +324,7 @@ jobs:
           --plugin-bundle "${{ runner.temp }}/managed-source-inputs/plugin/portable"
           --connector-project "${{ runner.temp }}/managed-source-inputs/connector/project"
           --connector-wheel "${{ runner.temp }}/managed-source-inputs/connector/dist/hermes_connector-0.1.0-py3-none-any.whl"
-          --release-id desktop-0.1.0-${{ matrix.target }}
+          --release-id "$RELEASE_ID"
           --output "${{ runner.temp }}/managed-release-payload"
       - name: Independently validate portable B2 directory
         run: >-
@@ -349,7 +351,7 @@ jobs:
           "${{ runner.temp }}/hermes-toolchain-qualified"
           "${{ runner.temp }}/staged-releases"
           "${{ runner.temp }}/update-stage"
-          desktop-0.1.0-${{ matrix.target }}
+          "$RELEASE_ID"
           1
           ${{ matrix.target }}
       - name: Verify exact immutable release produced by client staging path
@@ -358,11 +360,11 @@ jobs:
           import json
           import os
           from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"]) / "staged-releases" / "desktop-0.1.0-${{ matrix.target }}"
+          root = Path(os.environ["RUNNER_TEMP"]) / "staged-releases" / os.environ["RELEASE_ID"]
           if root.is_symlink() or not root.is_dir():
               raise SystemExit("staged immutable release is missing")
           manifest = json.loads((root / "manifest/release.json").read_text(encoding="utf-8"))
-          if manifest.get("release_id") != "desktop-0.1.0-${{ matrix.target }}":
+          if manifest.get("release_id") != os.environ["RELEASE_ID"]:
               raise SystemExit("staged release identity mismatch")
           for relative in ("host/venv", "connector/venv", "plugin/artifacts"):
               path = root / relative

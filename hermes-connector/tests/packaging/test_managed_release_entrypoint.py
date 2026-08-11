@@ -348,6 +348,30 @@ def test_managed_release_workflow_watches_local_release_builder() -> None:
     ) == 2
 
 
+def test_managed_release_workflow_uses_a_unique_immutable_release_identity() -> None:
+    workflow = (
+        REPOSITORY_ROOT
+        / ".github"
+        / "workflows"
+        / "hermes-desktop-managed-release-payload.yml"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "RELEASE_ID: desktop-0.1.0-${{ matrix.target }}+run.${{ github.run_id }}.${{ github.run_attempt }}"
+        in workflow
+    )
+    assert '--release-id "$RELEASE_ID"' in workflow
+    assert '          "$RELEASE_ID"\n          1' in workflow
+    assert (
+        'root = Path(os.environ["RUNNER_TEMP"]) / "staged-releases" / os.environ["RELEASE_ID"]'
+        in workflow
+    )
+    assert 'manifest.get("release_id") != os.environ["RELEASE_ID"]' in workflow
+    assert "--release-id desktop-0.1.0-${{ matrix.target }}" not in workflow
+    assert "          desktop-0.1.0-${{ matrix.target }}\n          1" not in workflow
+    assert ' / "desktop-0.1.0-${{ matrix.target }}"' not in workflow
+
+
 def test_payload_proof_cleanup_removes_frozen_release(tmp_path: Path) -> None:
     namespace = runpy.run_path(
         str(

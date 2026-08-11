@@ -103,7 +103,9 @@ MAJOR.MINOR.PATCH
 <product-version>+<yyyymmdd>.<build-seq>.g<git-sha8>
 ```
 
-`release_id` 一旦发布永不复用。
+`release_id` 一旦发布永不复用。资格构建必须把平台、`github.run_id` 与
+`github.run_attempt` 写入 release identity；同一提交因临时签名或重跑导致内容变更时，
+也必须生成新的不可变 release，而不能覆盖本地已有目录。
 
 ### 3.3 Release Generation
 
