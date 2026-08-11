@@ -24,7 +24,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
 
-_RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_RELEASE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _STAGING_NONCE_HEX_CHARS = 12
 _SIGNED_PLUGIN_FIELDS = {

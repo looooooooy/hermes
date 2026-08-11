@@ -449,6 +449,17 @@ def test_release_id_cannot_escape_versioned_directory(
         ).build(_inputs(tmp_path, release_id=release_id), dry_run=True)
 
 
+def test_release_id_accepts_semver_build_metadata(tmp_path: Path) -> None:
+    release_id = "1.0.0+20260811.1.gabcdef12"
+
+    plan = ReleaseBuilder(
+        releases_root=tmp_path / "releases", runner=RecordingRunner()
+    ).build(_inputs(tmp_path, release_id=release_id), dry_run=True)
+
+    assert plan.release_id == release_id
+    assert plan.release_dir == tmp_path / "releases" / release_id
+
+
 def test_rejects_sha_mismatch_symlink_and_symlinked_release_root(
     tmp_path: Path,
 ) -> None:
