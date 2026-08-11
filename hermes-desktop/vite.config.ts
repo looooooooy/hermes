@@ -3,8 +3,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 const host = process.env.TAURI_DEV_HOST;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [svelte()],
+  resolve: mode === 'test' ? { conditions: ['browser'] } : undefined,
   clearScreen: false,
   server: {
     port: 1420,
@@ -21,4 +22,4 @@ export default defineConfig({
       ignored: ['**/src-tauri/**'],
     },
   },
-});
+}));

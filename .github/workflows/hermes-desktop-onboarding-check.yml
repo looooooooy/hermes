@@ -39,9 +39,12 @@ jobs:
         run: rustup default stable
       - name: Install frontend dependencies
         working-directory: hermes-desktop
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Validate Tauri dev bootstrap script
         run: node --check hermes-desktop/scripts/before-tauri-dev.mjs
+      - name: Test Svelte onboarding behavior
+        working-directory: hermes-desktop
+        run: npm test
       - name: Build Svelte onboarding
         working-directory: hermes-desktop
         run: npm run build

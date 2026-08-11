@@ -105,11 +105,65 @@ async fn workspace_connect(
         .map_err(|_| "Hermes workspace sign-in task did not complete.".to_owned())?
 }
 
+const WORKSPACE_REAUTH_REQUIRED_CODE: &str = "workspace_reauth_required";
+const DEVICE_PAIRING_FAILED_CODE: &str = "device_pairing_failed";
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DevicePairingCommandError {
+    code: &'static str,
+    message: String,
+}
+
+fn device_pairing_command_error(message: String) -> DevicePairingCommandError {
+    let code = if message == workspace_session::REAUTH_REQUIRED_MESSAGE {
+        WORKSPACE_REAUTH_REQUIRED_CODE
+    } else {
+        DEVICE_PAIRING_FAILED_CODE
+    };
+    DevicePairingCommandError { code, message }
+}
+
+#[cfg(test)]
+mod device_pairing_command_error_tests {
+    use super::*;
+
+    #[test]
+    fn reauthentication_required_error_serializes_with_a_stable_code() {
+        let error =
+            device_pairing_command_error(workspace_session::REAUTH_REQUIRED_MESSAGE.to_owned());
+
+        assert_eq!(
+            serde_json::to_value(error).expect("pairing command error should serialize"),
+            serde_json::json!({
+                "code": "workspace_reauth_required",
+                "message": "Hermes workspace sign-in has expired. Sign in again.",
+            })
+        );
+    }
+
+    #[test]
+    fn generic_pairing_error_serializes_with_a_stable_code() {
+        let error = device_pairing_command_error("Unrelated pairing failure.".to_owned());
+
+        assert_eq!(
+            serde_json::to_value(error).expect("pairing command error should serialize"),
+            serde_json::json!({
+                "code": "device_pairing_failed",
+                "message": "Unrelated pairing failure.",
+            })
+        );
+    }
+}
+
 #[tauri::command]
-async fn device_pair() -> Result<device_pairing::DevicePairingStatus, String> {
+async fn device_pair() -> Result<device_pairing::DevicePairingStatus, DevicePairingCommandError> {
     tauri::async_runtime::spawn_blocking(device_pairing::pair)
         .await
-        .map_err(|_| "Hermes device pairing task did not complete.".to_owned())?
+        .map_err(|_| {
+            device_pairing_command_error("Hermes device pairing task did not complete.".to_owned())
+        })?
+        .map_err(device_pairing_command_error)
 }
 
 #[tauri::command]

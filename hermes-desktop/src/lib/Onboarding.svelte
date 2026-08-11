@@ -327,7 +327,7 @@
               <button
                 class="connect pairing-connect"
                 on:click={onPairDevice}
-                disabled={devicePairing || !snapshot.workspaceAuthenticated}
+                disabled={devicePairing || workspaceConnecting || !snapshot.workspaceAuthenticated}
               >
                 {#if devicePairing}
                   <span class="spinner"></span> 正在创建设备身份…
@@ -335,7 +335,22 @@
                   <ShieldCheck size={18} /> 绑定这台 Mac
                 {/if}
               </button>
-              {#if devicePairingError}<div class="workspace-error">{devicePairingError}</div>{/if}
+              <button
+                class="connect pairing-relogin"
+                on:click={() => onConnectWorkspace(workspaceEndpoint)}
+                disabled={workspaceConnecting || devicePairing || !workspaceEndpoint.trim()}
+              >
+                {#if workspaceConnecting}
+                  <span class="spinner"></span> 正在重新登录企业账号…
+                {:else}
+                  <ExternalLink size={18} /> 重新登录企业账号
+                {/if}
+              </button>
+              {#if workspaceError}
+                <div class="workspace-error">{workspaceError}</div>
+              {:else if devicePairingError}
+                <div class="workspace-error">{devicePairingError}</div>
+              {/if}
               {#if snapshot.deviceCredentialFingerprint}
                 <div class="workspace-note fingerprint"><KeyRound size={15} /> {snapshot.deviceCredentialFingerprint}</div>
               {/if}
@@ -647,6 +662,8 @@
   .pairing-head strong { display: block; margin-top: 5px; color: #d4e1dd; font-size: 15px; }
   .pairing-state { padding: 7px 10px; border: 1px solid rgba(212, 238, 231, .10); border-radius: 999px; color: #81968f; font-size: 12px; }
   .pairing-connect { width: max-content; }
+  .pairing-relogin { width: max-content; background: transparent; color: #8fb3a8; }
+  .pairing-relogin:hover:not(:disabled) { background: rgba(111, 227, 189, .07); }
   .fingerprint { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; word-break: break-all; }
 
   .status-grid {
